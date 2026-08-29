@@ -1,0 +1,19 @@
+node_modules/
+dist/
+coverage/
+.cache/
+.vite/
+
+.env
+.env.*
+!.env.example
+
+.DS_Store
+Thumbs.db
+*.log
+
+# Internal research-transfer material is never part of the public repository.
+private/
+internal/
+*HANDOFF*
+EVIDENCE_MANIFEST.csv
