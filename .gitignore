@@ -1,6 +1,8 @@
 node_modules/
 dist/
 coverage/
+.test-output/
+results/
 .cache/
 .vite/
 
@@ -12,8 +14,7 @@ coverage/
 Thumbs.db
 *.log
 
-# Internal research-transfer material is never part of the public repository.
+# Local research artifacts are not part of the public source tree.
 private/
 internal/
-*HANDOFF*
-EVIDENCE_MANIFEST.csv
+.local-research/

@@ -2,86 +2,167 @@
 
 ## Research question
 
-Under which combinations of visibility, instance count, geometry cost, material cost, geometry diversity, camera motion, and device class does GPU visibility compaction improve a Three.js WebGPU workload after all compute and submission overhead is included?
+Under which combinations of visibility, instance count, geometry cost, geometry diversity, camera motion, and device class does GPU visibility compaction improve a Three.js WebGPU workload after compute and CPU submission overhead are included?
 
-## Initial comparison
+## Implemented 32-bucket comparison
 
-The first benchmark milestone will compare equivalent representations of the same scene:
+The active heterogeneous experiment uses 32 indexed geometry buckets. "Compute submissions" below are explicit Three.js `renderer.compute()` calls; "dispatches" are the compute nodes scheduled by those calls. Counts describe steady-state measured frames after one-time initialization.
 
-1. bundled per-geometry instancing with all instances submitted;
-2. Three.js `BatchedMesh` with per-object culling disabled;
-3. Three.js `BatchedMesh` with per-object culling enabled;
-4. current Three Blocks GPU instance culling;
-5. the independent atlas implementation;
-6. the independent separate-geometry implementation.
+| Lane | Compute dispatches | Compute submissions | Purpose |
+| --- | ---: | ---: | --- |
+| Bundled draw all | 0 | 0 | No-culling retained-rendering reference |
+| Three Blocks public baseline | 128 | 32 | Supported public `culler.update()` scheduling, one culler per bucket |
+| Three Blocks coalesced probe | 128 | 1 | Same package cullers and dispatch work with a guarded, pinned scheduling change |
+| Three Blocks historical baseline | 9 | 1 | Published v0.10 heterogeneous indirect-batching execution path |
+| Fixed-slice | 2 | 1 | Independent shared reset-and-compact implementation |
 
-Historical implementations may be included when their exact version, source, license, and compatibility constraints can be established.
+These are strategy-declared configuration values that the runner checks against each lane's expected schedule. They are not runtime counters observed from the GPU command stream.
 
-The comparison is split into two questions so that submission overhead is not mistaken for a better culling kernel:
+The standard 240-frame GPU-timestamp matrix compares bundled draw all, one explicitly selected heterogeneous package comparator, and fixed-slice. `BENCHMARK_HETEROGENEOUS_COMPARATOR` accepts `coalesced-v11` (the default) or `historical-v10`; the resulting modes remain exactly draw all, the selected comparator, and fixed-slice. Historical v0.10 runs require `indirect-first-instance` and are rejected at startup when the page reports that the feature is unavailable. The 32-submission public v0.11 lane remains the authoritative public-API correctness and scheduling baseline, but it is excluded from that timestamp window because it exceeds Three.js r185's timestamp-query capacity and its per-call timestamp identifiers collide. It must not be silently replaced by the coalesced probe when describing package behavior.
 
-1. **Single-geometry parity:** compare draw-all, current Three Blocks instance culling, and fixed-slice compaction with one indexed geometry and identical instance data.
-2. **Heterogeneous scaling:** compare stock per-geometry culling submissions, coalesced culling work in one explicit compute submission, historical heterogeneous indirect batching, and one shared fixed-slice culler across 32, 128, and 512 geometry buckets.
+Single-geometry trials continue to use the public Three Blocks v0.11 lane directly. The heterogeneous comparator selector applies to 4-, 32-, and 128-bucket runs. Four buckets provide the merge-aware control with exactly one asset from each topology family. Stock Three.js `BatchedMesh`, 512-bucket scaling, moving cameras, and production assets remain subsequent comparison stages rather than evidence already supplied by the 32-bucket matrix.
 
-The primary implementation hypothesis is that one explicitly scheduled compute submission can update many heterogeneous indirect commands before a cached render bundle is replayed. The benchmark must separately identify savings from submission coalescing and savings from the compaction layout.
+## Controlled scene
 
-## Controlled variables
+The focused 32-bucket cells hold constant:
 
-The headline subset will hold the renderer, dependency versions, shaders, transforms, geometry, viewport, device, browser, and camera constant while sweeping:
+- Three.js 0.185.1 and pinned package versions;
+- 32 independently allocated, unique indexed fixtures drawn from four procedural topology families: box, sphere, cylinder, and torus;
+- a deterministic, small non-affine vertex deformation per bucket, with family topology and comparable bounds preserved;
+- bucket-major, static, full translation/rotation/scale matrices;
+- object counts selected from 4,096, 16,384, and 65,536;
+- target visible fractions of approximately 20%, 80%, and 99%;
+- a deterministic seed, fixed perspective projection, 1280 by 720 viewport, and device pixel ratio 1;
+- matched PBR parameters and lighting;
+- cached `BundleGroup` rendering for all retained-draw lanes;
+- zero Three Blocks v0.11 frustum padding and disabled sorting; the historical v0.10 lane retains its published default padding of 0.2 in XY and at the far plane, with accepted and rejected placements separated far enough to preserve the predetermined membership.
 
-- visible fraction: approximately 20%, 80%, and 99%;
-- geometry buckets: 32, 128, and 512;
-- camera behavior: frozen and deterministic motion;
-- geometry workload: synthetic control and indexed production assets;
-- material workload: minimal and representative PBR.
+Visibility changes through deterministic object placement rather than field-of-view changes, avoiding projected-coverage changes caused only by a different projection.
 
-Visibility experiments must avoid changing field of view when that would confound visibility with projected coverage. Camera position or controlled scene layouts are preferred.
+## Three Blocks public baseline
 
-## Measurements
+The baseline uses the published `three-blocks@0.11.0` mesh-bound `ComputeInstanceCulling` constructor once per bucket. Every bucket receives a dedicated indexed geometry clone, unique node material, local `StorageInstancedBufferAttribute`, `InstancedMesh`, and culler. Matrices are the corresponding bucket slice of the shared scenario, and meshes remain at identity transforms.
 
-Each accepted run records:
+Construction installs the package's geometry/material integration and an automatic `onBeforeRender` update. The benchmark retains the integration but restores the mesh's prior hook, then explicitly calls the public `setCameraUniforms(camera)` and `update()` methods before rendering. This avoids duplicate culling, works with cached bundle replay, and makes submission cost observable.
 
-- GPU compute-pass, render-pass, and combined-pass distributions;
-- CPU culling, renderer preparation/submission, and frame-body distributions;
-- visible fraction and submitted survivor count;
-- direct and indirect command counts;
-- render-bundle rebuild count;
-- initialization cost and memory use where measurable;
-- timestamp resolution and backend information;
-- correctness results and deterministic configuration identifiers.
+Three Blocks v0.11.0 disposes its buffers but does not release the package-created Three.js compute nodes. To keep repeated trials from accumulating stale pipeline-cache entries, the harness retains a version-pinned, guarded list of those nodes and disposes them after the culler is disposed. This untimed lifecycle cleanup does not alter construction, validation, or steady-state execution, but it is an internal compatibility measure rather than part of the public package facade.
 
-Pass-duration sums are not described as presentation latency or end-to-end frame latency. Queue gaps and compositor work require separate measurement.
+The first untimed update performs each culler's lazy initialization. With sorting disabled, every later culler update schedules four nodes: clear indirect arguments, clear visibility, select/pack survivors, and cap the count. Those nodes run in one `renderer.compute()` call per culler. For 32 buckets, the public baseline therefore performs 128 dispatches through 32 calls per frame.
+
+This is the best-controlled public-API package integration. It is not a measurement of the package's stock automatic render hook, so no CPU-overhead claim about that stock hook may be inferred from this lane.
+
+## Three Blocks coalesced scheduling probe
+
+The coalesced probe reuses the same per-bucket construction, options, buffers, rendering, validation, and disposal as the public baseline. Its first untimed submit invokes every public `culler.update()` once, ensuring package initialization and an initial valid result occur through supported APIs.
+
+Steady-state submits use one stable flattened array containing each culler's four runtime compute nodes, in bucket order, and pass that array to the construction renderer in one `renderer.compute()` call. Every value is required to report `isComputeNode === true`; otherwise construction fails.
+
+Those node properties are not part of the stable Three Blocks facade. This lane is therefore a guarded, undocumented probe pinned to 0.11.0, not a supported package feature or a replacement for the public baseline. It answers a narrow question: what changes when identical package nodes and dispatches are grouped into one Three.js compute call rather than 32?
+
+## Three Blocks historical heterogeneous baseline
+
+The historical baseline pins `three-blocks@0.10.0` and imports `IndirectBatchedMesh` from its published `three-blocks/indirect-batching` entry. It merges the controlled indexed fixtures into one package mesh, assigns every object to its fixture through the stable `addGeometry()` and `addInstance()` methods, uploads the shared full TRS matrices, enables internal culling, and invokes the public `updateInternalCulling(camera)` method before cached bundle replay.
+
+After one untimed initialization dispatch, each steady-state update schedules nine compute nodes in one `renderer.compute()` call: clear block counts; cull and count by block; prefix block counts; clear geometry counts; scatter linear survivors and count by geometry; clear the geometry allocation head; allocate survivor ranges and write multi-indirect commands; clear geometry scatter heads; and scatter survivors by geometry. The schedule is independent of bucket count.
+
+Version 0.10 does not expose heterogeneous command and survivor readback through its public entry point. The correctness gate therefore accesses the pinned runtime culler only for untimed diagnostics and fails if the expected readback surface is absent. Construction, scene mutation, culling update, rendering, and primary mesh/culler disposal continue through the published `IndirectBatchedMesh` path. The harness also retains a guarded list of package-owned storage attributes and compute nodes so Three.js r185 can release their cache entries after each trial; that untimed lifecycle cleanup is version-specific and not a public Three Blocks capability. These distinctions must accompany any result from the lane.
+
+Its indexed commands use GPU-allocated, generally nonzero `firstInstance` offsets. The lane is valid only when `renderer.hasFeature('indirect-first-instance')` reports support. Unsupported adapters produce an explicit smoke skip and cannot run the historical focused matrix; they do not receive a substituted result.
+
+## Fixed-slice design
+
+Fixed-slice assigns each geometry a permanent survivor range sized to its object capacity. One reset dispatch clears all 32 indirect instance counts and overflow state. One cull/compact dispatch tests every object and appends its global object ID directly into its bucket's range. The 32 indexed commands retain zero `firstInstance` values and are replayed from one cached `BundleGroup`.
+
+Both nodes are passed in one `renderer.compute()` call. Fixed-slice therefore changes more than scheduling: compared with the coalesced Three Blocks probe, it also changes buffer layout, compaction work, dispatch count, mesh type, and material/vertex-transform wiring. GPU compute and render durations must be reported separately, and a render-pass difference cannot be attributed solely to compaction.
+
+## Comparison interpretation
+
+- Public Three Blocks versus coalesced Three Blocks isolates submission topology, including renderer calls and compute-pass/command-buffer grouping, while retaining the same four package nodes and dispatches per bucket.
+- Coalesced Three Blocks versus fixed-slice compares two one-call schedules but includes different kernels, storage layouts, materials, and mesh representations.
+- Historical Three Blocks versus fixed-slice directly compares two heterogeneous one-call designs, but still changes package algorithms, command layout, compaction storage, mesh representation, and material integration.
+- Draw all versus either culling lane measures net compute-plus-render behavior at a specified visibility fraction.
+- Single-geometry Three Blocks versus fixed-slice provides the closest package/kernel parity check without heterogeneous submission scaling.
+
+No one comparison alone attributes a difference to every layer of the system.
 
 ## Correctness gate
 
-Timing data is accepted only after validation reports:
+Timing begins only after the currently implemented checks pass:
 
-- no duplicate, missing, invisible, wrong-bucket, or out-of-range survivor IDs;
-- no in-capacity overflow;
-- valid indirect command fields and strides;
-- exact object-ID target agreement;
-- color and linear-depth agreement within documented tolerances;
-- no unexpected render-bundle rebuild for buffer-only updates;
-- no WebGPU validation error during deterministic camera and mutation tests.
+- predetermined visibility agrees with an independent CPU frustum test;
+- native five-word indexed indirect commands have the expected index count, instance count, first index, and base vertex;
+- current and fixed-slice commands retain zero `firstInstance`; historical commands use in-range, disjoint survivor intervals whose union exactly covers the compacted prefix;
+- compacted IDs exactly match the expected global object-ID membership;
+- no ID is duplicate, hidden, assigned to the wrong bucket, or out of range;
+- survivor readback length agrees with the native indirect instance count;
+- fixed-slice reports no in-capacity overflow;
+- the browser reports no page or console error during the validation path.
+
+Three Blocks v0.11 returns bucket-local survivor IDs, which the adapter maps to global IDs using `bucketBases` before applying the common membership check. Historical v0.10 retains stable global instance IDs; the adapter slices its flat survivor buffer using each command's `firstInstance` and reconstructs the common bucket-major validation layout. Diagnostic readbacks are outside timed frames.
+
+Image-space color, linear-depth, and object-ID comparisons; explicit bundle-rebuild instrumentation; deterministic moving-camera tests; and mutation tests remain required before a production-rendering claim. They are not represented as completed by the current membership gate.
+
+## Timing environment and precision
+
+The Vite server sends `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` so the benchmark can enter a cross-origin-isolated context. The page records the actual `crossOriginIsolated` value and empirically samples the smallest positive `performance.now()` increment. High-resolution CPU results require isolation and an observed increment no greater than 0.01 ms. The automated browser smoke and focused runner both enforce that threshold; the focused runner fails before its first trial if isolation or adequate timer precision is absent.
+
+CPU measurements use `performance.now()` around common updates, compute submission calls, render submission, and the full frame body. They describe JavaScript-side elapsed time, not GPU execution or presentation latency.
+
+GPU compute and render durations come from separate Three.js timestamp pools. The harness calls the public timestamp-resolution method, then joins frame durations through version-pinned r185 backend pool metadata. That per-frame join is benchmark instrumentation, not a stable Three.js API. A trial is rejected if timestamp support is unavailable or any measured frame lacks its expected compute or render duration. The harness also records an observed duration quantum; this diagnostic is distinct from the CPU timer increment and is not presented as end-to-end frame latency.
+
+There is an additional r185 attribution constraint. `Renderer.compute(array)` passes the array into the backend timestamp-identifier path, which does not identify it as a `ComputeNode`. Multiple newly allocated array calls in one frame consequently receive the same identifier; the pool consumes query pairs for every call but its identifier-to-offset map retains only the last offset. The 32-call public Three Blocks lane would therefore report only its last compute pass for a frame, not the aggregate of all 32. The coalesced, historical, and fixed-slice lanes make one array-valued compute call per frame and do not collide with another compute call in that frame.
+
+### Three.js r185 timestamp-pool limit
+
+The r185 WebGPU backend allocates 2,048 queries for each timestamp type. A timed compute submission consumes two queries, one at each boundary. Queries remain unresolved throughout each 300-frame warmup or 240-frame measurement block; the harness resolves and clears the warmup block before measurement begins.
+
+- One compute submission per frame uses 600 queries during warmup and 480 during measurement, so each block fits independently.
+- The 32-bucket public Three Blocks lane would use 19,200 queries during warmup and 15,360 during measurement.
+
+Neither public-lane block can fit in the r185 compute timestamp pool: at 32 submissions per frame, one unresolved block is limited to 32 complete frames. Shorter blocks alone do not fix the timestamp-identifier collision described above. A valid public-lane GPU protocol needs both bounded query resolution and unique per-call timestamp aggregation, or a Three.js change that provides it. Accordingly, the standard 32-bucket GPU-timestamp matrix uses either the one-submission coalesced probe or the one-submission historical baseline alongside fixed-slice. The capacity and identifier behavior are Three.js r185 implementation constraints, not WebGPU limits or performance results.
+
+## Environment telemetry and evidence status
+
+The focused runner defaults to `development` evidence status. A higher status must be requested explicitly with `BENCHMARK_EVIDENCE_STATUS` after the run environment has been reviewed.
+
+When `nvidia-smi` is available, one long-lived process samples all visible NVIDIA GPUs at a requested 250 ms interval for the run. `gpu-telemetry.csv` records wall-clock and monotonic run time; current trial, plan position, mode, visibility, and phase; GPU identity; performance state; graphics and memory clocks; GPU and memory utilization; memory occupancy; temperature; and power. The runner also records sanitized pre-run and post-run compute-process snapshots that retain only process basenames. Sampling is performed outside the browser and no telemetry call is made from a measured frame.
+
+Telemetry absence does not fail a technically valid benchmark, which keeps the harness portable to non-NVIDIA systems. It does leave the environment unverified unless equivalent device-specific evidence is supplied. Promotion to candidate evidence requires a manual review that establishes an otherwise idle device and checks for unexplained, mode- or order-correlated discontinuities in clocks, utilization, memory, temperature, power, or device state during measured phases. There is no automatic P-state rejection threshold: boost and power-state behavior are device-, driver-, and workload-dependent, so any rejection boundary must be supported by evidence for the tested system rather than invented by the harness.
+
+## Recorded measurements
+
+Each accepted timed run records:
+
+- CPU common-update, compute-submission, render-submission, total-submission, and frame-body distributions;
+- GPU compute-pass, render-pass, and summed-pass distributions;
+- configured compute dispatch and submission counts;
+- visible fraction and expected survivor count;
+- direct or indirect draw-command count;
+- timestamp availability, missing-frame counts, and observed quantum;
+- renderer, browser, device, viewport, isolation, and CPU timer metadata;
+- validation kind and deterministic configuration identifiers.
+
+Summed pass durations are not described as presentation latency. Queue gaps, browser scheduling, and compositor work require separate measurement.
 
 ## Statistical protocol
 
-- Warm up pipelines and the benchmark workload before capture.
-- Rotate or randomize mode order.
-- Use at least five repetitions for published headline cells.
-- Retain frame-level samples, not only per-run summaries.
+- Warm 300 frames, resolve warmup timestamps, then measure 240 frames.
+- Use six repetitions of each focused cell.
+- Rotate all mode permutations and rotate visibility order by repetition.
+- Retain frame-level samples, not only per-trial summaries.
 - Report medians, tail distributions, absolute milliseconds, and frame-budget context.
-- Preserve raw results as immutable inputs to versioned analysis scripts.
+- Treat raw result files as immutable inputs to versioned analysis.
+- Require a stable, otherwise idle device for evidence used in inference.
+- Reproduce material conclusions on a second GPU family.
 
 ## Initial decision gates
 
-On the existing discrete-GPU test system, a production-style path remains interesting if it achieves all of the following:
+On the first discrete-GPU test system, the fixed-slice direction remains interesting if it satisfies all of the following in an otherwise equivalent workload:
 
-- at approximately 20% visibility, at least a 40% GPU-pass reduction versus equivalent bundled draw-all;
+- at approximately 20% visibility, at least a 40% GPU-pass reduction versus bundled draw all;
 - at approximately 80% visibility, at least a 10% reduction in a meaningful geometry workload;
 - near full visibility, no more than a 5% regression;
 - zero correctness failures;
-- acceptable CPU submission scaling through 128 geometry buckets, followed by explicit evaluation at 512.
+- a material benefit versus the selected one-submission package comparator, not merely versus the multi-call public schedule.
 
-Broader guidance requires a second materially different GPU family. These thresholds are falsification gates for the research direction, not universal performance claims.
-
-For the heterogeneous comparison, the independent path must also beat the best compatible existing implementation by at least 10% in GPU pass time or 0.10 ms in combined CPU and GPU cost at low visibility. Otherwise the useful output is the benchmark or an upstream scheduling improvement, not another culling implementation.
+For the comparator condition, the preregistered threshold is at least 10% in GPU pass time or 0.10 ms in a disclosed CPU-submit-plus-GPU-pass accounting metric at low visibility, without a material regression in either component. That sum is an accounting metric, not frame latency. Both the coalesced v0.11 probe and compatible historical v0.10 baseline must be reported before claiming differentiation from the existing ecosystem. Failure to clear the threshold favors a scheduling contribution, benchmark result, or documented negative result over a new culling implementation. These are falsification gates for this research direction, not universal WebGPU guidance.

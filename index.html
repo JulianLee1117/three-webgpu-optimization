@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2212%22 fill=%22%23060a12%22/><path d=%22M16 44V20h8l8 12 8-12h8v24h-8V32l-8 12-8-12v12z%22 fill=%22%236aa8ff%22/></svg>" />
+    <title>Three.js WebGPU Fixed-Slice Benchmark</title>
+    <script type="module" src="/src/main.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">Three.js r185 · controlled WebGPU experiment</p>
+        <h1>Fixed-slice heterogeneous culling</h1>
+        <p class="lede">Indexed geometry, full storage transforms, fixed projection, exact survivor validation, and frame-level timing.</p>
+      </header>
+      <section class="workspace">
+        <div id="canvas-host" class="viewport"></div>
+        <aside>
+          <label>Strategy
+            <select id="strategy">
+              <option value="draw-all">Bundled draw all</option>
+              <option value="three-blocks-current">Three Blocks 0.11 explicit</option>
+              <option value="three-blocks-coalesced">Three Blocks 0.11 coalesced probe</option>
+              <option value="three-blocks-historical">Three Blocks 0.10 indirect batching</option>
+              <option value="fixed-slice">Fixed-slice compacted</option>
+            </select>
+          </label>
+          <label>Objects
+            <select id="objects">
+              <option value="4096">4,096</option>
+              <option value="16384" selected>16,384</option>
+              <option value="65536">65,536</option>
+            </select>
+          </label>
+          <label>Geometry buckets
+            <select id="buckets">
+              <option value="1">1</option>
+              <option value="4">4 (family control)</option>
+              <option value="32" selected>32</option>
+              <option value="128">128</option>
+            </select>
+          </label>
+          <label>Visible subset
+            <select id="visibility">
+              <option value="0.2" selected>20%</option>
+              <option value="0.8">80%</option>
+              <option value="0.99">99%</option>
+            </select>
+          </label>
+          <div class="actions">
+            <button id="rebuild">Rebuild</button>
+            <button id="validate">Validate</button>
+            <button id="trial">Run 300 + 240</button>
+            <button id="export" disabled>Export frames</button>
+          </div>
+          <dl>
+            <dt>Status</dt><dd id="status">Initializing…</dd>
+            <dt>Backend</dt><dd id="backend">—</dd>
+            <dt>Expected visible</dt><dd id="expected-visible">—</dd>
+            <dt>Validation</dt><dd id="validation">not run</dd>
+            <dt>GPU p50 / p95</dt><dd id="gpu-summary">—</dd>
+            <dt>CPU submit p50 / p95</dt><dd id="cpu-summary">—</dd>
+            <dt>Timestamp quantum</dt><dd id="timestamp-quantum">—</dd>
+          </dl>
+          <pre id="details"></pre>
+        </aside>
+      </section>
+    </main>
+  </body>
+</html>
