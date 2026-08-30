@@ -7,6 +7,7 @@ import {
 import { IndirectBatchedMesh } from 'three-blocks-v10/indirect-batching';
 import { decodeHistoricalIndirectResults } from '../validation/historical-indirect.js';
 import { compareMembership } from '../validation/membership.js';
+import { createMembershipDigestEvidence } from '../validation/membership-digests.js';
 
 const HISTORICAL_STORAGE_FIELDS = Object.freeze([
   '_refPosFallbackSSBO',
@@ -77,8 +78,7 @@ function requireHistoricalDiagnostics(mesh) {
 
 function requireSafeCleanup(renderer, attributes, computeNodes) {
   const rendererDelete = renderer?._attributes?.delete;
-  if (attributes.some((attribute) => typeof attribute.dispose !== 'function')
-    && typeof rendererDelete !== 'function') {
+  if (attributes.length > 0 && typeof rendererDelete !== 'function') {
     throw new TypeError(
       'Three.js r185 attribute cleanup is unavailable for three-blocks@0.10.0 resources.',
     );
@@ -236,6 +236,7 @@ export function buildThreeBlocksHistoricalStrategy({ scenario, sourceGeometries,
     computeNodes,
     usesCompute: true,
     configuredDrawCommands: scenario.bucketCount,
+    configuredRenderObjects: 1,
     configuredComputeDispatches: 9,
     configuredComputeSubmissions: 1,
     configuredSubmittedInstances: null,
@@ -280,11 +281,20 @@ export function buildThreeBlocksHistoricalStrategy({ scenario, sourceGeometries,
         capacities: scenario.bucketCounts,
         objectCount: scenario.objectCount,
       });
+      const membershipDigests = await createMembershipDigestEvidence({
+        expectedIds,
+        actualIds: decoded.actualIds,
+        actualCounts: decoded.actualCounts,
+        objectBuckets: scenario.objectBuckets,
+        bucketBases: scenario.bucketBases,
+        capacities: scenario.bucketCounts,
+      });
       return {
-        pass: decoded.commandValidation.pass && membership.pass,
+        pass: decoded.commandValidation.pass && membership.pass && membershipDigests.pass,
         kind: 'three-blocks-historical-exact-membership',
         commandValidation: decoded.commandValidation,
         membership,
+        membershipDigests,
         readbackErrors: [],
       };
     },

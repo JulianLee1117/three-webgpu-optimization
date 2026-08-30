@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   PINNED_V11_COMPUTE_NODE_FIELDS,
+  PINNED_V11_STORAGE_ATTRIBUTE_FIELDS,
   disposeRetainedComputeNodes,
   retainPinnedV11ComputeNodes,
+  retainPinnedV11StorageAttributes,
 } from '../src/strategies/pinned-v11-compute-lifecycle.js';
 
 function fakeComputeNode() {
@@ -40,4 +42,25 @@ test('retained package compute nodes are deduplicated and disposed exactly once'
   const second = [shared, fakeComputeNode()];
   assert.equal(disposeRetainedComputeNodes([first, second]), 3);
   for (const node of new Set([...first, ...second])) assert.equal(node.disposeCalls, 1);
+});
+
+test('pinned v0.11 lifecycle retains every package-owned storage attribute', () => {
+  const culler = Object.fromEntries(PINNED_V11_STORAGE_ATTRIBUTE_FIELDS.map((field) => (
+    [field, { isBufferAttribute: true, field }]
+  )));
+  culler.sortKeysIA = { value: culler.sortKeysIA };
+  culler.sortValuesIA = { attribute: culler.sortValuesIA };
+  const attributes = retainPinnedV11StorageAttributes(culler, 3);
+  assert.deepEqual(attributes.map((attribute) => attribute.field), PINNED_V11_STORAGE_ATTRIBUTE_FIELDS);
+});
+
+test('pinned v0.11 storage lifecycle fails closed when the runtime surface changes', () => {
+  const culler = Object.fromEntries(PINNED_V11_STORAGE_ATTRIBUTE_FIELDS.map((field) => (
+    [field, { isBufferAttribute: true, field }]
+  )));
+  culler.outVisSSBO = null;
+  assert.throws(
+    () => retainPinnedV11StorageAttributes(culler, 8),
+    /requires BufferAttribute outVisSSBO at bucket 8/,
+  );
 });

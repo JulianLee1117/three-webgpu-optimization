@@ -37,6 +37,7 @@ export function buildDrawAllStrategy({ scenario, sourceGeometries }) {
     computeNodes: [],
     usesCompute: false,
     configuredDrawCommands: scenario.bucketCount,
+    configuredRenderObjects: scenario.bucketCount,
     configuredComputeDispatches: 0,
     configuredComputeSubmissions: 0,
     configuredSubmittedInstances: scenario.objectCount,

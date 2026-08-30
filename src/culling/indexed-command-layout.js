@@ -1,12 +1,20 @@
 export const INDEXED_INDIRECT_STRIDE_UINTS = 5;
 export const INDEXED_INDIRECT_STRIDE_BYTES = INDEXED_INDIRECT_STRIDE_UINTS * Uint32Array.BYTES_PER_ELEMENT;
 
-export function createIndexedIndirectCommands(geometries, capacities, initialCounts = null) {
+export function createIndexedIndirectCommands(
+  geometries,
+  capacities,
+  initialCounts = null,
+  firstIndexes = null,
+) {
   if (geometries.length !== capacities.length) {
     throw new RangeError('geometries and capacities must have equal lengths.');
   }
   if (initialCounts && initialCounts.length !== capacities.length) {
     throw new RangeError('initialCounts and capacities must have equal lengths.');
+  }
+  if (firstIndexes && firstIndexes.length !== capacities.length) {
+    throw new RangeError('firstIndexes and capacities must have equal lengths.');
   }
 
   // TSL r185 specializes a single struct storage binding as a scalar struct while
@@ -23,7 +31,9 @@ export function createIndexedIndirectCommands(geometries, capacities, initialCou
     const base = bucket * INDEXED_INDIRECT_STRIDE_UINTS;
     commands[base] = geometry.index.count;
     commands[base + 1] = initialCounts ? initialCounts[bucket] : 0;
-    commands[base + 2] = geometry.drawRange.start > 0 ? geometry.drawRange.start : 0;
+    commands[base + 2] = firstIndexes
+      ? firstIndexes[bucket]
+      : geometry.drawRange.start > 0 ? geometry.drawRange.start : 0;
     signed[base + 3] = 0;
     commands[base + 4] = 0;
     offsets[bucket] = bucket * INDEXED_INDIRECT_STRIDE_BYTES;

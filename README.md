@@ -14,12 +14,12 @@ The current controlled experiment uses Three.js 0.185.1, 32 unique indexed geome
 
 | Lane | Steady-state schedule at 32 buckets | Interpretation |
 | --- | ---: | --- |
-| Three Blocks public baseline | 128 dispatches in 32 `renderer.compute()` calls | One pinned `three-blocks@0.11.0` culler per bucket, invoked through public `setCameraUniforms()` and `update()` methods |
-| Three Blocks coalesced probe | 128 dispatches in one `renderer.compute()` call | The same cullers and GPU work, but a guarded, version-pinned array of undocumented runtime compute nodes |
-| Three Blocks historical baseline | 9 dispatches in one `renderer.compute()` call | The published `three-blocks@0.10.0` heterogeneous `IndirectBatchedMesh` execution path |
-| Fixed-slice | 2 dispatches in one `renderer.compute()` call | An independent reset-and-compact design with one preallocated survivor slice per geometry |
+| Three Blocks public baseline | 128 dispatches in 32 `renderer.compute()` calls | One pinned `three-blocks@0.11.0` culler and render object per bucket, invoked through public `setCameraUniforms()` and `update()` methods |
+| Three Blocks coalesced probe | 128 dispatches in one `renderer.compute()` call | The same per-bucket cullers, render objects, and GPU work, but a guarded, version-pinned array of undocumented runtime compute nodes |
+| Three Blocks historical baseline | 9 dispatches in one `renderer.compute()` call | The published `three-blocks@0.10.0` heterogeneous `IndirectBatchedMesh` execution path in one render object |
+| Fixed-slice | 2 dispatches in one `renderer.compute()` call | One preallocated survivor slice per geometry, with all indexed fixture ranges and indirect offsets retained by one render object |
 
-Here, "submission" means one explicit Three.js `renderer.compute()` call. The public and coalesced Three Blocks v0.11 lanes use the same per-bucket resources, compute nodes, dispatches, and validation; their distinction is submission topology, including renderer-call and compute-pass/command-buffer grouping. The historical v0.10 lane is a separate package algorithm and mesh representation. Comparisons between either one-submission package lane and fixed-slice therefore change compaction layout, kernel count, material wiring, and mesh representation, so compute and render timings must be reported separately.
+Here, "submission" means one explicit Three.js `renderer.compute()` call. The public and coalesced Three Blocks v0.11 lanes use the same per-bucket resources, compute nodes, dispatches, render objects, and validation; their distinction is submission topology, including renderer-call and compute-pass/command-buffer grouping. The historical v0.10 lane and fixed-slice each retain B indexed indirect commands in one render object, but remain different package algorithms and mesh representations. Comparisons between either package lane and fixed-slice therefore change compaction layout, kernel count, material wiring, and geometry organization, so compute and render timings must be reported separately.
 
 The schedule counts are strategy-declared metadata checked by the runner against the expected lane configuration; they are not runtime command-stream counters. A four-bucket control uses exactly one asset from each topology family, making it the family-count and merge-aware control between the single-geometry and higher-diversity cells.
 
@@ -29,7 +29,7 @@ The historical lane constructs and updates `IndirectBatchedMesh` through its pub
 
 ## Current status
 
-The package baselines, scheduling probe, fixed-slice lane, and their exact correctness gates are integrated. This README does not assert a 32-bucket performance conclusion; timing evidence must pass the environment, timestamp-completeness, repetition, and cross-device requirements below before it supports a broader claim.
+The package baselines, scheduling probe, and fixed-slice lane are integrated with lane-specific correctness gates; every compute lane requires exact survivor membership and native indexed-command validation. This README does not assert a 32-bucket performance conclusion; timing evidence must pass the environment, timestamp-completeness, repetition, and cross-device requirements below before it supports a broader claim.
 
 The core techniques, including GPU frustum culling, survivor compaction, indirect drawing, and retained command submission, are established prior art. The research question is whether a narrower Three.js integration or fixed-ownership specialization produces a material, reproducible difference.
 
@@ -38,7 +38,7 @@ The core techniques, including GPU frustum culling, survivor compaction, indirec
 Node.js 22.12 or newer and an installed Chrome, Chromium, or Edge build with WebGPU support are required. Set `BROWSER_PATH` when the browser is not in a standard location.
 
 ```sh
-npm install
+npm ci
 npm test
 npm run build
 npm run smoke:browser
@@ -50,7 +50,7 @@ The focused benchmark defaults to 16,384 objects and 32 geometry buckets:
 npm run benchmark:focused
 ```
 
-Raw runs are written under the ignored `results/runs/` directory. `BENCHMARK_OBJECT_COUNT` accepts `4096`, `16384`, or `65536`; `BENCHMARK_BUCKET_COUNT` accepts `1`, `4`, `32`, or `128`. For 4-, 32-, and 128-bucket runs, `BENCHMARK_HETEROGENEOUS_COMPARATOR` accepts `coalesced-v11` (the default) or `historical-v10`. The historical choice fails at startup when `indirect-first-instance` is unavailable. Single-bucket runs continue to use the public Three Blocks v0.11 lane. For example, on macOS or Linux:
+Raw runs are written under the ignored `results/runs/` directory. Each run records the Git commit, porcelain-state digest and counts, SHA-256 commitments for the tracked working tree and dependency lock, deterministic geometry and scenario manifests, untimed preflight/timing-start/post-trial lane-specific validation payloads, frame data, and optional GPU telemetry. The runner accepts exactly `development` or `candidate` evidence status; candidate evidence requires a clean Git tree, and every run that begins with available provenance requires it to remain unchanged through teardown. Core files are hash-bound by a final artifact manifest, while optional telemetry absence is explicit rather than silently omitted. `BENCHMARK_OBJECT_COUNT` accepts `4096`, `16384`, or `65536`; `BENCHMARK_BUCKET_COUNT` accepts `1`, `4`, `32`, or `128`. For 4-, 32-, and 128-bucket runs, `BENCHMARK_HETEROGENEOUS_COMPARATOR` accepts `coalesced-v11` (the default) or `historical-v10`. The historical choice fails at startup when `indirect-first-instance` is unavailable. Single-bucket runs continue to use the public Three Blocks v0.11 lane. For example, on macOS or Linux:
 
 ```sh
 BENCHMARK_HETEROGENEOUS_COMPARATOR=historical-v10 npm run benchmark:focused
@@ -66,14 +66,16 @@ npm run benchmark:focused
 A completed run can be summarized with:
 
 ```sh
-npm run analyze -- results/runs/<run-id>/frames.csv
+npm run analyze -- results/runs/<run-id>
 ```
 
-The benchmark requires a WebGPU-capable device and records the actual adapter, backend, browser, timestamp support, and timer precision with each run. Results from a busy or changing device should be retained as development evidence rather than used for performance claims.
+Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
+
+The benchmark requires a WebGPU-capable device and records the actual adapter, backend, browser, timestamp support, and timer precision with each run. The browser smoke additionally requires zero-tolerance decoded-RGBA screenshot agreement between draw all and fixed-slice at 4, 32, and 128 buckets, reports PNG byte equality as a diagnostic, and verifies repeated strategy teardown against the renderer's resource baseline. Results from a busy or changing device should be retained as development evidence rather than used for performance claims.
 
 ## Primary hypothesis
 
-Scenes with immutable geometry ownership may not need a general prefix-allocation-and-redistribution pipeline. A fixed-slice specialization can preallocate one survivor range per geometry, reset its counters, append visible IDs directly into those ranges, keep indirect `firstInstance` values at zero, and replay separate indexed geometry commands from a cached render bundle.
+Scenes with immutable geometry ownership may not need a general prefix-allocation-and-redistribution pipeline. A fixed-slice specialization can preallocate one survivor range per geometry, reset its counters, append visible IDs directly into those ranges, keep indirect `firstInstance` values at zero, concatenate immutable fixture ranges into one indexed buffer, and replay their indirect offsets through one cached render object.
 
 That design trades mutation flexibility for two compute dispatches and a portable command layout. The experiment tests whether this specialization remains useful after CPU submission cost, GPU compute cost, render cost, visibility, and correctness are measured together.
 
@@ -89,7 +91,7 @@ An accepted performance result must include:
 
 - pinned Three.js, package, browser, operating-system, and device details;
 - equivalent scene inputs and rendering conditions across compared modes;
-- exact survivor membership and native indexed-command validation before timing;
+- exact survivor membership and native indexed-command validation before and after timing;
 - GPU compute and render timestamps separated from CPU update and submission time;
 - recorded CPU-clock and GPU-timestamp precision;
 - frame-level samples, rotated mode order, repeated runs, and machine-readable output;
@@ -100,7 +102,7 @@ The detailed procedure is in [docs/BENCHMARK_PROTOCOL.md](docs/BENCHMARK_PROTOCO
 
 ## Scope
 
-The harness exposes bundled draw all, Three Blocks v0.11 public and coalesced scheduling, the historical Three Blocks v0.10 indirect-batching path, and fixed-slice compaction. At 4, 32, or 128 buckets, the focused timed matrix contains draw all, one explicitly selected one-submission package comparator, and fixed-slice; the multi-submission public v0.11 lane remains a separate correctness and scheduling reference. Stock Three.js `BatchedMesh`, dynamic cameras, production assets, and additional GPU families remain separate comparison stages.
+The harness exposes bundled draw all, Three Blocks v0.11 public and coalesced scheduling, the historical Three Blocks v0.10 indirect-batching path, and fixed-slice compaction. At 4, 32, or 128 buckets, the focused timed matrix contains draw all, one explicitly selected one-submission package comparator, and fixed-slice; the multi-submission public v0.11 lane remains a separate correctness and scheduling reference. Stock Three.js `BatchedMesh`, linear-depth and object-ID output checks, dynamic cameras, production assets, and additional GPU families remain separate comparison stages.
 
 This repository is an experiment harness and does not expose a supported library API.
 

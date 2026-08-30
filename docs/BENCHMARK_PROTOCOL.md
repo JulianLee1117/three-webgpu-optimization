@@ -8,13 +8,13 @@ Under which combinations of visibility, instance count, geometry cost, geometry 
 
 The active heterogeneous experiment uses 32 indexed geometry buckets. "Compute submissions" below are explicit Three.js `renderer.compute()` calls; "dispatches" are the compute nodes scheduled by those calls. Counts describe steady-state measured frames after one-time initialization.
 
-| Lane | Compute dispatches | Compute submissions | Purpose |
-| --- | ---: | ---: | --- |
-| Bundled draw all | 0 | 0 | No-culling retained-rendering reference |
-| Three Blocks public baseline | 128 | 32 | Supported public `culler.update()` scheduling, one culler per bucket |
-| Three Blocks coalesced probe | 128 | 1 | Same package cullers and dispatch work with a guarded, pinned scheduling change |
-| Three Blocks historical baseline | 9 | 1 | Published v0.10 heterogeneous indirect-batching execution path |
-| Fixed-slice | 2 | 1 | Independent shared reset-and-compact implementation |
+| Lane | Compute dispatches | Compute submissions | Render objects | Purpose |
+| --- | ---: | ---: | ---: | --- |
+| Bundled draw all | 0 | 0 | 32 | No-culling retained-rendering reference |
+| Three Blocks public baseline | 128 | 32 | 32 | Supported public `culler.update()` scheduling, one culler per bucket |
+| Three Blocks coalesced probe | 128 | 1 | 32 | Same package cullers and dispatch work with a guarded, pinned scheduling change |
+| Three Blocks historical baseline | 9 | 1 | 1 | Published v0.10 heterogeneous indirect-batching execution path |
+| Fixed-slice | 2 | 1 | 1 | Shared reset-and-compact implementation with merged immutable fixture storage |
 
 These are strategy-declared configuration values that the runner checks against each lane's expected schedule. They are not runtime counters observed from the GPU command stream.
 
@@ -71,9 +71,9 @@ Its indexed commands use GPU-allocated, generally nonzero `firstInstance` offset
 
 ## Fixed-slice design
 
-Fixed-slice assigns each geometry a permanent survivor range sized to its object capacity. One reset dispatch clears all 32 indirect instance counts and overflow state. One cull/compact dispatch tests every object and appends its global object ID directly into its bucket's range. The 32 indexed commands retain zero `firstInstance` values and are replayed from one cached `BundleGroup`.
+Fixed-slice assigns each geometry a permanent survivor range sized to its object capacity. One reset dispatch clears all 32 indirect instance counts and overflow state. One cull/compact dispatch tests every object and appends its global object ID directly into its bucket's range. The immutable indexed fixtures are concatenated once into nonoverlapping vertex/index ranges with a per-vertex bucket base. One mesh owns the merged buffer and the array of 32 indirect offsets; each command retains zero `firstInstance`, and the mesh is replayed from one cached `BundleGroup`.
 
-Both nodes are passed in one `renderer.compute()` call. Fixed-slice therefore changes more than scheduling: compared with the coalesced Three Blocks probe, it also changes buffer layout, compaction work, dispatch count, mesh type, and material/vertex-transform wiring. GPU compute and render durations must be reported separately, and a render-pass difference cannot be attributed solely to compaction.
+Both nodes are passed in one `renderer.compute()` call. Fixed-slice therefore changes more than scheduling: compared with the coalesced Three Blocks probe, it also changes buffer layout, compaction work, dispatch count, render-object count, mesh type, and material/vertex-transform wiring. GPU compute and render durations must be reported separately, and a render-pass difference cannot be attributed solely to compaction.
 
 ## Comparison interpretation
 
@@ -87,20 +87,20 @@ No one comparison alone attributes a difference to every layer of the system.
 
 ## Correctness gate
 
-Timing begins only after the currently implemented checks pass:
+Timing begins only after the currently implemented lane-specific checks pass, and the same semantic checks run again outside the timed window after every trial. Draw all submits every object and records a reference marker plus the scenario's expected-visible count; the survivor and indirect-command checks below apply to compute lanes unless a lane is named explicitly:
 
 - predetermined visibility agrees with an independent CPU frustum test;
 - native five-word indexed indirect commands have the expected index count, instance count, first index, and base vertex;
 - current and fixed-slice commands retain zero `firstInstance`; historical commands use in-range, disjoint survivor intervals whose union exactly covers the compacted prefix;
 - compacted IDs exactly match the expected global object-ID membership;
 - no ID is duplicate, hidden, assigned to the wrong bucket, or out of range;
-- survivor readback length agrees with the native indirect instance count;
+- Three Blocks survivor readback length agrees with the command-declared total; fixed-slice validates each command-declared prefix within its capacity-sized readback;
 - fixed-slice reports no in-capacity overflow;
 - the browser reports no page or console error during the validation path.
 
-Three Blocks v0.11 returns bucket-local survivor IDs, which the adapter maps to global IDs using `bucketBases` before applying the common membership check. Historical v0.10 retains stable global instance IDs; the adapter slices its flat survivor buffer using each command's `firstInstance` and reconstructs the common bucket-major validation layout. Diagnostic readbacks are outside timed frames.
+Three Blocks v0.11 returns bucket-local survivor IDs, which the adapter maps to global IDs using `bucketBases` before applying the common membership check. Historical v0.10 retains stable global instance IDs; the adapter slices its flat survivor buffer using each command's `firstInstance` and reconstructs the common bucket-major validation layout. Aggregate and per-bucket SHA-256 commitments over sorted survivor IDs bind both validations to the scenario's expected-membership commitment. Historical allocation offsets and survivor ordering may vary, so its pre/post comparison ignores allocation placement only after command semantics and those canonical membership digests agree. Diagnostic readbacks and workload fingerprinting are outside timed frames.
 
-Image-space color, linear-depth, and object-ID comparisons; explicit bundle-rebuild instrumentation; deterministic moving-camera tests; and mutation tests remain required before a production-rendering claim. They are not represented as completed by the current membership gate.
+For the fixed-camera 4,096-object, 20%-visibility scene, the automated browser smoke captures native PNGs and requires zero-tolerance decoded-RGBA screenshot agreement between draw all and fixed-slice at 4, 32, and 128 buckets; the 32- and 128-bucket cells are checked again after timed replay. PNG byte equality is reported separately as a diagnostic. This is static color-output smoke coverage, not an independent reference image or candidate-run artifact. Linear-depth, object-ID, deterministic moving-camera, explicit bundle-rebuild, and mutation validation remain open.
 
 ## Timing environment and precision
 
@@ -123,11 +123,17 @@ Neither public-lane block can fit in the r185 compute timestamp pool: at 32 subm
 
 ## Environment telemetry and evidence status
 
-The focused runner defaults to `development` evidence status. A higher status must be requested explicitly with `BENCHMARK_EVIDENCE_STATUS` after the run environment has been reviewed.
+The focused runner defaults to `development` evidence status. `BENCHMARK_EVIDENCE_STATUS` accepts exactly `development` or `candidate`; candidate status must be requested explicitly after the run environment has been reviewed.
 
 When `nvidia-smi` is available, one long-lived process samples all visible NVIDIA GPUs at a requested 250 ms interval for the run. `gpu-telemetry.csv` records wall-clock and monotonic run time; current trial, plan position, mode, visibility, and phase; GPU identity; performance state; graphics and memory clocks; GPU and memory utilization; memory occupancy; temperature; and power. The runner also records sanitized pre-run and post-run compute-process snapshots that retain only process basenames. Sampling is performed outside the browser and no telemetry call is made from a measured frame.
 
 Telemetry absence does not fail a technically valid benchmark, which keeps the harness portable to non-NVIDIA systems. It does leave the environment unverified unless equivalent device-specific evidence is supplied. Promotion to candidate evidence requires a manual review that establishes an otherwise idle device and checks for unexplained, mode- or order-correlated discontinuities in clocks, utilization, memory, temperature, power, or device state during measured phases. There is no automatic P-state rejection threshold: boost and power-state behavior are device-, driver-, and workload-dependent, so any rejection boundary must be supported by evidence for the tested system rather than invented by the harness.
+
+At run start and after teardown, the runner records the full Git commit and tree, exact porcelain digest and counts, tracked-file-list digest, a SHA-256 commitment over every tracked working-tree file, and the raw `package-lock.json` SHA-256. Each capture brackets and repeats its Git-state and working-byte reads, retrying rather than accepting a mixed snapshot. Candidate status requires clean source at startup. Any run that begins with available provenance is rejected unless the same commit, ref, porcelain state, tracked list, working bytes, and lock are proven stable through teardown. Candidate runs should begin from `npm ci`; the lock commitment records the intended dependency graph but cannot prove that installed package contents were not edited locally.
+
+The page freshly fingerprints every source fixture attribute, index, draw range, and bound before and after timing. It also fingerprints the generated matrices, bounds, bucket layout, cull order, and expected membership. Node validates the full schemas, dimensions, nested record hashes, seed, visibility, and array lengths rather than trusting only the browser's aggregate digest. Full manifests are deduplicated by digest in the crash-safe `workload-manifests.json`; each trial capture records its pre/start/post digest references. Full validation diagnostics and every actual/expected native indirect-command record are stored in the crash-safe `validation-artifacts.json`, linked by digest from the trial summary rather than duplicated across frame rows. Separate structural tests prove that merged fixed-slice storage preserves those fixture bytes, metadata, rebased indices, and command offsets.
+
+The final atomically written `artifact-manifest.json` is the finalization marker. It requires frame data, metadata, trial summaries, validation artifacts, workload manifests, and a telemetry-availability summary, recording each file's byte length and SHA-256. A usable run additionally requires `metadata.status` to equal `complete` and analyzer verification to succeed. Device-sample telemetry remains optional; its presence and evidence availability, or the reason for absence, are explicit in the manifest.
 
 ## Recorded measurements
 
@@ -136,11 +142,12 @@ Each accepted timed run records:
 - CPU common-update, compute-submission, render-submission, total-submission, and frame-body distributions;
 - GPU compute-pass, render-pass, and summed-pass distributions;
 - configured compute dispatch and submission counts;
+- configured draw-command and render-object counts;
 - visible fraction and expected survivor count;
-- direct or indirect draw-command count;
 - timestamp availability, missing-frame counts, and observed quantum;
 - renderer, browser, device, viewport, isolation, and CPU timer metadata;
-- validation kind and deterministic configuration identifiers.
+- validation kind and deterministic configuration identifiers;
+- Git/source/lock provenance, geometry and scenario manifests, and full validation artifacts.
 
 Summed pass durations are not described as presentation latency. Queue gaps, browser scheduling, and compositor work require separate measurement.
 

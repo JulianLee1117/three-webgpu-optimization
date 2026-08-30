@@ -19,8 +19,9 @@ import {
 import { createFrustumPlaneState, updateFrustumPlaneState } from '../culling/frustum-planes.js';
 import { createIndexedIndirectCommands } from '../culling/indexed-command-layout.js';
 import { createStorageTransformMaterial } from '../materials/storage-transform.js';
-import { createIndexedBucketGeometry } from '../render/indexed-bucket-geometry.js';
+import { createMergedIndexedBucketGeometry } from '../render/indexed-bucket-geometry.js';
 import { compareMembership, validateIndexedCommands } from '../validation/membership.js';
+import { createMembershipDigestEvidence } from '../validation/membership-digests.js';
 
 function sphereInsideNode(sphere, planeUniforms) {
   let inside = dot(planeUniforms[0].xyz, sphere.xyz)
@@ -41,7 +42,17 @@ function asUint32(buffer) {
 }
 
 export function buildFixedSliceStrategy({ scenario, sourceGeometries }) {
-  const commandLayout = createIndexedIndirectCommands(sourceGeometries, scenario.bucketCounts);
+  const { geometry, firstIndexes } = createMergedIndexedBucketGeometry(
+    sourceGeometries,
+    scenario.bucketBases,
+    scenario.bucketCounts,
+  );
+  const commandLayout = createIndexedIndirectCommands(
+    sourceGeometries,
+    scenario.bucketCounts,
+    null,
+    firstIndexes,
+  );
   const matrixAttribute = new StorageBufferAttribute(scenario.matrices, 16);
   const boundsAttribute = new StorageBufferAttribute(scenario.bounds, 4);
   const bucketAttribute = new StorageBufferAttribute(scenario.objectBuckets, 1);
@@ -101,26 +112,16 @@ export function buildFixedSliceStrategy({ scenario, sourceGeometries }) {
     visibleIdsAttribute,
   });
   const root = new BundleGroup();
-  root.name = 'fixed-slice-indexed-indirect-bundle';
-  const geometries = [];
-
-  for (let bucket = 0; bucket < scenario.bucketCount; bucket += 1) {
-    const geometry = createIndexedBucketGeometry(
-      sourceGeometries[bucket],
-      scenario.bucketBases[bucket],
-      scenario.bucketCounts[bucket],
-    );
-    geometry.setIndirect(indirectAttribute, commandLayout.offsets[bucket]);
-    const mesh = new Mesh(geometry, material);
-    mesh.frustumCulled = false;
-    root.add(mesh);
-    geometries.push(geometry);
-  }
+  root.name = 'fixed-slice-merged-indexed-indirect-bundle';
+  geometry.setIndirect(indirectAttribute, Array.from(commandLayout.offsets));
+  const mesh = new Mesh(geometry, material);
+  mesh.frustumCulled = false;
+  root.add(mesh);
 
   return {
     id: 'fixed-slice',
     root,
-    geometries,
+    geometries: [geometry],
     materials: [material],
     storageAttributes: [
       matrixAttribute,
@@ -136,6 +137,7 @@ export function buildFixedSliceStrategy({ scenario, sourceGeometries }) {
     computeNodes: [reset, cull],
     usesCompute: true,
     configuredDrawCommands: scenario.bucketCount,
+    configuredRenderObjects: 1,
     configuredComputeDispatches: 2,
     configuredComputeSubmissions: 1,
     configuredSubmittedInstances: null,
@@ -169,13 +171,26 @@ export function buildFixedSliceStrategy({ scenario, sourceGeometries }) {
       });
       const commandValidation = validateIndexedCommands({
         commands,
-        geometries,
+        geometries: sourceGeometries,
         expectedCounts: scenario.visibleCounts,
+        expectedFirstIndexes: firstIndexes,
+      });
+      const membershipDigests = await createMembershipDigestEvidence({
+        expectedIds,
+        actualIds: visibleIds,
+        actualCounts,
+        objectBuckets: scenario.objectBuckets,
+        bucketBases: scenario.bucketBases,
+        capacities: scenario.bucketCounts,
       });
       return {
-        pass: membership.pass && commandValidation.pass && overflow === 0,
+        pass: membership.pass
+          && membershipDigests.pass
+          && commandValidation.pass
+          && overflow === 0,
         kind: 'fixed-slice-exact-membership',
         membership,
+        membershipDigests,
         commandValidation,
         overflow,
       };

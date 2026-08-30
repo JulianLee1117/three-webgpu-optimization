@@ -42,6 +42,7 @@ export function decodeHistoricalIndirectResults({
   const actualIds = new Uint32Array(objectCount);
   actualIds.fill(objectCount);
   const ranges = [];
+  const records = [];
   let expectedFirstIndex = 0;
   let totalCommandSurvivors = 0;
 
@@ -66,6 +67,18 @@ export function decodeHistoricalIndirectResults({
     const firstInstance = commands[base + 4];
     actualCounts[bucket] = instanceCount;
     totalCommandSurvivors += instanceCount;
+
+    records.push({
+      bucket,
+      actual: { indexCount, instanceCount, firstIndex, baseVertex, firstInstance },
+      expected: {
+        indexCount: geometry.index.count,
+        instanceCount: expectedCounts[bucket],
+        firstIndex: expectedFirstIndex,
+        baseVertex: 0,
+        firstInstance: null,
+      },
+    });
 
     if (indexCount !== geometry.index.count) errors.push(`bucket ${bucket}: indexCount`);
     if (instanceCount !== expectedCounts[bucket]) errors.push(`bucket ${bucket}: instanceCount`);
@@ -114,8 +127,10 @@ export function decodeHistoricalIndirectResults({
     commandValidation: {
       pass: errors.length === 0,
       errors,
+      commandCount: records.length,
       totalCommandSurvivors,
       survivorReadbackLength: survivorIds.length,
+      records,
     },
   };
 }

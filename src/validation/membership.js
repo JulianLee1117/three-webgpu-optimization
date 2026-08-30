@@ -79,17 +79,48 @@ export function compareMembership({
   };
 }
 
-export function validateIndexedCommands({ commands, geometries, expectedCounts }) {
+export function validateIndexedCommands({
+  commands,
+  geometries,
+  expectedCounts,
+  expectedFirstIndexes = null,
+}) {
   const signed = new Int32Array(commands.buffer, commands.byteOffset, commands.length);
   const errors = [];
+  const records = [];
+  let totalInstanceCount = 0;
   for (let bucket = 0; bucket < geometries.length; bucket += 1) {
     const base = bucket * INDEXED_INDIRECT_STRIDE_UINTS;
-    const expectedFirstIndex = geometries[bucket].drawRange.start > 0 ? geometries[bucket].drawRange.start : 0;
-    if (commands[base] !== geometries[bucket].index.count) errors.push(`bucket ${bucket}: indexCount`);
-    if (commands[base + 1] !== expectedCounts[bucket]) errors.push(`bucket ${bucket}: instanceCount`);
-    if (commands[base + 2] !== expectedFirstIndex) errors.push(`bucket ${bucket}: firstIndex`);
-    if (signed[base + 3] !== 0) errors.push(`bucket ${bucket}: baseVertex`);
-    if (commands[base + 4] !== 0) errors.push(`bucket ${bucket}: firstInstance`);
+    const expectedFirstIndex = expectedFirstIndexes
+      ? expectedFirstIndexes[bucket]
+      : geometries[bucket].drawRange.start > 0 ? geometries[bucket].drawRange.start : 0;
+    const actual = {
+      indexCount: commands[base] ?? null,
+      instanceCount: commands[base + 1] ?? null,
+      firstIndex: commands[base + 2] ?? null,
+      baseVertex: signed[base + 3] ?? null,
+      firstInstance: commands[base + 4] ?? null,
+    };
+    const expected = {
+      indexCount: geometries[bucket].index.count,
+      instanceCount: expectedCounts[bucket],
+      firstIndex: expectedFirstIndex,
+      baseVertex: 0,
+      firstInstance: 0,
+    };
+    records.push({ bucket, actual, expected });
+    if (Number.isInteger(actual.instanceCount)) totalInstanceCount += actual.instanceCount;
+    if (actual.indexCount !== expected.indexCount) errors.push(`bucket ${bucket}: indexCount`);
+    if (actual.instanceCount !== expected.instanceCount) errors.push(`bucket ${bucket}: instanceCount`);
+    if (actual.firstIndex !== expected.firstIndex) errors.push(`bucket ${bucket}: firstIndex`);
+    if (actual.baseVertex !== expected.baseVertex) errors.push(`bucket ${bucket}: baseVertex`);
+    if (actual.firstInstance !== expected.firstInstance) errors.push(`bucket ${bucket}: firstInstance`);
   }
-  return { pass: errors.length === 0, errors };
+  return {
+    pass: errors.length === 0,
+    errors,
+    commandCount: records.length,
+    totalInstanceCount,
+    records,
+  };
 }

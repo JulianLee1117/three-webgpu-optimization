@@ -8,6 +8,10 @@ import {
 } from './config.js';
 import { TrialController } from './benchmark/trial-controller.js';
 import { downloadRows } from './lib/csv.js';
+import {
+  fingerprintFixedSubsetScenario,
+  fingerprintGeometryFixtures,
+} from './scenes/geometry-fingerprints.js';
 import { createIndexedGeometryFixtures } from './scenes/geometry-fixtures.js';
 import { createFixedSubsetScenario } from './scenes/fixed-subsets.js';
 import { buildDrawAllStrategy } from './strategies/draw-all.js';
@@ -73,9 +77,12 @@ let strategy = null;
 let scenario = null;
 let expectedCpuVisible = null;
 let sourceGeometries = [];
+let sourceGeometryManifest = null;
+let sourceScenarioManifest = null;
 let rebuilding = false;
 let validating = false;
 let lastRows = [];
+let lastValidation = null;
 
 const trial = new TrialController(renderer, {
   warmupFrames: DEVELOPMENT_PROTOCOL.warmupFrames,
@@ -109,6 +116,21 @@ function selectedConfig() {
   };
 }
 
+async function fingerprintWorkload() {
+  if (!scenario || sourceGeometries.length === 0) {
+    throw new Error('Cannot fingerprint an unbuilt workload.');
+  }
+  const [geometryFixtures, scenarioManifest] = await Promise.all([
+    fingerprintGeometryFixtures(sourceGeometries, 'medium'),
+    fingerprintFixedSubsetScenario(scenario, DEVELOPMENT_PROTOCOL.seed),
+  ]);
+  return {
+    scenarioSeed: DEVELOPMENT_PROTOCOL.seed,
+    geometryFixtures,
+    scenario: scenarioManifest,
+  };
+}
+
 function setControlsLocked(locked) {
   for (const id of ['strategy', 'objects', 'buckets', 'visibility', 'rebuild', 'validate', 'trial']) {
     elements[id].disabled = locked;
@@ -124,8 +146,12 @@ async function rebuild() {
     disposeStrategyResources(renderer, strategy);
     sourceGeometries.forEach((geometry) => geometry.dispose());
     sourceGeometries = [];
+    sourceGeometryManifest = null;
+    sourceScenarioManifest = null;
+    lastValidation = null;
     const config = selectedConfig();
     sourceGeometries = createIndexedGeometryFixtures(config.bucketCount, 'medium');
+    sourceGeometryManifest = await fingerprintGeometryFixtures(sourceGeometries, 'medium');
     scenario = createFixedSubsetScenario({
       objectCount: config.objectCount,
       bucketCount: config.bucketCount,
@@ -133,6 +159,10 @@ async function rebuild() {
       geometrySpheres: sourceGeometries.map((geometry) => geometry.boundingSphere.clone()),
       seed: DEVELOPMENT_PROTOCOL.seed,
     });
+    sourceScenarioManifest = await fingerprintFixedSubsetScenario(
+      scenario,
+      DEVELOPMENT_PROTOCOL.seed,
+    );
     expectedCpuVisible = cpuVisibleIds(
       scenario,
       camera,
@@ -179,6 +209,7 @@ async function validateCurrent() {
     if (strategy.usesCompute) strategy.submitCompute(renderer);
     renderer.render(scene, camera);
     const result = await strategy.validate(renderer, expectedCpuVisible);
+    lastValidation = result;
     elements.validation.textContent = result.pass ? 'PASS' : 'FAIL';
     elements.details.textContent = JSON.stringify(result, null, 2);
     setStatus(result.pass ? 'Validation passed.' : 'Validation failed.');
@@ -195,9 +226,10 @@ async function startTrial(extraContext = {}) {
   if (!validation?.pass) throw new Error('Timing refused because validation did not pass.');
   setControlsLocked(true);
   const config = selectedConfig();
+  const workload = await fingerprintWorkload();
   await trial.start({
     ...extraContext,
-    schemaVersion: 1,
+    schemaVersion: 2,
     modeId: strategy.id,
     objectCount: scenario.objectCount,
     bucketCount: scenario.bucketCount,
@@ -206,10 +238,15 @@ async function startTrial(extraContext = {}) {
     validationKind: validation.kind,
     validationPass: true,
     usesCompute: strategy.usesCompute,
+    configuredRenderObjects: strategy.configuredRenderObjects,
     configuredComputeDispatches: strategy.configuredComputeDispatches,
     configuredComputeSubmissions: strategy.configuredComputeSubmissions,
     timestampAvailable,
   });
+  return {
+    validation: structuredClone(validation),
+    workload,
+  };
 }
 
 function frame() {
@@ -238,6 +275,7 @@ function frame() {
     cpuSubmitTotalMs,
     cpuFrameBodyMs,
     configuredDrawCommands: strategy.configuredDrawCommands,
+    configuredRenderObjects: strategy.configuredRenderObjects,
     configuredComputeDispatches: strategy.configuredComputeDispatches,
     configuredComputeSubmissions: strategy.configuredComputeSubmissions,
     configuredSubmittedInstances: strategy.configuredSubmittedInstances,
@@ -286,9 +324,11 @@ function detectPerformanceNowQuantum(iterations = 20_000) {
 function pinnedRendererCacheDiagnostics() {
   const pipelineCache = renderer._pipelines?.caches;
   const computePrograms = renderer._pipelines?.programs?.compute;
+  const memory = renderer.info?.memory;
   if (THREE.REVISION !== THREE_REVISION
     || !(pipelineCache instanceof Map)
-    || !(computePrograms instanceof Map)) {
+    || !(computePrograms instanceof Map)
+    || !memory) {
     return { available: false };
   }
   return {
@@ -297,6 +337,17 @@ function pinnedRendererCacheDiagnostics() {
     computePipelineCacheEntries: [...pipelineCache.values()]
       .filter((pipeline) => pipeline?.isComputePipeline === true).length,
     computeProgramEntries: computePrograms.size,
+    memory: Object.fromEntries([
+      'attributes',
+      'attributesSize',
+      'geometries',
+      'indexAttributes',
+      'indexAttributesSize',
+      'indirectStorageAttributes',
+      'indirectStorageAttributesSize',
+      'storageAttributes',
+      'storageAttributesSize',
+    ].map((name) => [name, memory[name]])),
   };
 }
 const environment = Object.freeze({
@@ -320,7 +371,11 @@ window.__WEBGPU_BENCH__ = {
   rebuild,
   validate: validateCurrent,
   startTrial,
+  fingerprintWorkload,
   cacheDiagnostics: pinnedRendererCacheDiagnostics,
+  get geometryManifest() { return sourceGeometryManifest; },
+  get scenarioManifest() { return sourceScenarioManifest; },
+  get lastValidation() { return lastValidation; },
   get phase() { return trial.phase; },
   get trialError() { return trial.error?.message ?? null; },
   get rows() { return lastRows; },

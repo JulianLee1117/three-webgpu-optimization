@@ -7,9 +7,11 @@ import {
 } from 'three/webgpu';
 import { ComputeInstanceCulling } from 'three-blocks-v11/instance-culling';
 import { compareMembership, validateIndexedCommands } from '../validation/membership.js';
+import { createMembershipDigestEvidence } from '../validation/membership-digests.js';
 import {
   disposeRetainedComputeNodes,
   retainPinnedV11ComputeNodes,
+  retainPinnedV11StorageAttributes,
 } from './pinned-v11-compute-lifecycle.js';
 
 function failedReadback(id, message) {
@@ -148,6 +150,7 @@ function buildThreeBlocksStrategy(
       frustumPadZFar: 0,
     });
     const retainedCompute = retainPinnedV11ComputeNodes(culler, bucket);
+    const retainedStorageAttributes = retainPinnedV11StorageAttributes(culler, bucket);
 
     // The mesh-bound constructor installs an automatic update. This benchmark
     // invokes the public update API explicitly before replaying the bundle.
@@ -165,6 +168,7 @@ function buildThreeBlocksStrategy(
       culler,
       computeNodeByField: retainedCompute.byField,
       computeNodes: retainedCompute.nodes,
+      storageAttributes: [matrixAttribute, ...retainedStorageAttributes],
     });
   }
 
@@ -188,12 +192,13 @@ function buildThreeBlocksStrategy(
     root,
     geometries: entries.map((entry) => entry.geometry),
     materials: entries.map((entry) => entry.material),
-    storageAttributes: entries.map((entry) => entry.matrixAttribute),
+    storageAttributes: [...new Set(entries.flatMap((entry) => entry.storageAttributes))],
     // Pinned package nodes are released explicitly by dispose() because v0.11.0
     // disposes their buffers but does not emit ComputeNode disposal events.
     computeNodes: [],
     usesCompute: true,
     configuredDrawCommands: scenario.bucketCount,
+    configuredRenderObjects: scenario.bucketCount,
     configuredComputeDispatches: schedule.configuredComputeDispatches,
     configuredComputeSubmissions: schedule.configuredComputeSubmissions,
     configuredSubmittedInstances: null,
@@ -309,11 +314,23 @@ function buildThreeBlocksStrategy(
         geometries: entries.map((entry) => entry.geometry),
         expectedCounts: scenario.visibleCounts,
       });
+      const membershipDigests = await createMembershipDigestEvidence({
+        expectedIds,
+        actualIds: survivorIds,
+        actualCounts,
+        objectBuckets: scenario.objectBuckets,
+        bucketBases: scenario.bucketBases,
+        capacities: scenario.bucketCounts,
+      });
 
       return {
-        pass: readbackErrors.length === 0 && membership.pass && commandValidation.pass,
+        pass: readbackErrors.length === 0
+          && membership.pass
+          && membershipDigests.pass
+          && commandValidation.pass,
         kind: `${id}-exact-membership`,
         membership,
+        membershipDigests,
         commandValidation,
         readbackErrors,
       };
