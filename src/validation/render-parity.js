@@ -135,10 +135,18 @@ function validateObjectIdReadback(value, objectCount, expectedIds) {
   };
 }
 
-function createObjectIdMaterial({ matrixAttribute, visibleIdsAttribute, objectCount }) {
+function createObjectIdMaterial({
+  matrixAttribute,
+  visibleIdsAttribute,
+  visibleIdsCount,
+  visibleIdOffset,
+  objectCount,
+}) {
   const matrixRead = storage(matrixAttribute, 'mat4', objectCount).toReadOnly();
-  const visibleRead = storage(visibleIdsAttribute, 'uint', objectCount).toReadOnly();
-  const sliceIndex = attribute('bucketBase', 'uint').add(instanceIndex);
+  const visibleRead = storage(visibleIdsAttribute, 'uint', visibleIdsCount).toReadOnly();
+  const sliceIndex = uint(visibleIdOffset)
+    .add(attribute('bucketBase', 'uint'))
+    .add(instanceIndex);
   const objectId = visibleRead.element(sliceIndex);
   const fragmentObjectId = objectId.toVarying('v_renderParityObjectId');
 
@@ -161,7 +169,7 @@ function createObjectIdMaterial({ matrixAttribute, visibleIdsAttribute, objectCo
   return material;
 }
 
-function requireParityStrategy(strategy) {
+export function resolveRenderParityResources(strategy) {
   const resources = strategy?.parityResources;
   if (!resources
     || !resources.matrixAttribute
@@ -171,10 +179,30 @@ function requireParityStrategy(strategy) {
     || resources.objectCount > 0x00ff_ffff) {
     throw new Error(`Strategy ${strategy?.id ?? 'unknown'} does not expose parity resources.`);
   }
+  const visibleIdsCount = resources.visibleIdsCount ?? resources.objectCount;
+  const visibleIdOffset = resources.visibleIdOffset ?? 0;
+  if (!Number.isInteger(visibleIdsCount)
+    || visibleIdsCount < resources.objectCount
+    || visibleIdsCount > resources.visibleIdsAttribute.count) {
+    throw new RangeError(
+      `Strategy ${strategy?.id ?? 'unknown'} exposes an invalid parity visibleIdsCount.`,
+    );
+  }
+  if (!Number.isInteger(visibleIdOffset)
+    || visibleIdOffset < 0
+    || visibleIdOffset + resources.objectCount > visibleIdsCount) {
+    throw new RangeError(
+      `Strategy ${strategy?.id ?? 'unknown'} exposes an invalid parity visibleIdOffset.`,
+    );
+  }
   if (strategy.geometries?.length !== 1 || strategy.materials?.length !== 1) {
     throw new Error('Render parity requires exactly one merged geometry and material.');
   }
-  return resources;
+  return {
+    ...resources,
+    visibleIdsCount,
+    visibleIdOffset,
+  };
 }
 
 async function captureOnce({
@@ -249,7 +277,7 @@ export async function captureExactRenderParity({
   if ((VIEWPORT.width * 4) % 256 !== 0) {
     throw new Error('Exact parity requires an unpadded 256-byte-aligned readback row.');
   }
-  const resources = requireParityStrategy(strategy);
+  const resources = resolveRenderParityResources(strategy);
   const geometry = strategy.geometries[0];
   const sourceMaterial = strategy.materials[0];
   const objectIdMaterial = createObjectIdMaterial(resources);

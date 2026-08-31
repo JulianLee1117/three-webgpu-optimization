@@ -3,10 +3,30 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+import { summarizeFrozenCrossoverRows } from './frozen-crossover-summary.mjs';
+import {
+  FROZEN_CROSSOVER_BLOCK_SIZE,
+  FROZEN_CROSSOVER_MEASURED_BLOCKS,
+  FROZEN_CROSSOVER_MEASURED_FRAMES,
+  FROZEN_CROSSOVER_PATTERNS,
+  FROZEN_CROSSOVER_WARMUP_BLOCKS,
+  FROZEN_CROSSOVER_WARMUP_FRAMES,
+  frozenCrossoverFrame,
+} from '../src/benchmark/frozen-crossover-schedule.js';
+import {
+  FROZEN_DEPTH_CROSSOVER_LANES,
+  FROZEN_DEPTH_CROSSOVER_MODE,
+  FROZEN_DEPTH_CROSSOVER_ORIENTATION_OFFSETS,
+  FROZEN_DEPTH_CROSSOVER_REPETITIONS,
+  FROZEN_DEPTH_CROSSOVER_STORAGE_ORDERS,
+} from '../src/benchmark/plan.js';
 import {
   physicalBinSequenceIdentity,
+  renderParityIdentity,
   validateDepthOrderingCompletionInvariant,
   validateExactValidation,
+  validateFrozenCrossoverCompletionInvariant,
+  validateFrozenCrossoverRenderParity,
 } from '../scripts/evidence-validation.mjs';
 
 const REQUIRED_RUN_ARTIFACTS = Object.freeze([
@@ -96,6 +116,24 @@ const DEPTH_ORDERING_MODE_ORDERS = Object.freeze([
     DEPTH_ORDERING_MODES[1],
   ]),
 ]);
+const FROZEN_DEPTH_CROSSOVER_MATRIX = 'depth-ordering-render-only';
+const FROZEN_DEPTH_CROSSOVER_LAYOUTS = DEPTH_ORDERING_LAYOUTS;
+const FROZEN_DEPTH_CROSSOVER_VISIBILITIES = DEPTH_ORDERING_VISIBILITIES;
+const FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT = DEPTH_ORDERING_OBJECT_COUNT;
+const FROZEN_DEPTH_CROSSOVER_BUCKET_COUNT = DEPTH_ORDERING_BUCKET_COUNT;
+const FROZEN_DEPTH_CROSSOVER_BIN_COUNT = DEPTH_ORDERING_BIN_COUNT;
+const FROZEN_DEPTH_CROSSOVER_MAXIMUM_TIMESTAMP_QUANTUM_NS = 10_000;
+const FROZEN_DEPTH_CROSSOVER_PATTERNS_AS_STRINGS = Object.freeze(
+  FROZEN_CROSSOVER_PATTERNS.map((_, index) => (
+    index === 0 ? 'FRFRRFRF' : 'RFRFFRFR'
+  )),
+);
+const FROZEN_DEPTH_CROSSOVER_VALIDATION_KIND =
+  'frozen-depth-crossover-exact-paired-snapshots';
+const FROZEN_DEPTH_CROSSOVER_ORDERING =
+  'twelve-repetition-paired-eight-frame-frozen-crossover-with-balanced-layout-storage-base-and-starting-orientation';
+const FROZEN_DEPTH_CROSSOVER_RENDER_PARITY =
+  'preflight, timing-start, and postflight paired-lane exact validation plus two stable offscreen captures per lane of rgba8 color, depth32float, and encoded object ID';
 const PROVENANCE_STABILITY_FIELDS = Object.freeze([
   'commit',
   'tree',
@@ -145,6 +183,109 @@ const REPETITION_COLUMNS = Object.freeze([
   'repeat',
   'trialId',
   'runId',
+]);
+
+const FROZEN_CROSSOVER_REQUIRED_COLUMNS = Object.freeze([
+  'runId',
+  'trialId',
+  'planIndex',
+  'repetitionIndex',
+  'modeOrderPosition',
+  'visibilityOrderPosition',
+  'frameIndex',
+  'phaseFrameIndex',
+  'modeId',
+  'targetVisibilityFraction',
+  'scenarioLayout',
+  'layoutOrderPosition',
+  'plannedModeOrder',
+  'plannedVisibilityOrder',
+  'plannedLayoutOrder',
+  'protocolWarmupFrames',
+  'protocolMeasuredFrames',
+  'objectCount',
+  'bucketCount',
+  'expectedVisibleCount',
+  'depthBinRangeNear',
+  'depthBinRangeFar',
+  'plannedLaneStorageOrder',
+  'superblockOrientationOffset',
+  'plannedScheduleSha256',
+  'crossoverBlockIndex',
+  'withinBlockPosition',
+  'crossoverPattern',
+  'crossoverPatternIndex',
+  'laneId',
+  'laneBase',
+  'frontLaneBase',
+  'reverseLaneBase',
+  'selectorWriteSerial',
+  'renderCallSerial',
+  'gpuFrameId',
+  'gpuRenderTimestampUidCount',
+  'expectedRenderTimestampUidCount',
+  'validationKind',
+  'validationPass',
+  'timestampAvailable',
+  'usesCompute',
+  'configuredDrawCommands',
+  'configuredRenderObjects',
+  'configuredComputeDispatches',
+  'configuredComputeSubmissions',
+  'configuredSubmittedInstances',
+  'bundleRecordCallbackCountAtTimingStart',
+  'gpuPassTotalMs',
+  'gpuComputeMs',
+  'gpuRenderMs',
+  'cpuComputeSubmitMs',
+  'selectorWriteSerialAtTimingStart',
+  'renderCallSerialAtTimingStart',
+  'computeCallSerialAtTimingStart',
+  'totalPipelineCacheEntriesAtTimingStart',
+  'computePipelineCacheEntriesAtTimingStart',
+  'bundleGroupUuidAtTimingStart',
+  'meshUuidAtTimingStart',
+  'geometryUuidAtTimingStart',
+  'materialUuidAtTimingStart',
+  'matrixAttributeIdAtTimingStart',
+  'visibleIdsAttributeIdAtTimingStart',
+  'indirectAttributeIdAtTimingStart',
+  'selectorChallengeAttributeIdAtTimingStart',
+  'bundleGroupVersionAtTimingStart',
+  'matrixAttributeVersionAtTimingStart',
+  'visibleIdsAttributeVersionAtTimingStart',
+  'indirectAttributeVersionAtTimingStart',
+  'selectorUniformUuidAtTimingStart',
+  'renderTargetTextureUuidAtTimingStart',
+  'renderTargetWidthAtTimingStart',
+  'renderTargetHeightAtTimingStart',
+  'renderTargetSamplesAtTimingStart',
+  'renderTargetDepthBufferAtTimingStart',
+  'cameraViewFnv64AtTimingStart',
+  'cameraProjectionFnv64AtTimingStart',
+]);
+
+const FROZEN_CROSSOVER_ROW_IDENTITY_FIELDS = Object.freeze([
+  'bundleGroupUuidAtTimingStart',
+  'meshUuidAtTimingStart',
+  'geometryUuidAtTimingStart',
+  'materialUuidAtTimingStart',
+  'matrixAttributeIdAtTimingStart',
+  'visibleIdsAttributeIdAtTimingStart',
+  'indirectAttributeIdAtTimingStart',
+  'selectorChallengeAttributeIdAtTimingStart',
+  'bundleGroupVersionAtTimingStart',
+  'matrixAttributeVersionAtTimingStart',
+  'visibleIdsAttributeVersionAtTimingStart',
+  'indirectAttributeVersionAtTimingStart',
+  'selectorUniformUuidAtTimingStart',
+  'renderTargetTextureUuidAtTimingStart',
+  'renderTargetWidthAtTimingStart',
+  'renderTargetHeightAtTimingStart',
+  'renderTargetSamplesAtTimingStart',
+  'renderTargetDepthBufferAtTimingStart',
+  'cameraViewFnv64AtTimingStart',
+  'cameraProjectionFnv64AtTimingStart',
 ]);
 
 function csvError(message, line) {
@@ -448,6 +589,342 @@ function parseFrameRecords(parsed) {
   });
 
   return { frames, repetitionColumn };
+}
+
+function frozenCrossoverScheduleRecord(orientationOffset) {
+  const phase = (frameCount) => Array.from({ length: frameCount }, (_, phaseFrameIndex) => {
+    const scheduled = frozenCrossoverFrame(phaseFrameIndex, orientationOffset);
+    return {
+      phaseFrameIndex,
+      crossoverBlockIndex: scheduled.crossoverBlockIndex,
+      withinBlockPosition: scheduled.withinBlockPosition,
+      patternIndex: scheduled.patternIndex,
+      pattern: scheduled.pattern,
+      laneId: scheduled.laneId,
+    };
+  });
+  return {
+    schemaVersion: 1,
+    kind: 'frozen-depth-crossover-frame-schedule',
+    blockSize: FROZEN_CROSSOVER_BLOCK_SIZE,
+    warmupFrames: FROZEN_CROSSOVER_WARMUP_FRAMES,
+    measuredFrames: FROZEN_CROSSOVER_MEASURED_FRAMES,
+    orientationOffset,
+    warmup: phase(FROZEN_CROSSOVER_WARMUP_FRAMES),
+    measured: phase(FROZEN_CROSSOVER_MEASURED_FRAMES),
+  };
+}
+
+function frozenCrossoverScheduleSha256(orientationOffset) {
+  return sha256Json(frozenCrossoverScheduleRecord(orientationOffset));
+}
+
+function csvInteger(value, field, recordNumber, { minimum = -Infinity, maximum = Infinity } = {}) {
+  const number = finiteNumber(value, field, recordNumber, { minimum, maximum });
+  if (!Number.isInteger(number)) {
+    throw new Error(`Record ${recordNumber} has non-integer ${field}: ${JSON.stringify(value)}.`);
+  }
+  return number;
+}
+
+function isFrozenCrossoverCsv(parsed) {
+  const headers = new Set(parsed.headers);
+  return parsed.records.some((record) => record.modeId === FROZEN_DEPTH_CROSSOVER_MODE)
+    || [
+      'crossoverBlockIndex',
+      'plannedLaneStorageOrder',
+      'plannedScheduleSha256',
+      'superblockOrientationOffset',
+    ].some((header) => headers.has(header));
+}
+
+function parseFrozenCrossoverRecords(parsed) {
+  const headers = new Set(parsed.headers);
+  const missing = FROZEN_CROSSOVER_REQUIRED_COLUMNS.filter((column) => !headers.has(column));
+  if (missing.length > 0) {
+    throw new Error(`Frozen crossover CSV is missing required columns: ${missing.join(', ')}.`);
+  }
+  if (parsed.records.some((record) => record.modeId !== FROZEN_DEPTH_CROSSOVER_MODE)) {
+    throw new Error('Frozen crossover CSV cannot mix frozen and non-frozen modes.');
+  }
+
+  const expectedScheduleSha256 = [0, 1].map(frozenCrossoverScheduleSha256);
+  const seenGpuFrameIds = new Set();
+  const normalized = parsed.records.map((record, index) => {
+    const recordNumber = index + 2;
+    const integer = (field, limits = {}) => csvInteger(
+      record[field],
+      field,
+      recordNumber,
+      limits,
+    );
+    const repetitionIndex = integer('repetitionIndex', {
+      minimum: 0,
+      maximum: FROZEN_DEPTH_CROSSOVER_REPETITIONS - 1,
+    });
+    const frameIndex = integer('frameIndex', {
+      minimum: 0,
+      maximum: FROZEN_CROSSOVER_MEASURED_FRAMES - 1,
+    });
+    const phaseFrameIndex = integer('phaseFrameIndex', {
+      minimum: 0,
+      maximum: FROZEN_CROSSOVER_MEASURED_FRAMES - 1,
+    });
+    const layoutOrderPosition = integer('layoutOrderPosition', { minimum: 0, maximum: 1 });
+    const orientationOffset = integer('superblockOrientationOffset', {
+      minimum: 0,
+      maximum: 1,
+    });
+    const gpuFrameId = integer('gpuFrameId', { minimum: 0 });
+    if (seenGpuFrameIds.has(gpuFrameId)) {
+      throw new Error(`Record ${recordNumber} duplicates gpuFrameId ${gpuFrameId}.`);
+    }
+    seenGpuFrameIds.add(gpuFrameId);
+
+    const gpuRenderMs = finiteNumber(
+      record.gpuRenderMs,
+      'gpuRenderMs',
+      recordNumber,
+      { minimum: Number.MIN_VALUE },
+    );
+    const gpuPassTotalMs = finiteNumber(
+      record.gpuPassTotalMs,
+      'gpuPassTotalMs',
+      recordNumber,
+      { minimum: Number.MIN_VALUE },
+    );
+    if (gpuPassTotalMs !== gpuRenderMs) {
+      throw new Error(`Record ${recordNumber} gpuPassTotalMs must equal gpuRenderMs.`);
+    }
+    if (record.gpuComputeMs !== '' || record.cpuComputeSubmitMs !== '') {
+      throw new Error(`Record ${recordNumber} contains an unexpected compute duration.`);
+    }
+    if (record.usesCompute !== 'false') {
+      throw new Error(`Record ${recordNumber} must record usesCompute=false.`);
+    }
+    if (record.validationPass !== 'true' || record.timestampAvailable !== 'true') {
+      throw new Error(`Record ${recordNumber} lacks accepted validation or GPU timestamps.`);
+    }
+    if (record.validationKind !== FROZEN_DEPTH_CROSSOVER_VALIDATION_KIND) {
+      throw new Error(`Record ${recordNumber} has the wrong frozen validation kind.`);
+    }
+    const expectedVisibleCount = Math.round(
+      FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT * FROZEN_DEPTH_CROSSOVER_VISIBILITIES[0],
+    );
+    if (finiteNumber(
+      record.targetVisibilityFraction,
+      'targetVisibilityFraction',
+      recordNumber,
+    ) !== FROZEN_DEPTH_CROSSOVER_VISIBILITIES[0]
+      || integer('modeOrderPosition') !== 0
+      || integer('visibilityOrderPosition') !== 0
+      || record.plannedModeOrder !== FROZEN_DEPTH_CROSSOVER_MODE
+      || record.plannedVisibilityOrder !== String(FROZEN_DEPTH_CROSSOVER_VISIBILITIES[0])
+      || integer('protocolWarmupFrames') !== FROZEN_CROSSOVER_WARMUP_FRAMES
+      || integer('protocolMeasuredFrames') !== FROZEN_CROSSOVER_MEASURED_FRAMES
+      || integer('objectCount') !== FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT
+      || integer('bucketCount') !== FROZEN_DEPTH_CROSSOVER_BUCKET_COUNT
+      || integer('expectedVisibleCount') !== expectedVisibleCount
+      || integer('configuredDrawCommands') !== FROZEN_DEPTH_CROSSOVER_BUCKET_COUNT
+      || integer('configuredRenderObjects') !== 1
+      || integer('configuredComputeDispatches') !== 0
+      || integer('configuredComputeSubmissions') !== 0
+      || integer('configuredSubmittedInstances') !== expectedVisibleCount
+      || integer('bundleRecordCallbackCountAtTimingStart') !== 1) {
+      throw new Error(`Record ${recordNumber} has the wrong frozen workload or render-only shape.`);
+    }
+    if (integer('gpuRenderTimestampUidCount') !== 1
+      || integer('expectedRenderTimestampUidCount') !== 1) {
+      throw new Error(`Record ${recordNumber} must contain exactly one render timestamp UID.`);
+    }
+    if (record.plannedScheduleSha256 !== expectedScheduleSha256[orientationOffset]) {
+      throw new Error(`Record ${recordNumber} has the wrong frozen schedule commitment.`);
+    }
+    const stringIdentityFields = [
+      'bundleGroupUuidAtTimingStart',
+      'meshUuidAtTimingStart',
+      'geometryUuidAtTimingStart',
+      'materialUuidAtTimingStart',
+      'selectorUniformUuidAtTimingStart',
+      'renderTargetTextureUuidAtTimingStart',
+    ];
+    if (stringIdentityFields.some((field) => record[field].trim() === '')
+      || !/^[0-9a-f]{16}$/.test(record.cameraViewFnv64AtTimingStart)
+      || !/^[0-9a-f]{16}$/.test(record.cameraProjectionFnv64AtTimingStart)
+      || integer('renderTargetWidthAtTimingStart') !== 1280
+      || integer('renderTargetHeightAtTimingStart') !== 720
+      || integer('renderTargetSamplesAtTimingStart') !== 0
+      || record.renderTargetDepthBufferAtTimingStart !== 'true') {
+      throw new Error(`Record ${recordNumber} has an invalid frozen resource, target, or camera identity.`);
+    }
+    const selectorWriteSerialAtTimingStart = integer(
+      'selectorWriteSerialAtTimingStart',
+      { minimum: 0 },
+    );
+    const renderCallSerialAtTimingStart = integer(
+      'renderCallSerialAtTimingStart',
+      { minimum: 0 },
+    );
+    const computeCallSerialAtTimingStart = integer(
+      'computeCallSerialAtTimingStart',
+      { minimum: 0 },
+    );
+    const totalPipelineCacheEntriesAtTimingStart = integer(
+      'totalPipelineCacheEntriesAtTimingStart',
+      { minimum: 0 },
+    );
+    const computePipelineCacheEntriesAtTimingStart = integer(
+      'computePipelineCacheEntriesAtTimingStart',
+      { minimum: 0 },
+    );
+    if (computePipelineCacheEntriesAtTimingStart
+      > totalPipelineCacheEntriesAtTimingStart) {
+      throw new Error(`Record ${recordNumber} has impossible frozen pipeline-cache counts.`);
+    }
+    const numericIdentity = Object.fromEntries([
+      'matrixAttributeIdAtTimingStart',
+      'visibleIdsAttributeIdAtTimingStart',
+      'indirectAttributeIdAtTimingStart',
+      'selectorChallengeAttributeIdAtTimingStart',
+      'bundleGroupVersionAtTimingStart',
+      'matrixAttributeVersionAtTimingStart',
+      'visibleIdsAttributeVersionAtTimingStart',
+      'indirectAttributeVersionAtTimingStart',
+    ].map((field) => [field, integer(field, { minimum: 0 })]));
+
+    return {
+      runId: record.runId,
+      trialId: record.trialId,
+      planIndex: integer('planIndex', { minimum: 0, maximum: 23 }),
+      repetitionIndex,
+      frameIndex,
+      phaseFrameIndex,
+      layout: record.scenarioLayout,
+      layoutOrderPosition,
+      plannedLayoutOrder: record.plannedLayoutOrder,
+      laneStorageOrder: record.plannedLaneStorageOrder,
+      frontLaneBase: integer('frontLaneBase', {
+        minimum: 0,
+        maximum: FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT,
+      }),
+      reverseLaneBase: integer('reverseLaneBase', {
+        minimum: 0,
+        maximum: FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT,
+      }),
+      superblockOrientationOffset: orientationOffset,
+      plannedScheduleSha256: record.plannedScheduleSha256,
+      crossoverBlockIndex: integer('crossoverBlockIndex', {
+        minimum: 0,
+        maximum: FROZEN_CROSSOVER_MEASURED_BLOCKS - 1,
+      }),
+      withinBlockPosition: integer('withinBlockPosition', {
+        minimum: 0,
+        maximum: FROZEN_CROSSOVER_BLOCK_SIZE - 1,
+      }),
+      crossoverPattern: record.crossoverPattern,
+      crossoverPatternIndex: integer('crossoverPatternIndex', { minimum: 0, maximum: 1 }),
+      laneId: record.laneId,
+      laneBase: integer('laneBase', {
+        minimum: 0,
+        maximum: FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT,
+      }),
+      selectorWriteSerial: integer('selectorWriteSerial', { minimum: 1 }),
+      renderCallSerial: integer('renderCallSerial', { minimum: 1 }),
+      gpuFrameId,
+      gpuRenderMs,
+      selectorWriteSerialAtTimingStart,
+      renderCallSerialAtTimingStart,
+      computeCallSerialAtTimingStart,
+      totalPipelineCacheEntriesAtTimingStart,
+      computePipelineCacheEntriesAtTimingStart,
+      bundleGroupUuidAtTimingStart: record.bundleGroupUuidAtTimingStart,
+      meshUuidAtTimingStart: record.meshUuidAtTimingStart,
+      geometryUuidAtTimingStart: record.geometryUuidAtTimingStart,
+      materialUuidAtTimingStart: record.materialUuidAtTimingStart,
+      ...numericIdentity,
+      selectorUniformUuidAtTimingStart: record.selectorUniformUuidAtTimingStart,
+      renderTargetTextureUuidAtTimingStart: record.renderTargetTextureUuidAtTimingStart,
+      renderTargetWidthAtTimingStart: 1280,
+      renderTargetHeightAtTimingStart: 720,
+      renderTargetSamplesAtTimingStart: 0,
+      renderTargetDepthBufferAtTimingStart: true,
+      cameraViewFnv64AtTimingStart: record.cameraViewFnv64AtTimingStart,
+      cameraProjectionFnv64AtTimingStart: record.cameraProjectionFnv64AtTimingStart,
+    };
+  });
+
+  const runIds = new Set(normalized.map((row) => row.runId));
+  if (runIds.size !== 1 || [...runIds][0] === '') {
+    throw new Error('Frozen crossover CSV must contain exactly one nonempty runId.');
+  }
+  const byTrial = new Map();
+  for (const row of normalized) {
+    let rows = byTrial.get(row.trialId);
+    if (rows === undefined) {
+      rows = [];
+      byTrial.set(row.trialId, rows);
+    }
+    rows.push(row);
+  }
+  for (const [trialId, rows] of byTrial) {
+    if (trialId === '') throw new Error('Frozen crossover CSV contains an empty trialId.');
+    const first = rows[0];
+    const expectedLayoutOrder = first.repetitionIndex % 2 === 0
+      ? FROZEN_DEPTH_CROSSOVER_LAYOUTS
+      : [...FROZEN_DEPTH_CROSSOVER_LAYOUTS].reverse();
+    const expectedStorageOrder = FROZEN_DEPTH_CROSSOVER_STORAGE_ORDERS[first.repetitionIndex];
+    const expectedFrontLaneBase = expectedStorageOrder.indexOf(
+      FROZEN_DEPTH_CROSSOVER_LANES[0],
+    ) * FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT;
+    if (first.planIndex !== first.repetitionIndex * 2 + first.layoutOrderPosition
+      || first.layout !== expectedLayoutOrder[first.layoutOrderPosition]
+      || first.plannedLayoutOrder !== expectedLayoutOrder.join('|')
+      || first.laneStorageOrder !== expectedStorageOrder.join('|')
+      || first.frontLaneBase !== expectedFrontLaneBase
+      || first.reverseLaneBase
+        !== (expectedFrontLaneBase === 0 ? FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT : 0)
+      || first.superblockOrientationOffset
+        !== FROZEN_DEPTH_CROSSOVER_ORIENTATION_OFFSETS[first.repetitionIndex]) {
+      throw new Error(`Frozen crossover trial ${JSON.stringify(trialId)} differs from the committed plan.`);
+    }
+    for (const [frameIndex, row] of rows.entries()) {
+      const scheduled = frozenCrossoverFrame(
+        frameIndex,
+        first.superblockOrientationOffset,
+      );
+      if (row.planIndex !== first.planIndex
+        || row.repetitionIndex !== first.repetitionIndex
+        || row.layout !== first.layout
+        || row.layoutOrderPosition !== first.layoutOrderPosition
+        || row.plannedLayoutOrder !== first.plannedLayoutOrder
+        || row.laneStorageOrder !== first.laneStorageOrder
+        || row.frontLaneBase !== first.frontLaneBase
+        || row.reverseLaneBase !== first.reverseLaneBase
+        || row.superblockOrientationOffset !== first.superblockOrientationOffset
+        || row.plannedScheduleSha256 !== first.plannedScheduleSha256
+        || row.selectorWriteSerialAtTimingStart
+          !== first.selectorWriteSerialAtTimingStart
+        || row.renderCallSerialAtTimingStart !== first.renderCallSerialAtTimingStart
+        || row.computeCallSerialAtTimingStart !== first.computeCallSerialAtTimingStart
+        || row.totalPipelineCacheEntriesAtTimingStart
+          !== first.totalPipelineCacheEntriesAtTimingStart
+        || row.computePipelineCacheEntriesAtTimingStart
+          !== first.computePipelineCacheEntriesAtTimingStart
+        || FROZEN_CROSSOVER_ROW_IDENTITY_FIELDS.some(
+          (field) => row[field] !== first[field],
+        )
+        || row.frameIndex !== frameIndex
+        || row.phaseFrameIndex !== frameIndex
+        || row.crossoverPatternIndex !== scheduled.patternIndex
+        || row.selectorWriteSerial !== row.selectorWriteSerialAtTimingStart
+          + FROZEN_CROSSOVER_WARMUP_FRAMES + frameIndex + 1
+        || row.renderCallSerial !== row.renderCallSerialAtTimingStart
+          + FROZEN_CROSSOVER_WARMUP_FRAMES + frameIndex + 1) {
+        throw new Error(`Frozen crossover trial ${JSON.stringify(trialId)} has inconsistent frame audit fields.`);
+      }
+    }
+  }
+  return normalized;
 }
 
 function metricP50(frames) {
@@ -1249,6 +1726,94 @@ export function validateProtocolMatrix(protocol) {
     return;
   }
 
+  if (protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+    if (!orderedValuesMatch(protocol.modes, [FROZEN_DEPTH_CROSSOVER_MODE])) {
+      failVerification('depth-ordering-render-only protocol must use exactly the frozen crossover mode.');
+    }
+    if (!orderedValuesMatch(protocol.layouts, FROZEN_DEPTH_CROSSOVER_LAYOUTS)
+      || !orderedValuesMatch(
+        protocol.visibilityLevels,
+        FROZEN_DEPTH_CROSSOVER_VISIBILITIES,
+      )) {
+      failVerification('depth-ordering-render-only protocol has the wrong layouts or visibility level.');
+    }
+    if (protocol.repetitions !== FROZEN_DEPTH_CROSSOVER_REPETITIONS
+      || protocol.warmupFrames !== FROZEN_CROSSOVER_WARMUP_FRAMES
+      || protocol.measuredFrames !== FROZEN_CROSSOVER_MEASURED_FRAMES) {
+      failVerification('depth-ordering-render-only protocol has the wrong repetitions or frame counts.');
+    }
+    if (protocol.objectCount !== FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT
+      || protocol.bucketCount !== FROZEN_DEPTH_CROSSOVER_BUCKET_COUNT
+      || protocol.depthBinCount !== FROZEN_DEPTH_CROSSOVER_BIN_COUNT) {
+      failVerification('depth-ordering-render-only protocol must use 65536 objects, 32 buckets, and eight depth bins.');
+    }
+    if (protocol.matrix
+      !== `${FROZEN_DEPTH_CROSSOVER_MATRIX}-o${FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT}-b${FROZEN_DEPTH_CROSSOVER_BUCKET_COUNT}`) {
+      failVerification('depth-ordering-render-only matrix identifier does not match its exact workload.');
+    }
+    if (protocol.reversedDepthBuffer !== true
+      || protocol.minimumStorageBuffersPerShaderStage
+        !== DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS
+      || protocol.heterogeneousComparator !== null
+      || protocol.representationScaleRole !== null) {
+      failVerification('depth-ordering-render-only protocol has the wrong renderer or comparator contract.');
+    }
+    if (protocol.ordering !== FROZEN_DEPTH_CROSSOVER_ORDERING
+      || protocol.renderParity !== FROZEN_DEPTH_CROSSOVER_RENDER_PARITY) {
+      failVerification('depth-ordering-render-only protocol has the wrong ordering or parity contract.');
+    }
+    const frozen = requireRecord(
+      protocol.frozenCrossover,
+      'metadata.json protocol.frozenCrossover',
+    );
+    const frozenKeys = [
+      'lanes',
+      'blockSize',
+      'warmupBlocks',
+      'measuredBlocks',
+      'patterns',
+      'expectedMeasuredRowsPerLane',
+      'expectedRenderCallsPerFrame',
+      'expectedRenderTimestampUidCount',
+      'expectedComputeTimestampsPerFrame',
+      'survivorBufferSegments',
+      'survivorSegmentLength',
+      'legalLaneBases',
+      'scheduleSha256ByOrientation',
+    ];
+    if (Object.keys(frozen).length !== frozenKeys.length
+      || frozenKeys.some((key) => !Object.hasOwn(frozen, key))) {
+      failVerification('depth-ordering-render-only frozenCrossover has an unexpected schema.');
+    }
+    if (!orderedValuesMatch(frozen.lanes, FROZEN_DEPTH_CROSSOVER_LANES)
+      || frozen.blockSize !== FROZEN_CROSSOVER_BLOCK_SIZE
+      || frozen.warmupBlocks !== FROZEN_CROSSOVER_WARMUP_BLOCKS
+      || frozen.measuredBlocks !== FROZEN_CROSSOVER_MEASURED_BLOCKS
+      || !orderedValuesMatch(frozen.patterns, FROZEN_DEPTH_CROSSOVER_PATTERNS_AS_STRINGS)
+      || frozen.expectedMeasuredRowsPerLane !== FROZEN_CROSSOVER_MEASURED_FRAMES / 2
+      || frozen.expectedRenderCallsPerFrame !== 1
+      || frozen.expectedRenderTimestampUidCount !== 1
+      || frozen.expectedComputeTimestampsPerFrame !== 0
+      || frozen.survivorBufferSegments !== 2
+      || frozen.survivorSegmentLength !== FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT
+      || !orderedValuesMatch(
+        frozen.legalLaneBases,
+        [0, FROZEN_DEPTH_CROSSOVER_OBJECT_COUNT],
+      )) {
+      failVerification('depth-ordering-render-only frozenCrossover constants differ from the preregistration.');
+    }
+    const scheduleDigests = requireRecord(
+      frozen.scheduleSha256ByOrientation,
+      'metadata.json protocol.frozenCrossover.scheduleSha256ByOrientation',
+    );
+    if (Object.keys(scheduleDigests).length !== 2
+      || scheduleDigests['0'] !== frozenCrossoverScheduleSha256(0)
+      || scheduleDigests['1'] !== frozenCrossoverScheduleSha256(1)) {
+      failVerification('depth-ordering-render-only schedule commitments are incomplete or inconsistent.');
+    }
+    return;
+  }
+
   if (protocol.matrixKind !== DEPTH_ORDERING_MATRIX) return;
   if (!orderedValuesMatch(protocol.modes, DEPTH_ORDERING_MODES)) {
     failVerification(
@@ -1362,11 +1927,18 @@ function requireMetadataCompleteness(metadata, manifest) {
     failVerification('metadata.json protocol.visibilityLevels must contain finite values.');
   }
   validateProtocolMatrix(protocol);
-  if (protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+  if (protocol.matrixKind === DEPTH_ORDERING_MATRIX
+    || protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
     const benchmarkPage = requireRecord(
       metadata.environment.benchmarkPage,
       'metadata.json environment.benchmarkPage',
     );
+    if (protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
+      && benchmarkPage.reversedDepth !== true) {
+      failVerification(
+        'depth-ordering-render-only metadata does not prove camera reversed-depth operation.',
+      );
+    }
     if (benchmarkPage.rendererReversedDepthBuffer !== true) {
       failVerification('depth-ordering metadata does not prove renderer reversed-depth operation.');
     }
@@ -1391,6 +1963,7 @@ function requireMetadataCompleteness(metadata, manifest) {
     failVerification('metadata.json expectedTrialCount does not equal plan length.');
   }
   const layoutCount = protocol.matrixKind === DEPTH_ORDERING_MATRIX
+    || protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
     ? requireArray(protocol.layouts, 'metadata.json protocol.layouts').length
     : 1;
   const protocolTrialCount = protocol.repetitions
@@ -1437,13 +2010,15 @@ function requireExactPermutation(value, expectedValues, label) {
 export function validateBenchmarkPlan(plan, metadata) {
   validateProtocolMatrix(metadata.protocol);
   const isDepthOrdering = metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX;
+  const isFrozenCrossover = metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX;
+  const hasLayouts = isDepthOrdering || isFrozenCrossover;
   const byTrialId = new Map();
   const byPlanIndex = new Map();
   const matrixCells = new Set();
   const repetitionOrders = new Map();
   const modes = metadata.protocol.modes;
   const visibilityLevels = metadata.protocol.visibilityLevels;
-  const layouts = isDepthOrdering ? metadata.protocol.layouts : null;
+  const layouts = hasLayouts ? metadata.protocol.layouts : null;
   for (const [arrayIndex, item] of plan.entries()) {
     requireRecord(item, `metadata.json plan[${arrayIndex}]`);
     const trialId = requireNonemptyString(item.trialId, `metadata.json plan[${arrayIndex}].trialId`);
@@ -1480,7 +2055,7 @@ export function validateBenchmarkPlan(plan, metadata) {
       failVerification(`metadata.json plan[${arrayIndex}] visibility position is inconsistent.`);
     }
     let layoutOrder = null;
-    if (isDepthOrdering) {
+    if (hasLayouts) {
       requireNonemptyString(item.layout, `metadata.json plan[${arrayIndex}].layout`);
       layoutOrder = requireExactPermutation(
         item.layoutOrder,
@@ -1495,12 +2070,31 @@ export function validateBenchmarkPlan(plan, metadata) {
         failVerification(`metadata.json plan[${arrayIndex}] layout position is inconsistent.`);
       }
     }
+    if (isFrozenCrossover) {
+      const laneStorageOrder = requireExactPermutation(
+        item.laneStorageOrder,
+        FROZEN_DEPTH_CROSSOVER_LANES,
+        `metadata.json plan[${arrayIndex}].laneStorageOrder`,
+      );
+      requireInteger(
+        item.superblockOrientationOffset,
+        `metadata.json plan[${arrayIndex}].superblockOrientationOffset`,
+        { minimum: 0, maximum: 1 },
+      );
+      if (!orderedValuesMatch(
+        laneStorageOrder,
+        FROZEN_DEPTH_CROSSOVER_STORAGE_ORDERS[item.repetitionIndex],
+      ) || item.superblockOrientationOffset
+        !== FROZEN_DEPTH_CROSSOVER_ORIENTATION_OFFSETS[item.repetitionIndex]) {
+        failVerification(`metadata.json plan[${arrayIndex}] changes a preregistered frozen crossover factor.`);
+      }
+    }
     if (item.runId !== metadata.runId) failVerification(`metadata.json plan[${arrayIndex}] has the wrong runId.`);
     requireInteger(item.objectCount, `metadata.json plan[${arrayIndex}].objectCount`, { minimum: 1 });
     requireInteger(item.bucketCount, `metadata.json plan[${arrayIndex}].bucketCount`, { minimum: 1 });
     if (!metadata.protocol.modes.includes(item.modeId)
       || !metadata.protocol.visibilityLevels.includes(item.visibilityFraction)
-      || (isDepthOrdering && !layouts.includes(item.layout))
+      || (hasLayouts && !layouts.includes(item.layout))
       || item.repetitionIndex >= metadata.protocol.repetitions
       || item.objectCount !== metadata.protocol.objectCount
       || item.bucketCount !== metadata.protocol.bucketCount) {
@@ -1512,11 +2106,11 @@ export function validateBenchmarkPlan(plan, metadata) {
     if (byTrialId.has(trialId) || byPlanIndex.has(item.planIndex)) {
       failVerification('metadata.json plan has duplicate trial identities.');
     }
-    const cellKey = JSON.stringify(isDepthOrdering
+    const cellKey = JSON.stringify(hasLayouts
       ? [item.repetitionIndex, item.layout, item.modeId, item.visibilityFraction]
       : [item.repetitionIndex, item.modeId, item.visibilityFraction]);
     if (matrixCells.has(cellKey)) {
-      failVerification(isDepthOrdering
+      failVerification(hasLayouts
         ? 'metadata.json plan duplicates a repetition/layout/mode/visibility cell.'
         : 'metadata.json plan duplicates a repetition/mode/visibility cell.');
     }
@@ -1525,7 +2119,7 @@ export function validateBenchmarkPlan(plan, metadata) {
     const orderRecord = repetitionOrders.get(item.repetitionIndex);
     const modeOrderSignature = JSON.stringify(modeOrder);
     const visibilityOrderSignature = JSON.stringify(visibilityOrder);
-    const layoutOrderSignature = isDepthOrdering ? JSON.stringify(layoutOrder) : null;
+    const layoutOrderSignature = hasLayouts ? JSON.stringify(layoutOrder) : null;
     if (orderRecord === undefined) {
       repetitionOrders.set(item.repetitionIndex, {
         modeOrder: [...modeOrder],
@@ -1548,15 +2142,15 @@ export function validateBenchmarkPlan(plan, metadata) {
     if (!repetitionOrders.has(repetition)) {
       failVerification(`metadata.json plan omits repetition ${repetition}.`);
     }
-    const expectedLayouts = isDepthOrdering ? layouts : [null];
+    const expectedLayouts = hasLayouts ? layouts : [null];
     for (const layout of expectedLayouts) {
       for (const mode of modes) {
         for (const visibility of visibilityLevels) {
-          const cellKey = JSON.stringify(isDepthOrdering
+          const cellKey = JSON.stringify(hasLayouts
             ? [repetition, layout, mode, visibility]
             : [repetition, mode, visibility]);
           if (!matrixCells.has(cellKey)) {
-            failVerification(isDepthOrdering
+            failVerification(hasLayouts
               ? 'metadata.json plan omits a repetition/layout/mode/visibility cell.'
               : 'metadata.json plan omits a repetition/mode/visibility cell.');
           }
@@ -1587,6 +2181,35 @@ export function validateBenchmarkPlan(plan, metadata) {
           'fixed-slice-representation visibility orders must rotate by repetition.',
         );
       }
+    }
+    if (isFrozenCrossover) {
+      const expectedLayoutOrder = repetition % 2 === 0
+        ? FROZEN_DEPTH_CROSSOVER_LAYOUTS
+        : [...FROZEN_DEPTH_CROSSOVER_LAYOUTS].reverse();
+      if (!orderedValuesMatch(orderRecord.modeOrder, [FROZEN_DEPTH_CROSSOVER_MODE])
+        || !orderedValuesMatch(
+          orderRecord.visibilityOrder,
+          FROZEN_DEPTH_CROSSOVER_VISIBILITIES,
+        )
+        || !orderedValuesMatch(orderRecord.layoutOrder, expectedLayoutOrder)) {
+        failVerification('depth-ordering-render-only plan changes its exact mode, visibility, or layout order.');
+      }
+      for (let layoutPosition = 0;
+        layoutPosition < expectedLayoutOrder.length;
+        layoutPosition += 1) {
+        const item = plan[executionIndex];
+        if (item.repetitionIndex !== repetition
+          || item.layoutOrderPosition !== layoutPosition
+          || item.layout !== expectedLayoutOrder[layoutPosition]
+          || item.visibilityOrderPosition !== 0
+          || item.visibilityFraction !== FROZEN_DEPTH_CROSSOVER_VISIBILITIES[0]
+          || item.modeOrderPosition !== 0
+          || item.modeId !== FROZEN_DEPTH_CROSSOVER_MODE) {
+          failVerification('metadata.json frozen crossover plan execution order is not repetition-contiguous and layout-paired.');
+        }
+        executionIndex += 1;
+      }
+      continue;
     }
     if (isDepthOrdering) {
       const expectedModeOrder = DEPTH_ORDERING_MODE_ORDERS[repetition];
@@ -1674,14 +2297,14 @@ export function validateBenchmarkPlan(plan, metadata) {
       }
     }
   }
-  if (isDepthOrdering && metadata.protocol.repetitions % layouts.length === 0) {
+  if (hasLayouts && metadata.protocol.repetitions % layouts.length === 0) {
     const expectedPerPosition = metadata.protocol.repetitions / layouts.length;
     for (const layout of layouts) {
       for (let position = 0; position < layouts.length; position += 1) {
         const count = [...repetitionOrders.values()]
           .filter((record) => record.layoutOrder[position] === layout).length;
         if (count !== expectedPerPosition) {
-          failVerification('metadata.json depth-ordering layout ordering is not position-balanced.');
+          failVerification('metadata.json layout ordering is not position-balanced.');
         }
       }
     }
@@ -1752,11 +2375,42 @@ function validateTrialSummaries(trialSummaries, metadata, planIndex) {
       || timestamps.missingComputeFrames !== 0) {
       failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} lacks complete accepted timestamps.`);
     }
-    if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+    if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX
+      || metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
       requireRecord(
         summary.completionInvariant,
         `trial-summaries.json trial ${JSON.stringify(trialId)} completionInvariant`,
       );
+    }
+    if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+      const plannedScheduleSha256 = metadata.protocol.frozenCrossover
+        .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)];
+      if (validation.kind !== FROZEN_DEPTH_CROSSOVER_VALIDATION_KIND
+        || !orderedValuesMatch(summary.laneStorageOrder, planned.laneStorageOrder)
+        || summary.superblockOrientationOffset !== planned.superblockOrientationOffset
+        || summary.plannedScheduleSha256 !== plannedScheduleSha256) {
+        failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} changes its frozen plan commitments.`);
+      }
+      if (timestamps.expectedRenderTimestampUidCount !== 1
+        || timestamps.invalidRenderTimestampUidCountFrames !== 0
+        || !Number.isFinite(timestamps.quantumNs)
+        || timestamps.quantumNs <= 0
+        || timestamps.quantumNs > FROZEN_DEPTH_CROSSOVER_MAXIMUM_TIMESTAMP_QUANTUM_NS) {
+        failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} violates the frozen timestamp contract.`);
+      }
+      const selected = requireRecord(
+        summary.selectedConfig,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} selectedConfig`,
+      );
+      if (selected.strategyId !== planned.modeId
+        || selected.objectCount !== planned.objectCount
+        || selected.bucketCount !== planned.bucketCount
+        || selected.visibilityFraction !== planned.visibilityFraction
+        || selected.layout !== planned.layout
+        || !orderedValuesMatch(selected.laneStorageOrder, planned.laneStorageOrder)
+        || selected.superblockOrientationOffset !== planned.superblockOrientationOffset) {
+        failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} selectedConfig differs from its frozen plan.`);
+      }
     }
     byTrialId.set(trialId, summary);
   }
@@ -1932,7 +2586,8 @@ function validateWorkloadManifests(catalog, metadata) {
   if (geometries[metadataGeometrySha256] === undefined) {
     failVerification('metadata geometry digest is absent from workload-manifests.json.');
   }
-  if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+  if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX
+    || metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
     if (metadata.workload.scenarioSha256ByVisibility !== null) {
       failVerification('depth-ordering workload scenarioSha256ByVisibility must be null.');
     }
@@ -2040,7 +2695,8 @@ function validateWorkloadManifests(catalog, metadata) {
 }
 
 function scenarioDigestForTrial(metadata, trial) {
-  if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+  if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX
+    || metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
     return metadata.workload.scenarioSha256ByCell?.[
       `${trial.layout}|${trial.visibilityFraction}`
     ];
@@ -2113,6 +2769,26 @@ function validateValidationArtifacts(
         || selectedConfig.layout !== planned.layout)) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} selectedConfig differs from the planned depth-ordering cell.`);
     }
+    if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
+      && (selectedConfig.strategyId !== planned.modeId
+        || selectedConfig.objectCount !== planned.objectCount
+        || selectedConfig.bucketCount !== planned.bucketCount
+        || selectedConfig.visibilityFraction !== planned.visibilityFraction
+        || selectedConfig.layout !== planned.layout
+        || !orderedValuesMatch(selectedConfig.laneStorageOrder, planned.laneStorageOrder)
+        || selectedConfig.superblockOrientationOffset
+          !== planned.superblockOrientationOffset)) {
+      failVerification(`validation artifact ${JSON.stringify(trialId)} selectedConfig differs from the frozen plan.`);
+    }
+    if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+      const plannedScheduleSha256 = metadata.protocol.frozenCrossover
+        .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)];
+      if (!orderedValuesMatch(artifact.laneStorageOrder, planned.laneStorageOrder)
+        || artifact.superblockOrientationOffset !== planned.superblockOrientationOffset
+        || artifact.plannedScheduleSha256 !== plannedScheduleSha256) {
+        failVerification(`validation artifact ${JSON.stringify(trialId)} changes its frozen plan commitments.`);
+      }
+    }
     requireSha256(artifact.sha256, `validation artifact ${JSON.stringify(trialId)} sha256`);
     if (sha256Json(bodyWithoutSha256(artifact)) !== artifact.sha256) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} record SHA-256 is inconsistent.`);
@@ -2155,6 +2831,76 @@ function validateValidationArtifacts(
     const scenarioManifest = workloadCatalog.scenarios[captures[0].scenarioSha256];
     if (geometryManifest === undefined || scenarioManifest === undefined) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} links an unknown workload manifest.`);
+    }
+    if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+      const parityDigests = [];
+      for (const captureName of ['pre', 'timingStart', 'post']) {
+        const capture = artifact[captureName];
+        const exactCheck = validateExactValidation(capture.validation.payload, {
+          modeId: planned.modeId,
+          objectCount: planned.objectCount,
+          bucketCount: planned.bucketCount,
+          expectedVisibleCount: scenarioManifest.expectedVisibleCount,
+          expectedVisibleIdsCanonicalSha256:
+            scenarioManifest.expectedVisibleIdsCanonicalSha256,
+          geometryManifest,
+          scenarioManifest,
+          laneStorageOrder: planned.laneStorageOrder,
+        });
+        if (exactCheck.rejectionReasons.length !== 0) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} frozen payload failed: ${exactCheck.rejectionReasons.join('; ')}.`,
+          );
+        }
+        if (exactCheck.semanticSha256 !== capture.validation.semanticSha256) {
+          failVerification(`validation artifact ${JSON.stringify(trialId)} ${captureName} frozen semantic SHA-256 is inconsistent.`);
+        }
+        const parityReasons = validateFrozenCrossoverRenderParity(
+          capture.renderParity,
+          { spec: planned, geometryManifest, scenarioManifest },
+        );
+        if (parityReasons.length !== 0) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} frozen render parity failed: ${parityReasons.join('; ')}.`,
+          );
+        }
+        if (capture.renderParity.snapshotValidation?.physicalBinSequenceSha256
+          !== capture.validation.payload.physicalBinSequenceSha256) {
+          failVerification(`validation artifact ${JSON.stringify(trialId)} ${captureName} changed its physical-bin sequence between parity and validation.`);
+        }
+        if (sha256Json(capture.renderParity.snapshotValidation)
+          !== capture.validation.payloadSha256) {
+          failVerification(`validation artifact ${JSON.stringify(trialId)} ${captureName} parity snapshot differs from its exact validation payload.`);
+        }
+        parityDigests.push(renderParityIdentity(capture.renderParity));
+      }
+      const expectedParitySha256 = renderParityDigestForTrial(metadata, artifact);
+      if (parityDigests.some((digest) => digest !== expectedParitySha256)) {
+        failVerification(`validation artifact ${JSON.stringify(trialId)} frozen render-parity digest differs from its layout cell.`);
+      }
+      const completionReasons = validateFrozenCrossoverCompletionInvariant(
+        summary.completionInvariant,
+        {
+          objectCount: planned.objectCount,
+          validation: artifact.timingStart.validation.payload,
+        },
+      );
+      if (completionReasons.length !== 0) {
+        failVerification(
+          `trial summary ${JSON.stringify(trialId)} frozen completion invariant failed: ${completionReasons.join('; ')}.`,
+        );
+      }
+      const pairKey = [
+        artifact.repetitionIndex,
+        artifact.layout,
+        artifact.visibilityFraction,
+        captures[0].scenarioSha256,
+      ].join('|');
+      const sequenceSha256 = artifact.pre.validation.payload.physicalBinSequenceSha256;
+      if (physicalBinSequencePairs.has(pairKey)) {
+        failVerification(`frozen physical-bin sequence pair ${JSON.stringify(pairKey)} is duplicated.`);
+      }
+      physicalBinSequencePairs.set(pairKey, { sha256: sequenceSha256, modeIds: null });
     }
     if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
       for (const captureName of ['pre', 'timingStart', 'post']) {
@@ -2267,6 +3013,19 @@ function validateValidationArtifacts(
       }
     }
   }
+  if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+    const expectedPairCount = metadata.protocol.repetitions
+      * metadata.protocol.layouts.length
+      * metadata.protocol.visibilityLevels.length;
+    if (physicalBinSequencePairs.size !== expectedPairCount) {
+      failVerification('frozen physical-bin sequence commitments do not cover every trial.');
+    }
+    for (const [key, pair] of physicalBinSequencePairs) {
+      if (metadata.workload.physicalBinSequenceSha256ByPair?.[key] !== pair.sha256) {
+        failVerification(`frozen physical-bin sequence pair ${JSON.stringify(key)} differs from metadata.`);
+      }
+    }
+  }
 }
 
 function exactCsvInteger(value, label) {
@@ -2305,6 +3064,83 @@ function depthFrameShape(modeId, bucketCount) {
   };
 }
 
+function validateVerifiedFrozenFrames(
+  parsed,
+  metadata,
+  planIndex,
+  summariesByTrialId,
+  workloadCatalog,
+) {
+  let rows;
+  try {
+    rows = parseFrozenCrossoverRecords(parsed);
+  } catch (error) {
+    failVerification(error instanceof Error ? error.message : String(error));
+  }
+  if (rows.length !== metadata.frameRowCount
+    || metadata.frameRowCount !== metadata.expectedTrialCount * metadata.protocol.measuredFrames) {
+    failVerification('frozen frames.csv row count is inconsistent with metadata.');
+  }
+  const rowCountByTrial = new Map();
+  for (const [index, row] of rows.entries()) {
+    const record = parsed.records[index];
+    const label = `frames.csv record ${index + 2}`;
+    const planned = planIndex.byTrialId.get(row.trialId);
+    const summary = summariesByTrialId.get(row.trialId);
+    if (row.runId !== metadata.runId
+      || planned === undefined
+      || summary === undefined) {
+      failVerification(`${label} has an unknown run or trial identity.`);
+    }
+    if (row.planIndex !== planned.planIndex
+      || row.repetitionIndex !== planned.repetitionIndex
+      || row.layout !== planned.layout
+      || row.layoutOrderPosition !== planned.layoutOrderPosition
+      || row.laneStorageOrder !== planned.laneStorageOrder.join('|')
+      || row.superblockOrientationOffset !== planned.superblockOrientationOffset
+      || row.plannedScheduleSha256
+        !== metadata.protocol.frozenCrossover.scheduleSha256ByOrientation[
+          String(planned.superblockOrientationOffset)
+        ]) {
+      failVerification(`${label} differs from its frozen plan or schedule commitment.`);
+    }
+    const completion = summary.completionInvariant;
+    if (row.selectorWriteSerialAtTimingStart
+        !== completion.selectorWriteSerialAtTimingStart
+      || row.renderCallSerialAtTimingStart !== completion.renderCallSerialAtTimingStart
+      || row.computeCallSerialAtTimingStart !== completion.computeCallSerialAtTimingStart
+      || row.totalPipelineCacheEntriesAtTimingStart
+        !== completion.totalPipelineCacheEntriesAtTimingStart
+      || row.computePipelineCacheEntriesAtTimingStart
+        !== completion.computePipelineCacheEntriesAtTimingStart
+      || FROZEN_CROSSOVER_ROW_IDENTITY_FIELDS.some(
+        (field) => row[field] !== completion[field],
+      )) {
+      failVerification(`${label} differs from its frozen timing-start lifecycle commitment.`);
+    }
+    const scenarioSha256 = scenarioDigestForTrial(metadata, planned);
+    const scenarioManifest = workloadCatalog.scenarios[scenarioSha256];
+    if (!scenarioManifest
+      || exactCsvNumber(record.depthBinRangeNear, `${label} depthBinRangeNear`)
+        !== scenarioManifest.depthBinRange.near
+      || exactCsvNumber(record.depthBinRangeFar, `${label} depthBinRangeFar`)
+        !== scenarioManifest.depthBinRange.far
+      || exactCsvInteger(record.expectedVisibleCount, `${label} expectedVisibleCount`)
+        !== scenarioManifest.expectedVisibleCount) {
+      failVerification(`${label} differs from its frozen scenario manifest.`);
+    }
+    rowCountByTrial.set(row.trialId, (rowCountByTrial.get(row.trialId) ?? 0) + 1);
+  }
+  if (rowCountByTrial.size !== planIndex.byTrialId.size) {
+    failVerification('frozen frames.csv does not cover every planned trial.');
+  }
+  for (const trialId of planIndex.byTrialId.keys()) {
+    if (rowCountByTrial.get(trialId) !== FROZEN_CROSSOVER_MEASURED_FRAMES) {
+      failVerification(`frozen frames.csv has an incomplete trial ${JSON.stringify(trialId)}.`);
+    }
+  }
+}
+
 function validateVerifiedFrames(
   parsed,
   metadata,
@@ -2312,6 +3148,16 @@ function validateVerifiedFrames(
   summariesByTrialId,
   workloadCatalog,
 ) {
+  if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+    validateVerifiedFrozenFrames(
+      parsed,
+      metadata,
+      planIndex,
+      summariesByTrialId,
+      workloadCatalog,
+    );
+    return;
+  }
   const requiredAuditColumns = [
     'runId',
     'trialId',
@@ -2511,7 +3357,15 @@ export async function verifyRunDirectory(runDirectory) {
   }
   const csvText = contentsByName.get('frames.csv').toString('utf8');
   const parsed = parseCsv(csvText);
-  parseFrameRecords(parsed);
+  if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+    try {
+      parseFrozenCrossoverRecords(parsed);
+    } catch (error) {
+      failVerification(error instanceof Error ? error.message : String(error));
+    }
+  } else {
+    parseFrameRecords(parsed);
+  }
   validateVerifiedFrames(
     parsed,
     metadata,
@@ -2541,6 +3395,19 @@ export async function verifyRunDirectory(runDirectory) {
 
 export function summarizeCsv(text) {
   const parsed = parseCsv(text);
+  if (isFrozenCrossoverCsv(parsed)) {
+    return {
+      ...summarizeFrozenCrossoverRows(parseFrozenCrossoverRecords(parsed)),
+      artifactVerification: {
+        status: 'unverified',
+        scope: 'artifact-integrity-and-schema-only',
+        authenticityVerified: false,
+        inputKind: 'raw-csv-content',
+        evidenceStatus: null,
+        reason: 'Raw CSV is not bound to a consistent run artifact manifest.',
+      },
+    };
+  }
   const { frames, repetitionColumn } = parseFrameRecords(parsed);
   const groups = groupFrames(frames);
   const depthFrontToBackVsReverse = pairedContrasts(

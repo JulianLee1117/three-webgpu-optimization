@@ -34,13 +34,19 @@ The completed matrix tested whether per-bucket coarse GPU-generated front-to-bac
 
 The fixed candidate cell uses 65,536 objects, 32 buckets, 99% visibility, a high-overlap layout, and a low-overlap negative control. Three.js reversed depth is enabled for every lane so dense-scene depth ties do not make output depend on draw order. Candidate timing is gated by exact survivor, command, bin-layout, traversal-normalized within-bin sequence, bundle-lifecycle, full-frame color, depth, and object-ID evidence. The preregistered design and falsification thresholds are in [Coarse depth-ordering protocol](docs/DEPTH_ORDERING_PROTOCOL.md).
 
+## Frozen render-order crossover
+
+The active experiment isolates the remaining render-order question from compaction cost. Before timing, it constructs exact front-to-back and reverse survivor lists in the two halves of one immutable storage buffer. Both lanes then use the same merged geometry, indirect commands, matrix buffer, material, shader pipeline, mesh, and static bundle; a uint base offset is the only lane-varying shader input. There is no compute submission in the timed workload.
+
+Each paired trial alternates the two lanes inside complementary eight-frame superblocks and renders once per animation frame to a fixed offscreen target. Twelve repetitions cover both high- and low-overlap layouts while counterbalancing physical buffer placement, starting superblock orientation, and layout position. Full buffer readback, an untimed selector-address challenge, exact color/depth/object-ID parity, timestamp identity, and static-resource invariants gate every result. The estimand, schedule, replication rule, and decision thresholds are fixed in the [Frozen render-order crossover protocol](docs/FROZEN_DEPTH_CROSSOVER_PROTOCOL.md).
+
 ## Current status
 
 The package baselines, scheduling probe, fixed-slice lane, and fixed-slice representation control are integrated with lane-specific correctness gates; every compute lane requires exact survivor membership and native indexed-command validation. The representation control additionally requires one shared geometry and material, exactly B retained meshes, exactly B bundle-record callbacks before timing, no bundle rebuild during timing, and exact decoded-pixel parity.
 
 Two independent single-device candidate runs now show that the fixed-ownership specialization materially reduces timestamped GPU-pass cost against the published Three Blocks 0.10 heterogeneous path at 32 buckets. Two further candidate runs show a low- and medium-visibility GPU-pass reduction against the guarded Three Blocks 0.11 coalesced diagnostic, with a near-full-visibility crossover. These are scoped results for one RTX 5070 Ti / D3D12 system, not a cross-device conclusion.
 
-Two coarse depth-ordering candidates each completed all 36 trials and passed the correctness, lifecycle, provenance, and artifact gates, but neither passed the preregistered performance decision. The first measured front-to-back render time 4.1% slower than reverse; the replication measured it 10.6% faster but failed the absolute-position stability gate. The deterministic bucket-serial scatter increased total GPU-pass time by 49.1-55.1% in the high-overlap layout and 58.7-66.5% in the low-overlap control. The next experiment will isolate render order with prevalidated survivor lists and short, interleaved timing blocks before any scalable ordering pipeline is developed. Exact comparisons and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
+Two coarse depth-ordering candidates each completed all 36 trials and passed the correctness, lifecycle, provenance, and artifact gates, but neither passed the preregistered performance decision. The first measured front-to-back render time 4.1% slower than reverse; the replication measured it 10.6% faster but failed the absolute-position stability gate. The deterministic bucket-serial scatter increased total GPU-pass time by 49.1-55.1% in the high-overlap layout and 58.7-66.5% in the low-overlap control. The frozen render-order crossover now tests the possible early-depth signal without including survivor generation or compaction in the timed contrast. Exact completed comparisons and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
 
 The core techniques, including GPU frustum culling, survivor compaction, indirect drawing, and retained command submission, are established prior art. The research question is whether a narrower Three.js integration or fixed-ownership specialization produces a material, reproducible difference.
 
@@ -98,13 +104,24 @@ $env:BENCHMARK_MATRIX = 'depth-ordering'
 npm run benchmark:focused
 ```
 
+The frozen render-order crossover uses the same fixed scene size and runs 24 paired trials:
+
+```sh
+BENCHMARK_MATRIX=depth-ordering-render-only npm run benchmark:focused
+```
+
+```powershell
+$env:BENCHMARK_MATRIX = 'depth-ordering-render-only'
+npm run benchmark:focused
+```
+
 A completed run can be summarized with:
 
 ```sh
 npm run analyze -- results/runs/<run-id>
 ```
 
-Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. For the depth matrix it evaluates the preregistered numeric gates, keeps front-to-back versus reverse under causal contrasts, and labels comparisons against atomic fixed-slice as contextual whole-mechanism comparisons. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
+Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. For the coarse depth matrix it evaluates the preregistered numeric gates, keeps front-to-back versus reverse under causal contrasts, and labels comparisons against atomic fixed-slice as contextual whole-mechanism comparisons. For the frozen crossover it reconstructs every superblock, rejects schedule or base-mapping deviations, and evaluates the preregistered repetition-level, control, interaction, and drift gates. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
 
 The benchmark requires a WebGPU-capable device and records the actual adapter, backend, browser, timestamp support, and timer precision with each run. The browser smoke additionally requires zero-tolerance decoded-RGBA screenshot agreement among draw all, fixed-slice, and the per-bucket representation control at 4, 32, and 128 buckets, reports PNG byte equality as a diagnostic, verifies 32- and 128-bucket timed replay, and checks repeated strategy teardown against the renderer's resource and cache baseline. Results from a busy or changing device should be retained as development evidence rather than used for performance claims.
 

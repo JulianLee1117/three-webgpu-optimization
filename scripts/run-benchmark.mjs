@@ -21,12 +21,25 @@ import {
   DEPTH_ORDERING_MODES,
   DEPTH_ORDERING_VISIBILITY,
   FIXED_SLICE_REPRESENTATION_MODES,
+  FROZEN_DEPTH_CROSSOVER_LANES,
+  FROZEN_DEPTH_CROSSOVER_MODE,
+  FROZEN_DEPTH_CROSSOVER_REPETITIONS,
   assertBalancedModeOrders,
   buildBenchmarkPlan,
   buildDepthOrderingPlan,
+  buildFrozenDepthCrossoverPlan,
   createEcosystemModeOrders,
   createRepresentationModeOrders,
 } from '../src/benchmark/plan.js';
+import {
+  FROZEN_CROSSOVER_BLOCK_SIZE,
+  FROZEN_CROSSOVER_MEASURED_BLOCKS,
+  FROZEN_CROSSOVER_MEASURED_FRAMES,
+  FROZEN_CROSSOVER_PATTERNS,
+  FROZEN_CROSSOVER_WARMUP_BLOCKS,
+  FROZEN_CROSSOVER_WARMUP_FRAMES,
+  frozenCrossoverFrame,
+} from '../src/benchmark/frozen-crossover-schedule.js';
 import {
   physicalBinSequenceIdentity,
   renderParityIdentity,
@@ -66,9 +79,10 @@ const ALLOWED_BENCHMARK_MATRICES = Object.freeze([
   'ecosystem',
   'fixed-slice-representation',
   'depth-ordering',
+  'depth-ordering-render-only',
 ]);
-const WARMUP_FRAMES = 300;
-const MEASURED_FRAMES = 240;
+const LEGACY_WARMUP_FRAMES = 300;
+const LEGACY_MEASURED_FRAMES = 240;
 const SCENARIO_SEED = 0xb1ad_2026;
 const BROWSER_ARGS = Object.freeze([
   '--enable-unsafe-webgpu',
@@ -107,10 +121,19 @@ const BENCHMARK_MATRIX = validatedStringEnvironmentChoice(
   'ecosystem',
   ALLOWED_BENCHMARK_MATRICES,
 );
+const FROZEN_CROSSOVER_MATRIX = BENCHMARK_MATRIX === 'depth-ordering-render-only';
+const DEPTH_LAYOUT_MATRIX = BENCHMARK_MATRIX === 'depth-ordering'
+  || FROZEN_CROSSOVER_MATRIX;
+const WARMUP_FRAMES = FROZEN_CROSSOVER_MATRIX
+  ? FROZEN_CROSSOVER_WARMUP_FRAMES
+  : LEGACY_WARMUP_FRAMES;
+const MEASURED_FRAMES = FROZEN_CROSSOVER_MATRIX
+  ? FROZEN_CROSSOVER_MEASURED_FRAMES
+  : LEGACY_MEASURED_FRAMES;
 
 const OBJECT_COUNT = validatedEnvironmentChoice(
   'BENCHMARK_OBJECT_COUNT',
-  BENCHMARK_MATRIX === 'depth-ordering' ? 65_536 : 16_384,
+  DEPTH_LAYOUT_MATRIX ? 65_536 : 16_384,
   ALLOWED_OBJECT_COUNTS,
 );
 const BUCKET_COUNT = validatedEnvironmentChoice(
@@ -118,10 +141,10 @@ const BUCKET_COUNT = validatedEnvironmentChoice(
   32,
   ALLOWED_BUCKET_COUNTS,
 );
-if (BENCHMARK_MATRIX === 'depth-ordering'
+if (DEPTH_LAYOUT_MATRIX
   && (OBJECT_COUNT !== 65_536 || BUCKET_COUNT !== 32)) {
   throw new Error(
-    'The depth-ordering protocol is fixed at BENCHMARK_OBJECT_COUNT=65536 and '
+    `The ${BENCHMARK_MATRIX} protocol is fixed at BENCHMARK_OBJECT_COUNT=65536 and `
       + 'BENCHMARK_BUCKET_COUNT=32.',
   );
 }
@@ -154,13 +177,20 @@ const ECOSYSTEM_MODES = Object.freeze(['draw-all', THREE_BLOCKS_MODE, 'fixed-sli
 const REPRESENTATION_MODES = FIXED_SLICE_REPRESENTATION_MODES;
 const MODES = BENCHMARK_MATRIX === 'fixed-slice-representation'
   ? REPRESENTATION_MODES
-  : BENCHMARK_MATRIX === 'depth-ordering'
-    ? DEPTH_ORDERING_MODES
-    : ECOSYSTEM_MODES;
+  : FROZEN_CROSSOVER_MATRIX
+    ? Object.freeze([FROZEN_DEPTH_CROSSOVER_MODE])
+    : BENCHMARK_MATRIX === 'depth-ordering'
+      ? DEPTH_ORDERING_MODES
+      : ECOSYSTEM_MODES;
 const MODE_ORDERS = BENCHMARK_MATRIX === 'fixed-slice-representation'
   ? createRepresentationModeOrders(REPRESENTATION_MODES)
-  : createEcosystemModeOrders(MODES);
-const VISIBILITY_LEVELS = BENCHMARK_MATRIX === 'depth-ordering'
+  : FROZEN_CROSSOVER_MATRIX
+    ? Object.freeze(Array.from(
+      { length: FROZEN_DEPTH_CROSSOVER_REPETITIONS },
+      () => Object.freeze([FROZEN_DEPTH_CROSSOVER_MODE]),
+    ))
+    : createEcosystemModeOrders(MODES);
+const VISIBILITY_LEVELS = DEPTH_LAYOUT_MATRIX
   ? Object.freeze([DEPTH_ORDERING_VISIBILITY])
   : BENCHMARK_VISIBILITY_LEVELS;
 
@@ -170,6 +200,37 @@ const DEPTH_BINNED_MODE_IDS = new Set([
   'fixed-slice-depth-reverse',
 ]);
 const MATRIX_ID = `${BENCHMARK_MATRIX}-o${OBJECT_COUNT}-b${BUCKET_COUNT}`;
+
+function frozenScheduleCommitmentRecord(orientationOffset) {
+  const rows = (frameCount) => Array.from({ length: frameCount }, (_, phaseFrameIndex) => {
+    const scheduled = frozenCrossoverFrame(phaseFrameIndex, orientationOffset);
+    return {
+      phaseFrameIndex,
+      crossoverBlockIndex: scheduled.crossoverBlockIndex,
+      withinBlockPosition: scheduled.withinBlockPosition,
+      patternIndex: scheduled.patternIndex,
+      pattern: scheduled.pattern,
+      laneId: scheduled.laneId,
+    };
+  });
+  return {
+    schemaVersion: 1,
+    kind: 'frozen-depth-crossover-frame-schedule',
+    blockSize: FROZEN_CROSSOVER_BLOCK_SIZE,
+    warmupFrames: FROZEN_CROSSOVER_WARMUP_FRAMES,
+    measuredFrames: FROZEN_CROSSOVER_MEASURED_FRAMES,
+    orientationOffset,
+    warmup: rows(FROZEN_CROSSOVER_WARMUP_FRAMES),
+    measured: rows(FROZEN_CROSSOVER_MEASURED_FRAMES),
+  };
+}
+
+const FROZEN_SCHEDULE_SHA256_BY_ORIENTATION = FROZEN_CROSSOVER_MATRIX
+  ? Object.freeze(Object.fromEntries([0, 1].map((orientationOffset) => [
+    String(orientationOffset),
+    sha256Json(frozenScheduleCommitmentRecord(orientationOffset)),
+  ])))
+  : null;
 const sourceProvenanceStart = await collectSourceProvenance(PROJECT_ROOT, {
   allowUnavailable: EVIDENCE_STATUS === 'development',
 });
@@ -312,10 +373,23 @@ function validateBenchmarkEnvironment(environment) {
   }
   rejectionReasons.push(...validateBenchmarkProtocolEnvironment({
     matrixKind: BENCHMARK_MATRIX,
-    reversedDepthBuffer: BENCHMARK_MATRIX === 'depth-ordering' ? true : null,
+    reversedDepthBuffer: DEPTH_LAYOUT_MATRIX ? true : null,
     minimumStorageBuffersPerShaderStage:
-      BENCHMARK_MATRIX === 'depth-ordering' ? 8 : null,
+      DEPTH_LAYOUT_MATRIX ? 8 : null,
   }, environment));
+  if (FROZEN_CROSSOVER_MATRIX
+    && environment?.rendererReversedDepthBuffer !== true) {
+    rejectionReasons.push(
+      'the frozen depth crossover requires the renderer reversed-depth buffer',
+    );
+  }
+  if (FROZEN_CROSSOVER_MATRIX
+    && (!Number.isInteger(environment?.maxStorageBuffersPerShaderStage)
+      || environment.maxStorageBuffersPerShaderStage < 8)) {
+    rejectionReasons.push(
+      'the frozen depth crossover requires at least eight storage buffers per shader stage',
+    );
+  }
   if (rejectionReasons.length > 0) {
     throw new Error(`Benchmark environment rejected at startup: ${rejectionReasons.join('; ')}.`);
   }
@@ -325,6 +399,13 @@ async function configureAndValidateTrial(page, spec) {
   return page.evaluate(async (trial) => {
     const bench = window.__WEBGPU_BENCH__;
     if (!bench) throw new Error('Benchmark page API is unavailable.');
+    const frozenCrossover = trial.modeId === 'fixed-slice-depth-frozen-crossover';
+    if (frozenCrossover) {
+      bench.configureFrozenCrossover({
+        laneStorageOrder: trial.laneStorageOrder,
+        superblockOrientationOffset: trial.superblockOrientationOffset,
+      });
+    }
     const selections = {
       strategy: trial.modeId,
       objects: String(trial.objectCount),
@@ -346,7 +427,14 @@ async function configureAndValidateTrial(page, spec) {
       || selected.objectCount !== trial.objectCount
       || selected.bucketCount !== trial.bucketCount
       || selected.visibilityFraction !== trial.visibilityFraction
-      || selected.layout !== trial.layout) {
+      || selected.layout !== trial.layout
+      || (frozenCrossover
+        && (selected.superblockOrientationOffset !== trial.superblockOrientationOffset
+          || !Array.isArray(selected.laneStorageOrder)
+          || selected.laneStorageOrder.length !== trial.laneStorageOrder.length
+          || selected.laneStorageOrder.some(
+            (laneId, index) => laneId !== trial.laneStorageOrder[index],
+          )))) {
       throw new Error(`Page configuration mismatch: ${JSON.stringify(selected)}`);
     }
     let validation = null;
@@ -373,14 +461,16 @@ async function configureAndValidateTrial(page, spec) {
   }, spec);
 }
 
-async function startConfiguredTrial(page, auditContext) {
-  return page.evaluate(async (context) => {
+async function startConfiguredTrial(page, auditContext, capturePairedRenderParity = false) {
+  return page.evaluate(async ({ context, captureParity }) => {
     const bench = window.__WEBGPU_BENCH__;
     if (!bench) throw new Error('Benchmark page API is unavailable.');
+    let renderParity = null;
     try {
+      if (captureParity) renderParity = await bench.captureRenderParity();
       const evidence = await bench.startTrial(context);
       return {
-        evidence,
+        evidence: { ...evidence, renderParity },
         phase: bench.phase,
         trialError: bench.trialError,
         startError: null,
@@ -390,49 +480,61 @@ async function startConfiguredTrial(page, auditContext) {
         evidence: {
           validation: structuredClone(bench.lastValidation),
           workload: await bench.fingerprintWorkload(),
+          renderParity,
         },
         phase: bench.phase,
         trialError: bench.trialError,
         startError: error instanceof Error ? error.message : String(error),
       };
     }
-  }, auditContext);
+  }, { context: auditContext, captureParity: capturePairedRenderParity });
 }
 
-async function collectPostTrialEvidence(page) {
-  return page.evaluate(async () => {
+async function collectPostTrialEvidence(page, capturePairedRenderParity = false) {
+  return page.evaluate(async (captureParity) => {
     const bench = window.__WEBGPU_BENCH__;
     if (!bench) throw new Error('Benchmark page API is unavailable.');
     let validation = null;
     let validationError = null;
+    let renderParity = null;
     try {
       validation = await bench.validate();
+      if (captureParity) {
+        renderParity = await bench.captureRenderParity();
+        validation = await bench.validate();
+      }
     } catch (error) {
       validation = structuredClone(bench.lastValidation);
       validationError = error instanceof Error ? error.message : String(error);
     }
     const workload = await bench.fingerprintWorkload();
-    return { validation, validationError, workload };
-  });
+    return { validation, validationError, renderParity, workload };
+  }, capturePairedRenderParity);
 }
 
 const startedAt = new Date().toISOString();
 const runId = `${MATRIX_ID}-${compactTimestamp(startedAt)}`;
 const runDirectory = path.join(RESULT_ROOT, runId);
-const plan = (BENCHMARK_MATRIX === 'depth-ordering'
-  ? buildDepthOrderingPlan({
+const plan = (FROZEN_CROSSOVER_MATRIX
+  ? buildFrozenDepthCrossoverPlan({
     runId,
-    modeOrders: MODE_ORDERS,
     objectCount: OBJECT_COUNT,
     bucketCount: BUCKET_COUNT,
   })
-  : buildBenchmarkPlan({
-    runId,
-    modeOrders: MODE_ORDERS,
-    visibilityLevels: VISIBILITY_LEVELS,
-    objectCount: OBJECT_COUNT,
-    bucketCount: BUCKET_COUNT,
-  })).map((trial) => ({ ...trial, runId }));
+  : BENCHMARK_MATRIX === 'depth-ordering'
+    ? buildDepthOrderingPlan({
+      runId,
+      modeOrders: MODE_ORDERS,
+      objectCount: OBJECT_COUNT,
+      bucketCount: BUCKET_COUNT,
+    })
+    : buildBenchmarkPlan({
+      runId,
+      modeOrders: MODE_ORDERS,
+      visibilityLevels: VISIBILITY_LEVELS,
+      objectCount: OBJECT_COUNT,
+      bucketCount: BUCKET_COUNT,
+    })).map((trial) => ({ ...trial, runId }));
 const runStartedMonotonic = performance.now();
 const frameRows = [];
 const trialSummaries = [];
@@ -519,6 +621,7 @@ function inspectEvidenceCapture(spec, evidence) {
     expectedVisibleIdsCanonicalSha256: scenario?.expectedVisibleIdsCanonicalSha256,
     geometryManifest: geometry,
     scenarioManifest: scenario,
+    laneStorageOrder: spec.laneStorageOrder ?? null,
   });
   rejectionReasons.push(...validationCheck.rejectionReasons);
   return {
@@ -680,6 +783,12 @@ try {
       plannedLayoutOrder: spec.layoutOrder.join('|'),
       protocolWarmupFrames: WARMUP_FRAMES,
       protocolMeasuredFrames: MEASURED_FRAMES,
+      ...(FROZEN_CROSSOVER_MATRIX ? {
+        plannedLaneStorageOrder: spec.laneStorageOrder.join('|'),
+        superblockOrientationOffset: spec.superblockOrientationOffset,
+        plannedScheduleSha256:
+          FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[String(spec.superblockOrientationOffset)],
+      } : {}),
     };
 
     telemetryContext = Object.freeze({
@@ -718,7 +827,7 @@ try {
     if (priorScenarioSha256 === undefined && preflight.accepted) {
       scenarioSha256ByCell.set(scenarioKey, scenarioManifest.sha256);
     }
-    if (BENCHMARK_MATRIX === 'depth-ordering') {
+    if (DEPTH_LAYOUT_MATRIX) {
       const parityRejectionReasons = validateRenderParity(preflight.renderParity, {
         spec,
         geometryManifest: fixtureManifest,
@@ -735,6 +844,14 @@ try {
         } else if (priorParitySha256 === undefined) {
           renderParitySha256ByCell.set(scenarioKey, paritySha256);
         }
+      }
+      if (FROZEN_CROSSOVER_MATRIX
+        && (preflight.renderParity?.snapshotValidation === undefined
+          || sha256Json(preflight.renderParity.snapshotValidation)
+            !== preflight.validation.payloadSha256)) {
+        preflightRejectionReasons.push(
+          'frozen preflight parity snapshot differs from its exact validation payload',
+        );
       }
       if (DEPTH_BINNED_MODE_IDS.has(spec.modeId)) {
         const validationSequenceSha256 = physicalBinSequenceIdentity(
@@ -773,6 +890,39 @@ try {
           }
         }
       }
+      if (FROZEN_CROSSOVER_MATRIX) {
+        const validationSequenceSha256 = preflight.validation?.payload
+          ?.physicalBinSequenceSha256 ?? null;
+        const paritySequenceSha256 = preflight.renderParity?.snapshotValidation
+          ?.physicalBinSequenceSha256 ?? null;
+        if (!/^[0-9a-f]{64}$/.test(validationSequenceSha256 ?? '')
+          || !/^[0-9a-f]{64}$/.test(paritySequenceSha256 ?? '')) {
+          preflightRejectionReasons.push(
+            'frozen paired lanes lack a physical-bin sequence commitment',
+          );
+        } else if (validationSequenceSha256 !== paritySequenceSha256) {
+          preflightRejectionReasons.push(
+            'frozen physical-bin sequence changed between parity and preflight snapshots',
+          );
+        } else {
+          const pairKey = [
+            spec.repetitionIndex,
+            spec.layout,
+            spec.visibilityFraction,
+            scenarioManifest?.sha256,
+          ].join('|');
+          if (physicalBinSequenceByPair.has(pairKey)) {
+            preflightRejectionReasons.push(
+              'frozen physical-bin sequence pair was observed more than once',
+            );
+          } else {
+            physicalBinSequenceByPair.set(pairKey, {
+              sha256: validationSequenceSha256,
+              modeIds: new Set([spec.modeId]),
+            });
+          }
+        }
+      }
     }
     preflight.accepted = preflightRejectionReasons.length === 0;
     preflight.rejectionReasons = [...new Set(preflightRejectionReasons)];
@@ -786,6 +936,12 @@ try {
       layout: spec.layout,
       objectCount: spec.objectCount,
       bucketCount: spec.bucketCount,
+      ...(FROZEN_CROSSOVER_MATRIX ? {
+        laneStorageOrder: [...spec.laneStorageOrder],
+        superblockOrientationOffset: spec.superblockOrientationOffset,
+        plannedScheduleSha256:
+          FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[String(spec.superblockOrientationOffset)],
+      } : {}),
       selectedConfig,
       status: preflight.accepted ? 'preflight-accepted' : 'rejected',
       rejectionReasons: [...preflight.rejectionReasons],
@@ -801,7 +957,11 @@ try {
       throw new Error(`Trial ${spec.trialId} failed preflight validation: ${preflight.rejectionReasons.join('; ')}`);
     }
 
-    const started = await guarded(startConfiguredTrial(page, auditContext));
+    const started = await guarded(startConfiguredTrial(
+      page,
+      auditContext,
+      FROZEN_CROSSOVER_MATRIX,
+    ));
     const timingStartInspection = inspectEvidenceCapture(spec, started?.evidence);
     await registerWorkloadManifests(spec, 'timing-start', timingStartInspection);
     const timingStart = timingStartInspection.capture;
@@ -828,6 +988,30 @@ try {
     if (spec.modeId !== 'three-blocks-historical'
       && timingStart.validation.payloadSha256 !== preflight.validation.payloadSha256) {
       startRejectionReasons.push('exact validation payload changed before timing');
+    }
+    if (FROZEN_CROSSOVER_MATRIX) {
+      const parityRejectionReasons = validateRenderParity(timingStart.renderParity, {
+        spec,
+        geometryManifest: fixtureManifest,
+        scenarioManifest,
+      });
+      startRejectionReasons.push(...parityRejectionReasons.map(
+        (reason) => `timing-start ${reason}`,
+      ));
+      if (parityRejectionReasons.length === 0
+        && renderParityIdentity(timingStart.renderParity)
+          !== renderParityIdentity(preflight.renderParity)) {
+        startRejectionReasons.push(
+          'paired exact color/depth/object-ID/material parity changed before timing',
+        );
+      }
+      if (timingStart.renderParity?.snapshotValidation === undefined
+        || sha256Json(timingStart.renderParity.snapshotValidation)
+          !== timingStart.validation.payloadSha256) {
+        startRejectionReasons.push(
+          'frozen timing-start parity snapshot differs from its exact validation payload',
+        );
+      }
     }
     timingStart.accepted = startRejectionReasons.length === 0;
     timingStart.rejectionReasons = [...new Set(startRejectionReasons)];
@@ -882,7 +1066,10 @@ try {
     if (pageErrors.length) throw new Error(`${pageErrors[0].source}: ${pageErrors[0].detail}`);
 
     telemetryContext = Object.freeze({ ...telemetryContext, phase: 'post-validation' });
-    const postEvidence = await guarded(collectPostTrialEvidence(page));
+    const postEvidence = await guarded(collectPostTrialEvidence(
+      page,
+      FROZEN_CROSSOVER_MATRIX,
+    ));
     const postInspection = inspectEvidenceCapture(spec, postEvidence);
     await registerWorkloadManifests(spec, 'post-trial', postInspection);
     const post = postInspection.capture;
@@ -898,6 +1085,11 @@ try {
           schemaVersion: ARTIFACT_SCHEMA_VERSION,
           warmupFrames: WARMUP_FRAMES,
           measuredFrames: MEASURED_FRAMES,
+          plannedScheduleSha256: FROZEN_CROSSOVER_MATRIX
+            ? FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[
+              String(spec.superblockOrientationOffset)
+            ]
+            : null,
         },
       ),
     ];
@@ -916,6 +1108,30 @@ try {
     if (spec.modeId !== 'three-blocks-historical'
       && post.validation.payloadSha256 !== timingStart.validation.payloadSha256) {
       rejectionReasons.push('untimed post-trial exact-validation payload changed');
+    }
+    if (FROZEN_CROSSOVER_MATRIX) {
+      const parityRejectionReasons = validateRenderParity(post.renderParity, {
+        spec,
+        geometryManifest: fixtureManifest,
+        scenarioManifest,
+      });
+      rejectionReasons.push(...parityRejectionReasons.map(
+        (reason) => `postflight ${reason}`,
+      ));
+      if (parityRejectionReasons.length === 0
+        && renderParityIdentity(post.renderParity)
+          !== renderParityIdentity(timingStart.renderParity)) {
+        rejectionReasons.push(
+          'paired exact color/depth/object-ID/material parity changed during timing',
+        );
+      }
+      if (post.renderParity?.snapshotValidation === undefined
+        || sha256Json(post.renderParity.snapshotValidation)
+          !== post.validation.payloadSha256) {
+        rejectionReasons.push(
+          'frozen postflight parity snapshot differs from its exact validation payload',
+        );
+      }
     }
     const uniqueRejectionReasons = [...new Set(rejectionReasons)];
     post.accepted = uniqueRejectionReasons.length === 0;
@@ -942,6 +1158,12 @@ try {
       layoutOrderPosition: spec.layoutOrderPosition,
       objectCount: spec.objectCount,
       bucketCount: spec.bucketCount,
+      ...(FROZEN_CROSSOVER_MATRIX ? {
+        laneStorageOrder: [...spec.laneStorageOrder],
+        superblockOrientationOffset: spec.superblockOrientationOffset,
+        plannedScheduleSha256:
+          FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[String(spec.superblockOrientationOffset)],
+      } : {}),
       selectedConfig,
       startedAt: trialStartedAt,
       completedAt: new Date().toISOString(),
@@ -957,6 +1179,12 @@ try {
         rowCount: result.summary?.rowCount ?? null,
         missingRenderFrames: result.summary?.missingRenderFrames ?? null,
         missingComputeFrames: result.summary?.missingComputeFrames ?? null,
+        ...(FROZEN_CROSSOVER_MATRIX ? {
+          expectedRenderTimestampUidCount:
+            result.summary?.expectedRenderTimestampUidCount ?? null,
+          invalidRenderTimestampUidCountFrames:
+            result.summary?.invalidRenderTimestampUidCountFrames ?? null,
+        } : {}),
         quantumNs: result.summary?.quantumNs ?? null,
         classification: result.summary?.classification ?? null,
       },
@@ -999,6 +1227,11 @@ try {
       )) {
       throw new Error('Physical-bin sequence commitments do not cover every ordered-mode pair.');
     }
+  }
+  if (FROZEN_CROSSOVER_MATRIX && physicalBinSequenceByPair.size !== plan.length) {
+    throw new Error(
+      'Frozen physical-bin sequence commitments do not cover every paired trial.',
+    );
   }
   if (pageErrors.length) throw new Error(`${pageErrors[0].source}: ${pageErrors[0].detail}`);
 } catch (error) {
@@ -1098,16 +1331,16 @@ const metadata = {
     scenarioSeed,
     manifestArtifact: 'workload-manifests.json',
     geometryFixtureSha256: geometryFixtureManifest?.sha256 ?? null,
-    scenarioSha256ByVisibility: BENCHMARK_MATRIX === 'depth-ordering'
+    scenarioSha256ByVisibility: DEPTH_LAYOUT_MATRIX
       ? null
       : Object.fromEntries([...scenarioSha256ByCell].map(([cell, digest]) => (
         [cell.slice(cell.indexOf('|') + 1), digest]
       ))),
     scenarioSha256ByCell: Object.fromEntries(scenarioSha256ByCell),
-    renderParitySha256ByCell: BENCHMARK_MATRIX === 'depth-ordering'
+    renderParitySha256ByCell: DEPTH_LAYOUT_MATRIX
       ? Object.fromEntries(renderParitySha256ByCell)
       : null,
-    physicalBinSequenceSha256ByPair: BENCHMARK_MATRIX === 'depth-ordering'
+    physicalBinSequenceSha256ByPair: DEPTH_LAYOUT_MATRIX
       ? Object.fromEntries([...physicalBinSequenceByPair].map(([key, pair]) => (
         [key, pair.sha256]
       )))
@@ -1121,15 +1354,36 @@ const metadata = {
         ? 'negative-control-equal-mesh-render-object-count'
         : 'primary-one-versus-b-mesh-render-object-representation-ablation'
       : null,
-    layouts: BENCHMARK_MATRIX === 'depth-ordering'
+    layouts: DEPTH_LAYOUT_MATRIX
       ? [...DEPTH_ORDERING_LAYOUTS]
       : ['baseline'],
-    depthBinCount: BENCHMARK_MATRIX === 'depth-ordering' ? 8 : null,
-    reversedDepthBuffer: BENCHMARK_MATRIX === 'depth-ordering' ? true : null,
-    minimumStorageBuffersPerShaderStage: BENCHMARK_MATRIX === 'depth-ordering' ? 8 : null,
-    renderParity: BENCHMARK_MATRIX === 'depth-ordering'
-      ? 'same-snapshot exact validation plus two stable offscreen captures of rgba8 color, depth32float, and encoded object ID'
-      : null,
+    depthBinCount: DEPTH_LAYOUT_MATRIX ? 8 : null,
+    reversedDepthBuffer: DEPTH_LAYOUT_MATRIX ? true : null,
+    minimumStorageBuffersPerShaderStage: DEPTH_LAYOUT_MATRIX ? 8 : null,
+    renderParity: FROZEN_CROSSOVER_MATRIX
+      ? 'preflight, timing-start, and postflight paired-lane exact validation plus two stable offscreen captures per lane of rgba8 color, depth32float, and encoded object ID'
+      : BENCHMARK_MATRIX === 'depth-ordering'
+        ? 'same-snapshot exact validation plus two stable offscreen captures of rgba8 color, depth32float, and encoded object ID'
+        : null,
+    ...(FROZEN_CROSSOVER_MATRIX ? {
+      frozenCrossover: {
+        lanes: [...FROZEN_DEPTH_CROSSOVER_LANES],
+        blockSize: FROZEN_CROSSOVER_BLOCK_SIZE,
+        warmupBlocks: FROZEN_CROSSOVER_WARMUP_BLOCKS,
+        measuredBlocks: FROZEN_CROSSOVER_MEASURED_BLOCKS,
+        patterns: FROZEN_CROSSOVER_PATTERNS.map((pattern) => pattern.map(
+          (laneId) => (laneId === FROZEN_DEPTH_CROSSOVER_LANES[0] ? 'F' : 'R'),
+        ).join('')),
+        expectedMeasuredRowsPerLane: FROZEN_CROSSOVER_MEASURED_FRAMES / 2,
+        expectedRenderCallsPerFrame: 1,
+        expectedRenderTimestampUidCount: 1,
+        expectedComputeTimestampsPerFrame: 0,
+        survivorBufferSegments: 2,
+        survivorSegmentLength: OBJECT_COUNT,
+        legalLaneBases: [0, OBJECT_COUNT],
+        scheduleSha256ByOrientation: { ...FROZEN_SCHEDULE_SHA256_BY_ORIENTATION },
+      },
+    } : {}),
     objectCount: OBJECT_COUNT,
     bucketCount: BUCKET_COUNT,
     allowedObjectCounts: [...ALLOWED_OBJECT_COUNTS],
@@ -1146,9 +1400,11 @@ const metadata = {
     maximumCpuTimerQuantumMs: MAXIMUM_CPU_TIMER_QUANTUM_MS,
     ordering: BENCHMARK_MATRIX === 'fixed-slice-representation'
       ? 'six-repetition-balanced-ab-ba-with-rotated-visibility-order'
-      : BENCHMARK_MATRIX === 'depth-ordering'
-        ? 'all-six-mode-permutations-with-alternating-high-low-layout-order'
-        : 'all-six-mode-permutations-with-rotated-visibility-order',
+      : FROZEN_CROSSOVER_MATRIX
+        ? 'twelve-repetition-paired-eight-frame-frozen-crossover-with-balanced-layout-storage-base-and-starting-orientation'
+        : BENCHMARK_MATRIX === 'depth-ordering'
+          ? 'all-six-mode-permutations-with-alternating-high-low-layout-order'
+          : 'all-six-mode-permutations-with-rotated-visibility-order',
     threeBlocksScheduling: BENCHMARK_MATRIX !== 'ecosystem'
       ? null
       : BUCKET_COUNT === 1

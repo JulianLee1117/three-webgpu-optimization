@@ -11,7 +11,14 @@ export function setTimestampTracking(renderer, enabled) {
 }
 
 export async function resolveTimestampMaps(renderer, { includeCompute, collect }) {
-  const maps = { render: new Map(), compute: new Map() };
+  const maps = {
+    render: new Map(),
+    compute: new Map(),
+    uidCounts: {
+      render: new Map(),
+      compute: new Map(),
+    },
+  };
   if (!timestampSupport(renderer)) return maps;
 
   const types = timestampTypes(includeCompute);
@@ -21,13 +28,17 @@ export async function resolveTimestampMaps(renderer, { includeCompute, collect }
   for (const type of types) {
     const pool = renderer.backend?.timestampQueryPool?.[type];
     const frames = new Set(renderer.backend?.getTimestampFrames?.(type) ?? pool?.frames ?? []);
-    for (const frame of frames) maps[type].set(frame, 0);
+    for (const frame of frames) {
+      maps[type].set(frame, 0);
+      maps.uidCounts[type].set(frame, 0);
+    }
     for (const [uid, durationMs] of pool?.timestamps ?? []) {
       const match = uid.match(/:f(\d+)$/);
       if (!match) continue;
       const frame = Number(match[1]);
       if (!frames.has(frame)) continue;
       maps[type].set(frame, (maps[type].get(frame) ?? 0) + durationMs);
+      maps.uidCounts[type].set(frame, (maps.uidCounts[type].get(frame) ?? 0) + 1);
     }
   }
   return maps;
@@ -42,7 +53,7 @@ function gcd(left, right) {
 
 export function timestampResolution(maps) {
   const durationsNs = [];
-  for (const map of Object.values(maps)) {
+  for (const map of [maps.render, maps.compute]) {
     for (const durationMs of map.values()) {
       const nanoseconds = Math.round(durationMs * 1e6);
       if (nanoseconds > 0) durationsNs.push(nanoseconds);

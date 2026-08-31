@@ -386,11 +386,19 @@ test('depth protocol metadata is bound to reversed-depth and storage-limit page 
     minimumStorageBuffersPerShaderStage: 8,
   };
   const pageEnvironment = {
+    reversedDepth: true,
     rendererReversedDepthBuffer: true,
     maxStorageBuffersPerShaderStage: 8,
   };
   assert.deepEqual(
     validateBenchmarkProtocolEnvironment(protocol, pageEnvironment),
+    [],
+  );
+  assert.deepEqual(
+    validateBenchmarkProtocolEnvironment({
+      ...protocol,
+      matrixKind: 'depth-ordering-render-only',
+    }, pageEnvironment),
     [],
   );
 
@@ -417,6 +425,32 @@ test('depth protocol metadata is bound to reversed-depth and storage-limit page 
       new RegExp(expectedMessage),
     );
   }
+
+  const frozenProtocol = {
+    ...protocol,
+    matrixKind: 'depth-ordering-render-only',
+  };
+  assert.match(
+    validateBenchmarkProtocolEnvironment(frozenProtocol, {
+      ...pageEnvironment,
+      rendererReversedDepthBuffer: false,
+    }).join('; '),
+    /page rendererReversedDepthBuffer/,
+  );
+  assert.match(
+    validateBenchmarkProtocolEnvironment(frozenProtocol, {
+      ...pageEnvironment,
+      reversedDepth: false,
+    }).join('; '),
+    /page reversedDepth/,
+  );
+  assert.match(
+    validateBenchmarkProtocolEnvironment({
+      ...frozenProtocol,
+      minimumStorageBuffersPerShaderStage: 7,
+    }, pageEnvironment).join('; '),
+    /protocol minimumStorageBuffersPerShaderStage/,
+  );
 
   assert.deepEqual(validateBenchmarkProtocolEnvironment({ matrixKind: 'ecosystem' }, {}), []);
   assert.deepEqual(validateBenchmarkProtocolEnvironment({

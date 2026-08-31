@@ -11,6 +11,13 @@ function percentile(values, fraction) {
   return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * fraction) - 1))];
 }
 
+function requirePositiveFrameCount(value, label) {
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new RangeError(`${label} must be a positive integer.`);
+  }
+  return value;
+}
+
 export class TrialController {
   constructor(renderer, {
     warmupFrames,
@@ -21,8 +28,10 @@ export class TrialController {
     validateCompletion = null,
   }) {
     this.renderer = renderer;
-    this.warmupFrames = warmupFrames;
-    this.measuredFrames = measuredFrames;
+    this.defaultWarmupFrames = requirePositiveFrameCount(warmupFrames, 'warmupFrames');
+    this.defaultMeasuredFrames = requirePositiveFrameCount(measuredFrames, 'measuredFrames');
+    this.warmupFrames = this.defaultWarmupFrames;
+    this.measuredFrames = this.defaultMeasuredFrames;
     this.onStatus = onStatus;
     this.onComplete = onComplete;
     this.onError = onError;
@@ -52,8 +61,25 @@ export class TrialController {
     return this.phase.startsWith('resolving');
   }
 
-  async start(context) {
+  get frameDescriptor() {
+    if (!this.active) return null;
+    const phaseFrameCount = this.phase === 'warmup'
+      ? this.warmupFrames
+      : this.measuredFrames;
+    return Object.freeze({
+      phase: this.phase,
+      phaseFrameIndex: phaseFrameCount - this.remaining,
+      phaseFrameCount,
+    });
+  }
+
+  async start(context, {
+    warmupFrames = this.defaultWarmupFrames,
+    measuredFrames = this.defaultMeasuredFrames,
+  } = {}) {
     if (!['idle', 'complete', 'error'].includes(this.phase)) throw new Error('A trial is already active.');
+    this.warmupFrames = requirePositiveFrameCount(warmupFrames, 'warmupFrames');
+    this.measuredFrames = requirePositiveFrameCount(measuredFrames, 'measuredFrames');
     this.phase = 'resolving-start';
     this.error = null;
     this.context = context;
@@ -108,7 +134,14 @@ export class TrialController {
     });
     const joined = this.rows.map((row) => {
       const gpuComputeMs = this.context.usesCompute ? (maps.compute.get(row.gpuFrameId) ?? null) : null;
-      const gpuRenderMs = maps.render.get(row.gpuFrameId) ?? null;
+      const gpuRenderTimestampUidCount = maps.uidCounts.render.get(row.gpuFrameId) ?? 0;
+      const expectedRenderTimestampUidCount = this.context.expectedRenderTimestampUidCount ?? null;
+      const renderTimestampUidCountValid = expectedRenderTimestampUidCount === null
+        ? gpuRenderTimestampUidCount > 0
+        : gpuRenderTimestampUidCount === expectedRenderTimestampUidCount;
+      const gpuRenderMs = renderTimestampUidCountValid
+        ? (maps.render.get(row.gpuFrameId) ?? null)
+        : null;
       const gpuPassTotalMs = gpuRenderMs !== null
         && (!this.context.usesCompute || gpuComputeMs !== null)
         ? gpuRenderMs + (gpuComputeMs ?? 0)
@@ -117,10 +150,19 @@ export class TrialController {
         ...row,
         gpuComputeMs,
         gpuRenderMs,
+        gpuRenderTimestampUidCount,
         gpuPassTotalMs,
       };
     });
     const missingRenderFrames = joined.filter((row) => row.gpuRenderMs === null).length;
+    const invalidRenderTimestampUidCountFrames = joined.filter(
+      (row) => (
+        this.context.expectedRenderTimestampUidCount === null
+        || this.context.expectedRenderTimestampUidCount === undefined
+          ? row.gpuRenderTimestampUidCount <= 0
+          : row.gpuRenderTimestampUidCount !== this.context.expectedRenderTimestampUidCount
+      ),
+    ).length;
     const missingComputeFrames = this.context.usesCompute
       ? joined.filter((row) => row.gpuComputeMs === null).length
       : 0;
@@ -138,6 +180,8 @@ export class TrialController {
     const summary = {
       rowCount: joined.length,
       missingRenderFrames,
+      invalidRenderTimestampUidCountFrames,
+      expectedRenderTimestampUidCount: this.context.expectedRenderTimestampUidCount ?? null,
       missingComputeFrames,
       timestampAvailable: timestampSupport(this.renderer),
       ...resolution,
@@ -148,6 +192,7 @@ export class TrialController {
       completionInvariant,
       accepted: joined.length === this.measuredFrames
         && missingRenderFrames === 0
+        && invalidRenderTimestampUidCountFrames === 0
         && missingComputeFrames === 0
         && completionInvariant.pass === true,
     };

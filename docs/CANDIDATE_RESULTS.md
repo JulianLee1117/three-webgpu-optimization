@@ -74,7 +74,7 @@ The replications therefore do not establish a stable render-ordering benefit. Th
 
 The deterministic fourth kernel deliberately assigns one scatter owner per bucket so independently generated front-to-back and reverse survivor sequences can be proven identical. That diagnostic design costs approximately 0.84-0.86 ms of compute per frame, compared with approximately 0.004 ms for atomic fixed-slice, and makes the complete ordered mechanism materially slower. It is an attribution instrument, not a deployable optimization.
 
-The next experiment should remove compaction from the causal contrast: generate and validate frozen front-to-back and reverse survivor lists before timing, then alternate the two render orders within trials or short balanced blocks. It should retain the same bundle, draw, material, geometry, exact-output, and object-ID gates. A scalable parallel scan or radix compaction path is warranted only if that render-only signal is stable.
+The active follow-up removes compaction from the causal contrast: it generates and validates frozen front-to-back and reverse survivor lists before timing, then alternates the two render orders within complementary eight-frame blocks. It retains the same bundle, draw, material, geometry, exact-output, and object-ID gates. A scalable parallel scan or radix compaction path is warranted only if that render-only signal is stable. The design is fixed in the [Frozen render-order crossover protocol](FROZEN_DEPTH_CROSSOVER_PROTOCOL.md).
 
 ## Evidence identifiers
 
@@ -105,4 +105,4 @@ Generated run directories remain ignored source artifacts. Each identifier above
 - The benchmark does not measure presentation latency or queue overlap.
 - Whether coarse front-to-back traversal improves render-only time after within-trial temporal drift is controlled.
 
-The next GPU-side experiment should isolate the last point with frozen, prevalidated survivor buffers and tightly interleaved render-order measurements. Only a stable render benefit would justify implementing and timing a scalable GPU ordering pipeline.
+The frozen render-order crossover isolates the last point with prevalidated survivor buffers and tightly interleaved measurements. Only a stable render benefit would justify implementing and timing a scalable GPU ordering pipeline.

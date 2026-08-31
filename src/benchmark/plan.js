@@ -18,6 +18,34 @@ export const DEPTH_ORDERING_LAYOUTS = Object.freeze([
 
 export const DEPTH_ORDERING_VISIBILITY = 0.99;
 
+export const FROZEN_DEPTH_CROSSOVER_MODE = 'fixed-slice-depth-frozen-crossover';
+
+export const FROZEN_DEPTH_CROSSOVER_LANES = Object.freeze([
+  'fixed-slice-depth-front-to-back',
+  'fixed-slice-depth-reverse',
+]);
+
+export const FROZEN_DEPTH_CROSSOVER_REPETITIONS = 12;
+
+export const FROZEN_DEPTH_CROSSOVER_STORAGE_ORDERS = Object.freeze([
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES]),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES]),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES]),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES]),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES]),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES]),
+  Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES].reverse()),
+]);
+
+export const FROZEN_DEPTH_CROSSOVER_ORIENTATION_OFFSETS = Object.freeze([
+  0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1,
+]);
+
 export function createRepresentationModeOrders(modes = FIXED_SLICE_REPRESENTATION_MODES) {
   if (modes.length !== 2 || new Set(modes).size !== 2) {
     throw new Error('The fixed-slice representation design requires exactly two distinct modes.');
@@ -159,6 +187,76 @@ export function buildDepthOrderingPlan({
           bucketCount,
         });
       }
+    }
+  }
+  return plan;
+}
+
+export function buildFrozenDepthCrossoverPlan({
+  runId,
+  objectCount,
+  bucketCount,
+  layouts = DEPTH_ORDERING_LAYOUTS,
+  visibilityFraction = DEPTH_ORDERING_VISIBILITY,
+  storageOrders = FROZEN_DEPTH_CROSSOVER_STORAGE_ORDERS,
+  orientationOffsets = FROZEN_DEPTH_CROSSOVER_ORIENTATION_OFFSETS,
+}) {
+  if (layouts.length !== 2 || new Set(layouts).size !== 2) {
+    throw new Error('The frozen depth crossover requires exactly two distinct layouts.');
+  }
+  if (storageOrders.length !== FROZEN_DEPTH_CROSSOVER_REPETITIONS) {
+    throw new Error(
+      `The frozen depth crossover requires ${FROZEN_DEPTH_CROSSOVER_REPETITIONS} storage orders.`,
+    );
+  }
+  if (orientationOffsets.length !== FROZEN_DEPTH_CROSSOVER_REPETITIONS
+    || orientationOffsets.some((value) => value !== 0 && value !== 1)) {
+    throw new Error(
+      `The frozen depth crossover requires ${FROZEN_DEPTH_CROSSOVER_REPETITIONS} binary orientation offsets.`,
+    );
+  }
+  if (!Number.isFinite(visibilityFraction)
+    || visibilityFraction <= 0
+    || visibilityFraction > 1) {
+    throw new RangeError('Frozen depth crossover visibilityFraction must be in (0, 1].');
+  }
+
+  const plan = [];
+  for (let repetitionIndex = 0;
+    repetitionIndex < FROZEN_DEPTH_CROSSOVER_REPETITIONS;
+    repetitionIndex += 1) {
+    const layoutOrder = repetitionIndex % 2 === 0
+      ? [...layouts]
+      : [...layouts].reverse();
+    const laneStorageOrder = [...storageOrders[repetitionIndex]];
+    if (laneStorageOrder.length !== FROZEN_DEPTH_CROSSOVER_LANES.length
+      || new Set(laneStorageOrder).size !== FROZEN_DEPTH_CROSSOVER_LANES.length
+      || FROZEN_DEPTH_CROSSOVER_LANES.some((lane) => !laneStorageOrder.includes(lane))) {
+      throw new Error(`Frozen depth crossover storage order ${repetitionIndex} is invalid.`);
+    }
+    for (let layoutOrderPosition = 0;
+      layoutOrderPosition < layoutOrder.length;
+      layoutOrderPosition += 1) {
+      const layout = layoutOrder[layoutOrderPosition];
+      const planIndex = plan.length;
+      plan.push({
+        trialId: `${runId}-t${String(planIndex + 1).padStart(2, '0')}`,
+        planIndex,
+        repetitionIndex,
+        modeId: FROZEN_DEPTH_CROSSOVER_MODE,
+        modeOrder: [FROZEN_DEPTH_CROSSOVER_MODE],
+        modeOrderPosition: 0,
+        visibilityFraction,
+        visibilityOrder: [visibilityFraction],
+        visibilityOrderPosition: 0,
+        layout,
+        layoutOrder: [...layoutOrder],
+        layoutOrderPosition,
+        laneStorageOrder,
+        superblockOrientationOffset: orientationOffsets[repetitionIndex],
+        objectCount,
+        bucketCount,
+      });
     }
   }
   return plan;

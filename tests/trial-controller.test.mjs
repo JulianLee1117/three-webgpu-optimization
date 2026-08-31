@@ -61,6 +61,87 @@ test('initial timestamp failure enters a surfaced error state and can be retried
   assert.equal(renderer.backend.trackTimestamp, true);
 });
 
+test('per-start frame-count overrides expose an immutable active-frame descriptor', async () => {
+  const renderer = fakeRenderer();
+  const controller = new TrialController(renderer, {
+    warmupFrames: 3,
+    measuredFrames: 4,
+  });
+
+  assert.equal(controller.frameDescriptor, null);
+  await controller.start(
+    { usesCompute: false },
+    { warmupFrames: 2, measuredFrames: 3 },
+  );
+  assert.deepEqual(controller.frameDescriptor, {
+    phase: 'warmup',
+    phaseFrameIndex: 0,
+    phaseFrameCount: 2,
+  });
+  assert.equal(Object.isFrozen(controller.frameDescriptor), true);
+  assert.throws(
+    () => { controller.frameDescriptor.phaseFrameIndex = 99; },
+    /read only|Cannot assign/,
+  );
+
+  controller.recordFrame({ gpuFrameId: 0 });
+  assert.deepEqual(controller.frameDescriptor, {
+    phase: 'warmup',
+    phaseFrameIndex: 1,
+    phaseFrameCount: 2,
+  });
+  controller.recordFrame({ gpuFrameId: 1 });
+  while (controller.phase !== 'measure') await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(controller.frameDescriptor, {
+    phase: 'measure',
+    phaseFrameIndex: 0,
+    phaseFrameCount: 3,
+  });
+  controller.recordFrame({ gpuFrameId: 2, cpuSubmitTotalMs: 0.1 });
+  assert.deepEqual(controller.frameDescriptor, {
+    phase: 'measure',
+    phaseFrameIndex: 1,
+    phaseFrameCount: 3,
+  });
+});
+
+test('per-start frame counts fall back to constructor defaults on later trials', async () => {
+  const renderer = fakeRenderer();
+  const controller = new TrialController(renderer, {
+    warmupFrames: 2,
+    measuredFrames: 3,
+  });
+
+  await controller.start(
+    { usesCompute: false },
+    { warmupFrames: 1, measuredFrames: 1 },
+  );
+  assert.equal(controller.frameDescriptor.phaseFrameCount, 1);
+  controller.fail(new Error('end override trial'));
+
+  await controller.start({ usesCompute: false });
+  assert.deepEqual(controller.frameDescriptor, {
+    phase: 'warmup',
+    phaseFrameIndex: 0,
+    phaseFrameCount: 2,
+  });
+});
+
+test('invalid per-start frame-count overrides fail before timestamp tracking starts', async () => {
+  const renderer = fakeRenderer();
+  const controller = new TrialController(renderer, {
+    warmupFrames: 1,
+    measuredFrames: 1,
+  });
+
+  await assert.rejects(
+    controller.start({ usesCompute: false }, { measuredFrames: 0 }),
+    /measuredFrames must be a positive integer/,
+  );
+  assert.equal(controller.phase, 'idle');
+  assert.equal(renderer.backend.trackTimestamp, false);
+});
+
 test('warmup timestamp failure terminates the trial and reports the error', async () => {
   const reported = deferred();
   let completed = false;
@@ -131,6 +212,8 @@ for (const invariantPass of [true, false]) {
     const result = await completed.promise;
 
     assert.equal(result.summary.accepted, invariantPass);
+    assert.equal(result.summary.invalidRenderTimestampUidCountFrames, 0);
+    assert.equal(result.rows[0].gpuRenderTimestampUidCount, 1);
     assert.deepEqual(result.summary.completionInvariant, {
       pass: invariantPass,
       kind: 'test-invariant',
@@ -143,6 +226,27 @@ for (const invariantPass of [true, false]) {
     );
   });
 }
+
+test('multiple render timestamp UIDs for one measured frame reject the trial', async () => {
+  const completed = deferred();
+  const { controller, renderer } = await startedController({
+    onComplete: (result) => completed.resolve(result),
+  });
+  controller.context.expectedRenderTimestampUidCount = 1;
+  renderer.backend.timestampQueryPool.render.timestamps.set('second-render:f2', 0.3);
+
+  controller.recordFrame({ gpuFrameId: 1 });
+  while (controller.phase !== 'measure') await new Promise((resolve) => setTimeout(resolve, 0));
+  controller.recordFrame({ gpuFrameId: 2, cpuSubmitTotalMs: 0.2 });
+  const result = await completed.promise;
+
+  assert.equal(result.rows[0].gpuRenderTimestampUidCount, 2);
+  assert.equal(result.rows[0].gpuRenderMs, null);
+  assert.equal(result.rows[0].gpuPassTotalMs, null);
+  assert.equal(result.summary.invalidRenderTimestampUidCountFrames, 1);
+  assert.equal(result.summary.missingRenderFrames, 1);
+  assert.equal(result.summary.accepted, false);
+});
 
 for (const invalidResult of [null, undefined]) {
   test(`invalid ${String(invalidResult)} completion result fails closed`, async () => {

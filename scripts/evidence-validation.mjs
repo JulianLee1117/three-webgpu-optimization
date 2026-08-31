@@ -1,4 +1,15 @@
 import { createHash } from 'node:crypto';
+import {
+  FROZEN_DEPTH_CROSSOVER_LANES,
+  FROZEN_DEPTH_CROSSOVER_MODE,
+} from '../src/benchmark/plan.js';
+import {
+  FROZEN_CROSSOVER_BLOCK_SIZE,
+  FROZEN_CROSSOVER_MEASURED_FRAMES,
+  FROZEN_CROSSOVER_PATTERNS,
+  FROZEN_CROSSOVER_WARMUP_FRAMES,
+  frozenCrossoverFrame,
+} from '../src/benchmark/frozen-crossover-schedule.js';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const GEOMETRY_ATTRIBUTE_NAMES = Object.freeze(['normal', 'position', 'uv']);
@@ -8,6 +19,13 @@ const RENDER_PARITY_HEIGHT = 720;
 const RENDER_PARITY_PIXEL_COUNT = RENDER_PARITY_WIDTH * RENDER_PARITY_HEIGHT;
 const RENDER_PARITY_BYTE_LENGTH = RENDER_PARITY_PIXEL_COUNT * 4;
 const DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS = 8;
+const FROZEN_LANE_ORDER_BY_ID = Object.freeze({
+  'fixed-slice-depth-front-to-back': 'front-to-back',
+  'fixed-slice-depth-reverse': 'reverse',
+});
+const FROZEN_LOGICAL_LANES = Object.freeze(['front-to-back', 'reverse']);
+const FROZEN_EXPECTED_MEASURED_ROWS_PER_LANE =
+  FROZEN_CROSSOVER_MEASURED_FRAMES / FROZEN_LOGICAL_LANES.length;
 const DEPTH_MODE_PROTOCOLS = Object.freeze({
   'fixed-slice-depth-front-to-back': Object.freeze({
     order: 'front-to-back',
@@ -88,8 +106,45 @@ function depthModeProtocol(modeId) {
   return DEPTH_MODE_PROTOCOLS[modeId] ?? null;
 }
 
+function frozenLogicalLane(laneId) {
+  return FROZEN_LANE_ORDER_BY_ID[laneId] ?? null;
+}
+
+function frozenLaneModeId(logicalLane) {
+  return FROZEN_DEPTH_CROSSOVER_LANES.find(
+    (laneId) => frozenLogicalLane(laneId) === logicalLane,
+  ) ?? null;
+}
+
 export function sha256Json(value) {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
+}
+
+function frozenSchedulePhase(frameCount, orientationOffset) {
+  return Array.from({ length: frameCount }, (_, phaseFrameIndex) => {
+    const frame = frozenCrossoverFrame(phaseFrameIndex, orientationOffset);
+    return {
+      phaseFrameIndex,
+      crossoverBlockIndex: frame.crossoverBlockIndex,
+      withinBlockPosition: frame.withinBlockPosition,
+      patternIndex: frame.patternIndex,
+      pattern: frame.pattern,
+      laneId: frame.laneId,
+    };
+  });
+}
+
+export function frozenCrossoverScheduleSha256(orientationOffset) {
+  return sha256Json({
+    schemaVersion: 1,
+    kind: 'frozen-depth-crossover-frame-schedule',
+    blockSize: FROZEN_CROSSOVER_BLOCK_SIZE,
+    warmupFrames: FROZEN_CROSSOVER_WARMUP_FRAMES,
+    measuredFrames: FROZEN_CROSSOVER_MEASURED_FRAMES,
+    orientationOffset,
+    warmup: frozenSchedulePhase(FROZEN_CROSSOVER_WARMUP_FRAMES, orientationOffset),
+    measured: frozenSchedulePhase(FROZEN_CROSSOVER_MEASURED_FRAMES, orientationOffset),
+  });
 }
 
 function canonicalAttribute(attribute) {
@@ -404,6 +459,12 @@ function expectedStrategyShape(modeId, bucketCount, objectCount) {
       configuredComputeDispatches: 4,
       configuredComputeSubmissions: 1,
     },
+    [FROZEN_DEPTH_CROSSOVER_MODE]: {
+      compute: false,
+      configuredRenderObjects: 1,
+      configuredComputeDispatches: 0,
+      configuredComputeSubmissions: 0,
+    },
     'three-blocks-current': {
       compute: true,
       configuredRenderObjects: bucketCount,
@@ -605,9 +666,11 @@ function validateDepthBinEvidence(depthBins, {
 }
 
 export function physicalBinSequenceIdentity(validation) {
-  const sequence = validation?.depthBins?.physicalBinSequenceCommitment;
-  return typeof sequence?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(sequence.sha256)
-    ? sequence.sha256
+  const sha256 = validation?.kind === 'frozen-depth-crossover-exact-paired-snapshots'
+    ? validation?.physicalBinSequenceSha256
+    : validation?.depthBins?.physicalBinSequenceCommitment?.sha256;
+  return typeof sha256 === 'string' && /^[0-9a-f]{64}$/.test(sha256)
+    ? sha256
     : null;
 }
 
@@ -708,6 +771,446 @@ function validateDepthRepresentation(representation, {
   );
 }
 
+function validateFrozenLaneOffsets(laneOffsets, laneStorageOrder, objectCount, label, reasons) {
+  if (!exactKeys(laneOffsets, FROZEN_LOGICAL_LANES, label, reasons)) return;
+  const otherLane = FROZEN_LOGICAL_LANES.find((lane) => lane !== laneStorageOrder);
+  requireEqual(laneOffsets[laneStorageOrder], 0, `${label}.${laneStorageOrder}`, reasons);
+  requireEqual(laneOffsets[otherLane], objectCount, `${label}.${otherLane}`, reasons);
+}
+
+function validateFrozenIdentityDiagnostics(record, label, reasons) {
+  for (const field of [
+    'bundleGroupUuid',
+    'meshUuid',
+    'geometryUuid',
+    'materialUuid',
+    'selectorUniformUuid',
+  ]) {
+    if (typeof record?.[field] !== 'string' || record[field].length === 0) {
+      reasons.push(`${label}.${field} is not a nonempty identity string`);
+    }
+  }
+  for (const field of [
+    'matrixAttributeId',
+    'visibleIdsAttributeId',
+    'indirectAttributeId',
+    'selectorChallengeAttributeId',
+    'bundleGroupVersion',
+    'matrixAttributeVersion',
+    'visibleIdsAttributeVersion',
+    'indirectAttributeVersion',
+  ]) {
+    if (!isNonnegativeInteger(record?.[field])) {
+      reasons.push(`${label}.${field} is not a nonnegative integer`);
+    }
+  }
+}
+
+function validateFrozenRepresentation(validation, {
+  objectCount,
+  bucketCount,
+}, reasons) {
+  const representation = validation.representation;
+  const lifecycle = validation.lifecycle;
+  const sharedIdentityFields = [
+    'bundleGroupUuid',
+    'meshUuid',
+    'geometryUuid',
+    'materialUuid',
+    'matrixAttributeId',
+    'visibleIdsAttributeId',
+    'indirectAttributeId',
+    'selectorChallengeAttributeId',
+    'bundleGroupVersion',
+    'matrixAttributeVersion',
+    'visibleIdsAttributeVersion',
+    'indirectAttributeVersion',
+    'selectorUniformUuid',
+  ];
+  const representationKeys = [
+    'kind',
+    'laneStorageOrder',
+    'laneOffsets',
+    'activeLane',
+    'activeVisibleIdOffset',
+    'visibleIdsCount',
+    'visibleIdSegmentLength',
+    'depthBinCount',
+    'bundleGroupStatic',
+    'bundleRecordCallbackCount',
+    'meshCount',
+    'geometryIdentityCount',
+    'materialIdentityCount',
+    'commandCount',
+    'zeroFirstInstanceCount',
+    'configuredComputeDispatches',
+    'configuredComputeSubmissions',
+    'diagnosticSelectorDispatchesPerValidation',
+    ...sharedIdentityFields,
+  ];
+  const lifecycleKeys = [
+    'kind',
+    'laneStorageOrder',
+    'laneOffsets',
+    'activeLane',
+    'activeVisibleIdOffset',
+    'bundleGroupStatic',
+    'bundleRecordCallbackCount',
+    'meshCount',
+    'geometryIdentityCount',
+    'materialIdentityCount',
+    'configuredComputeDispatches',
+    'configuredComputeSubmissions',
+    ...sharedIdentityFields,
+  ];
+  if (!exactKeys(
+    representation,
+    representationKeys,
+    'frozen crossover representation',
+    reasons,
+  )) return;
+  if (!exactKeys(
+    lifecycle,
+    lifecycleKeys,
+    'frozen crossover lifecycle',
+    reasons,
+  )) return;
+
+  requireEqual(
+    representation.kind,
+    'single-render-object-frozen-depth-crossover',
+    'frozen crossover representation kind',
+    reasons,
+  );
+  requireEqual(
+    lifecycle.kind,
+    'frozen-depth-crossover-static-bundle-lifecycle',
+    'frozen crossover lifecycle kind',
+    reasons,
+  );
+  for (const record of [representation, lifecycle]) {
+    requireEqual(
+      record.laneStorageOrder,
+      validation.laneStorageOrder,
+      `${record === representation ? 'representation' : 'lifecycle'} laneStorageOrder`,
+      reasons,
+    );
+    validateFrozenLaneOffsets(
+      record.laneOffsets,
+      validation.laneStorageOrder,
+      objectCount,
+      `${record === representation ? 'representation' : 'lifecycle'} lane offsets`,
+      reasons,
+    );
+    requireEqual(record.activeLane, validation.activeLane, 'frozen active lane', reasons);
+    requireEqual(
+      record.activeVisibleIdOffset,
+      validation.activeVisibleIdOffset,
+      'frozen active visible-ID offset',
+      reasons,
+    );
+    requireEqual(record.bundleGroupStatic, true, 'frozen static BundleGroup', reasons);
+    requireEqual(record.bundleRecordCallbackCount, 1, 'frozen bundle-record callback count', reasons);
+    requireEqual(record.meshCount, 1, 'frozen mesh count', reasons);
+    requireEqual(record.geometryIdentityCount, 1, 'frozen geometry identity count', reasons);
+    requireEqual(record.materialIdentityCount, 1, 'frozen material identity count', reasons);
+    requireEqual(record.configuredComputeDispatches, 0, 'frozen configured compute dispatches', reasons);
+    requireEqual(record.configuredComputeSubmissions, 0, 'frozen configured compute submissions', reasons);
+    validateFrozenIdentityDiagnostics(
+      record,
+      record === representation ? 'frozen representation' : 'frozen lifecycle',
+      reasons,
+    );
+  }
+  for (const field of sharedIdentityFields) {
+    requireEqual(
+      lifecycle[field],
+      representation[field],
+      `frozen lifecycle ${field} versus representation`,
+      reasons,
+    );
+  }
+  requireEqual(representation.visibleIdsCount, objectCount * 2, 'frozen visible-ID count', reasons);
+  requireEqual(
+    representation.visibleIdSegmentLength,
+    objectCount,
+    'frozen visible-ID segment length',
+    reasons,
+  );
+  requireEqual(representation.depthBinCount, DEPTH_BIN_COUNT, 'frozen depth-bin count', reasons);
+  requireEqual(representation.commandCount, bucketCount, 'frozen command count', reasons);
+  requireEqual(
+    representation.zeroFirstInstanceCount,
+    bucketCount,
+    'frozen zero-first-instance count',
+    reasons,
+  );
+  requireEqual(
+    representation.diagnosticSelectorDispatchesPerValidation,
+    2,
+    'frozen diagnostic selector dispatch count',
+    reasons,
+  );
+}
+
+export function validateFrozenCrossoverValidation(validation, {
+  objectCount,
+  bucketCount,
+  expectedVisibleCount,
+  expectedVisibleIdsCanonicalSha256,
+  geometryManifest,
+  scenarioManifest = null,
+  laneStorageOrder = null,
+} = {}) {
+  const reasons = [];
+  if (!isRecord(validation)) {
+    return { rejectionReasons: ['frozen crossover validation is not an object'], semanticSha256: null };
+  }
+  exactKeys(validation, [
+    'pass',
+    'kind',
+    'expectedIdsMatchScenario',
+    'visibleIdsByteLength',
+    'visibleIdsSha256',
+    'expectedVisibleIdsSha256',
+    'visibleIdsExactPackingMatch',
+    'commandSha256',
+    'laneStorageOrder',
+    'laneOffsets',
+    'activeLane',
+    'activeVisibleIdOffset',
+    'physicalBinSequenceCommitmentsEqual',
+    'rawLaneSequencesDiffer',
+    'physicalBinSequenceSha256',
+    'commandValidation',
+    'lanes',
+    'selectorChallenges',
+    'representation',
+    'lifecycle',
+  ], 'frozen crossover exact validation', reasons);
+  requireEqual(validation.pass, true, 'frozen crossover exact validation pass', reasons);
+  requireEqual(
+    validation.kind,
+    'frozen-depth-crossover-exact-paired-snapshots',
+    'frozen crossover exact validation kind',
+    reasons,
+  );
+  requireEqual(validation.expectedIdsMatchScenario, true, 'frozen expected-ID scenario match', reasons);
+  if (!isRecord(scenarioManifest)) {
+    reasons.push('frozen crossover scenario manifest is missing');
+  } else {
+    requireEqual(
+      scenarioManifest.expectedVisibleCount,
+      expectedVisibleCount,
+      'frozen crossover scenario expected visible count',
+      reasons,
+    );
+    requireEqual(
+      scenarioManifest.expectedVisibleIdsCanonicalSha256,
+      expectedVisibleIdsCanonicalSha256,
+      'frozen crossover scenario expected visible-ID digest',
+      reasons,
+    );
+    if (!isRecord(scenarioManifest.depthBinRange)
+      || !Number.isFinite(scenarioManifest.depthBinRange.near)
+      || !Number.isFinite(scenarioManifest.depthBinRange.far)
+      || scenarioManifest.depthBinRange.far <= scenarioManifest.depthBinRange.near) {
+      reasons.push('frozen crossover scenario depthBinRange is missing or invalid');
+    }
+  }
+  requireEqual(
+    validation.visibleIdsByteLength,
+    objectCount * 2 * Uint32Array.BYTES_PER_ELEMENT,
+    'frozen visible-ID byte length',
+    reasons,
+  );
+  requireSha256(validation.visibleIdsSha256, 'frozen visible-ID sha256', reasons);
+  requireSha256(validation.expectedVisibleIdsSha256, 'frozen expected visible-ID sha256', reasons);
+  requireEqual(
+    validation.visibleIdsSha256,
+    validation.expectedVisibleIdsSha256,
+    'frozen visible-ID packing digest',
+    reasons,
+  );
+  requireEqual(validation.visibleIdsExactPackingMatch, true, 'frozen exact packing match', reasons);
+  requireSha256(validation.commandSha256, 'frozen command sha256', reasons);
+  requireEqual(
+    FROZEN_LOGICAL_LANES.includes(validation.laneStorageOrder),
+    true,
+    'frozen laneStorageOrder support',
+    reasons,
+  );
+  if (laneStorageOrder !== null) {
+    const expectedStorageOrder = Array.isArray(laneStorageOrder)
+      ? frozenLogicalLane(laneStorageOrder[0])
+      : laneStorageOrder;
+    requireEqual(
+      validation.laneStorageOrder,
+      expectedStorageOrder,
+      'frozen laneStorageOrder versus plan',
+      reasons,
+    );
+  }
+  validateFrozenLaneOffsets(
+    validation.laneOffsets,
+    validation.laneStorageOrder,
+    objectCount,
+    'frozen lane offsets',
+    reasons,
+  );
+  if (!FROZEN_LOGICAL_LANES.includes(validation.activeLane)) {
+    reasons.push('frozen active lane is unsupported');
+  } else {
+    requireEqual(
+      validation.activeVisibleIdOffset,
+      validation.laneOffsets?.[validation.activeLane],
+      'frozen active lane offset',
+      reasons,
+    );
+  }
+  requireEqual(
+    validation.physicalBinSequenceCommitmentsEqual,
+    true,
+    'frozen physical-bin sequence commitment equality',
+    reasons,
+  );
+  requireEqual(validation.rawLaneSequencesDiffer, true, 'frozen raw lane sequence difference', reasons);
+  requireSha256(
+    validation.physicalBinSequenceSha256,
+    'frozen physical-bin sequence sha256',
+    reasons,
+  );
+
+  if (!exactKeys(validation.lanes, FROZEN_LOGICAL_LANES, 'frozen lane validations', reasons)) {
+    // exactKeys records the structural rejection.
+  } else {
+    for (const logicalLane of FROZEN_LOGICAL_LANES) {
+      const lane = validation.lanes[logicalLane];
+      const laneModeId = frozenLaneModeId(logicalLane);
+      const label = `frozen ${logicalLane} lane`;
+      if (!exactKeys(lane, [
+        'pass',
+        'order',
+        'storageOffset',
+        'traversal',
+        'membership',
+        'membershipDigests',
+        'depthBins',
+        'storageSegmentSha256',
+        'paddingSentinelCount',
+        'paddingCorruptionCount',
+      ], label, reasons)) continue;
+      requireEqual(lane.pass, true, `${label} pass`, reasons);
+      requireEqual(lane.order, logicalLane, `${label} order`, reasons);
+      requireEqual(
+        lane.storageOffset,
+        validation.laneOffsets?.[logicalLane],
+        `${label} storage offset`,
+        reasons,
+      );
+      requireExactArray(
+        lane.traversal,
+        DEPTH_MODE_PROTOCOLS[laneModeId].traversal,
+        `${label} traversal`,
+        reasons,
+      );
+      requireSha256(lane.storageSegmentSha256, `${label} storage segment sha256`, reasons);
+      requireEqual(
+        lane.paddingSentinelCount,
+        objectCount - expectedVisibleCount,
+        `${label} padding sentinel count`,
+        reasons,
+      );
+      requireEqual(lane.paddingCorruptionCount, 0, `${label} padding corruption count`, reasons);
+
+      const membershipCheck = validateExactValidation({
+        pass: lane.pass,
+        kind: 'fixed-slice-exact-membership',
+        membership: lane.membership,
+        membershipDigests: lane.membershipDigests,
+        commandValidation: validation.commandValidation,
+        overflow: lane.membership?.overflow,
+      }, {
+        modeId: 'fixed-slice',
+        objectCount,
+        bucketCount,
+        expectedVisibleCount,
+        expectedVisibleIdsCanonicalSha256,
+        geometryManifest,
+        scenarioManifest,
+      });
+      reasons.push(...membershipCheck.rejectionReasons.map((reason) => `${label}: ${reason}`));
+      validateDepthBinEvidence(lane.depthBins, {
+        modeId: laneModeId,
+        bucketCount,
+        expectedVisibleCount,
+        membershipDigests: lane.membershipDigests,
+        commandValidation: validation.commandValidation,
+      }, reasons);
+      requireEqual(
+        lane.depthBins?.physicalBinSequenceCommitment?.sha256,
+        validation.physicalBinSequenceSha256,
+        `${label} physical-bin sequence commitment`,
+        reasons,
+      );
+    }
+    requireEqual(
+      validation.lanes['front-to-back']?.storageSegmentSha256
+        === validation.lanes.reverse?.storageSegmentSha256,
+      false,
+      'frozen raw lane segment digest equality',
+      reasons,
+    );
+  }
+
+  if (!exactKeys(
+    validation.selectorChallenges,
+    FROZEN_LOGICAL_LANES,
+    'frozen selector challenges',
+    reasons,
+  )) {
+    // exactKeys records the structural rejection.
+  } else {
+    for (const logicalLane of FROZEN_LOGICAL_LANES) {
+      const challenge = validation.selectorChallenges[logicalLane];
+      const label = `frozen ${logicalLane} selector challenge`;
+      if (!exactKeys(challenge, [
+        'pass',
+        'kind',
+        'lane',
+        'storageOffset',
+        'elementCount',
+        'sha256',
+        'expectedSha256',
+      ], label, reasons)) continue;
+      requireEqual(challenge.pass, true, `${label} pass`, reasons);
+      requireEqual(challenge.kind, 'gpu-selector-address-challenge', `${label} kind`, reasons);
+      requireEqual(challenge.lane, logicalLane, `${label} lane`, reasons);
+      requireEqual(
+        challenge.storageOffset,
+        validation.laneOffsets?.[logicalLane],
+        `${label} storage offset`,
+        reasons,
+      );
+      requireEqual(challenge.elementCount, objectCount, `${label} element count`, reasons);
+      requireSha256(challenge.sha256, `${label} sha256`, reasons);
+      requireEqual(challenge.sha256, challenge.expectedSha256, `${label} expected digest`, reasons);
+      requireEqual(
+        challenge.sha256,
+        validation.lanes?.[logicalLane]?.storageSegmentSha256,
+        `${label} lane segment digest`,
+        reasons,
+      );
+    }
+  }
+  validateFrozenRepresentation(validation, { objectCount, bucketCount }, reasons);
+
+  return {
+    rejectionReasons: [...new Set(reasons)],
+    semanticSha256: sha256Json(validation),
+  };
+}
+
 export function validateExactValidation(validation, {
   modeId,
   objectCount,
@@ -716,7 +1219,19 @@ export function validateExactValidation(validation, {
   expectedVisibleIdsCanonicalSha256,
   geometryManifest,
   scenarioManifest = null,
+  laneStorageOrder = null,
 } = {}) {
+  if (modeId === FROZEN_DEPTH_CROSSOVER_MODE) {
+    return validateFrozenCrossoverValidation(validation, {
+      objectCount,
+      bucketCount,
+      expectedVisibleCount,
+      expectedVisibleIdsCanonicalSha256,
+      geometryManifest,
+      scenarioManifest,
+      laneStorageOrder,
+    });
+  }
   const reasons = [];
   const shape = expectedStrategyShape(modeId, bucketCount, null);
   if (!shape) {
@@ -1018,7 +1533,15 @@ export function validateRenderParity(parity, {
   spec,
   geometryManifest,
   scenarioManifest,
+  skipSnapshotValidation = false,
 } = {}) {
+  if (spec?.modeId === FROZEN_DEPTH_CROSSOVER_MODE && !skipSnapshotValidation) {
+    return validateFrozenCrossoverRenderParity(parity, {
+      spec,
+      geometryManifest,
+      scenarioManifest,
+    });
+  }
   const reasons = [];
   if (!isRecord(parity)) return ['exact render-parity evidence is missing'];
 
@@ -1136,8 +1659,108 @@ export function validateRenderParity(parity, {
     }
   }
 
+  if (!skipSnapshotValidation) {
+    const snapshotCheck = validateExactValidation(parity.snapshotValidation, {
+      modeId: spec?.modeId,
+      objectCount: spec?.objectCount,
+      bucketCount: spec?.bucketCount,
+      expectedVisibleCount: scenarioManifest?.expectedVisibleCount,
+      expectedVisibleIdsCanonicalSha256:
+        scenarioManifest?.expectedVisibleIdsCanonicalSha256,
+      geometryManifest,
+      scenarioManifest,
+      laneStorageOrder: spec?.laneStorageOrder ?? null,
+    });
+    reasons.push(...snapshotCheck.rejectionReasons.map(
+      (reason) => `render-parity snapshot: ${reason}`,
+    ));
+  }
+
+  return [...new Set(reasons)];
+}
+
+export function validateFrozenCrossoverRenderParity(parity, {
+  spec,
+  geometryManifest,
+  scenarioManifest,
+} = {}) {
+  const reasons = [];
+  if (!isRecord(parity)) return ['frozen crossover render-parity evidence is missing'];
+  exactKeys(parity, [
+    'schemaVersion',
+    'kind',
+    'pass',
+    'laneIds',
+    'crossLaneExact',
+    'lanes',
+    'snapshotValidation',
+  ], 'frozen crossover render parity', reasons);
+  requireEqual(parity.schemaVersion, 1, 'frozen crossover render-parity schemaVersion', reasons);
+  requireEqual(
+    parity.kind,
+    'frozen-depth-crossover-exact-render-parity',
+    'frozen crossover render-parity kind',
+    reasons,
+  );
+  requireEqual(parity.pass, true, 'frozen crossover render-parity pass', reasons);
+  requireExactArray(
+    parity.laneIds,
+    FROZEN_DEPTH_CROSSOVER_LANES,
+    'frozen crossover parity lane IDs',
+    reasons,
+  );
+  requireEqual(parity.crossLaneExact, true, 'frozen crossover cross-lane exactness', reasons);
+  if (exactKeys(
+    parity.lanes,
+    FROZEN_DEPTH_CROSSOVER_LANES,
+    'frozen crossover parity lanes',
+    reasons,
+  )) {
+    for (const laneId of FROZEN_DEPTH_CROSSOVER_LANES) {
+      const lane = parity.lanes[laneId];
+      const label = `frozen crossover parity ${laneId}`;
+      exactKeys(lane, [
+        'schemaVersion',
+        'kind',
+        'pass',
+        'width',
+        'height',
+        'captures',
+        'material',
+        'color',
+        'depth',
+        'objectId',
+        'objectIdValidation',
+        'reversedDepthBuffer',
+        'stability',
+      ], label, reasons);
+      reasons.push(...validateRenderParity(lane, {
+        spec,
+        geometryManifest,
+        scenarioManifest,
+        skipSnapshotValidation: true,
+      }).map((reason) => `${label}: ${reason}`));
+    }
+    const front = parity.lanes[FROZEN_DEPTH_CROSSOVER_LANES[0]];
+    const reverse = parity.lanes[FROZEN_DEPTH_CROSSOVER_LANES[1]];
+    for (const field of ['material', 'color', 'depth', 'objectId', 'objectIdValidation']) {
+      requireEqual(
+        sha256Json(reverse?.[field]),
+        sha256Json(front?.[field]),
+        `frozen crossover parity cross-lane ${field}`,
+        reasons,
+      );
+    }
+    requireEqual(
+      reverse?.reversedDepthBuffer,
+      front?.reversedDepthBuffer,
+      'frozen crossover parity cross-lane reversedDepthBuffer',
+      reasons,
+    );
+  }
+
   const snapshotCheck = validateExactValidation(parity.snapshotValidation, {
-    modeId: spec?.modeId,
+    modeId: FROZEN_DEPTH_CROSSOVER_MODE,
     objectCount: spec?.objectCount,
     bucketCount: spec?.bucketCount,
     expectedVisibleCount: scenarioManifest?.expectedVisibleCount,
@@ -1145,15 +1768,42 @@ export function validateRenderParity(parity, {
       scenarioManifest?.expectedVisibleIdsCanonicalSha256,
     geometryManifest,
     scenarioManifest,
+    laneStorageOrder: spec?.laneStorageOrder ?? null,
   });
   reasons.push(...snapshotCheck.rejectionReasons.map(
-    (reason) => `render-parity snapshot: ${reason}`,
+    (reason) => `frozen crossover render-parity snapshot: ${reason}`,
   ));
-
   return [...new Set(reasons)];
 }
 
 export function renderParityIdentity(parity) {
+  if (parity?.kind === 'frozen-depth-crossover-exact-render-parity') {
+    return sha256Json({
+      schemaVersion: parity.schemaVersion,
+      kind: parity.kind,
+      laneIds: parity.laneIds,
+      crossLaneExact: parity.crossLaneExact,
+      lanes: Object.fromEntries(FROZEN_DEPTH_CROSSOVER_LANES.map((laneId) => {
+        const lane = parity?.lanes?.[laneId];
+        return [laneId, {
+          width: lane?.width,
+          height: lane?.height,
+          reversedDepthBuffer: lane?.reversedDepthBuffer,
+          material: lane?.material,
+          color: lane?.color,
+          depth: lane?.depth,
+          objectId: lane?.objectId,
+          objectIdValidation: lane?.objectIdValidation,
+        }];
+      })),
+      physicalBinSequenceSha256:
+        parity?.snapshotValidation?.physicalBinSequenceSha256 ?? null,
+      membershipSha256: Object.fromEntries(FROZEN_LOGICAL_LANES.map((lane) => [
+        lane,
+        parity?.snapshotValidation?.lanes?.[lane]?.membershipDigests?.actual?.sha256 ?? null,
+      ])),
+    });
+  }
   return sha256Json({
     width: parity?.width,
     height: parity?.height,
@@ -1173,7 +1823,8 @@ export function renderParityIdentity(parity) {
  * page. Other benchmark matrices intentionally retain their legacy contract.
  */
 export function validateBenchmarkProtocolEnvironment(protocol, pageEnvironment) {
-  if (protocol?.matrixKind !== 'depth-ordering') return [];
+  const frozenCrossover = protocol?.matrixKind === 'depth-ordering-render-only';
+  if (protocol?.matrixKind !== 'depth-ordering' && !frozenCrossover) return [];
 
   const reasons = [];
   requireEqual(
@@ -1191,6 +1842,14 @@ export function validateBenchmarkProtocolEnvironment(protocol, pageEnvironment) 
   if (!isRecord(pageEnvironment)) {
     reasons.push('depth-ordering benchmark page environment is missing');
   } else {
+    if (frozenCrossover) {
+      requireEqual(
+        pageEnvironment.reversedDepth,
+        true,
+        'depth-ordering-render-only page reversedDepth',
+        reasons,
+      );
+    }
     requireEqual(
       pageEnvironment.rendererReversedDepthBuffer,
       true,
@@ -1403,6 +2062,270 @@ function validateAtomicFixedSliceCompletionInvariant(invariant, reasons) {
   );
 }
 
+export function validateFrozenCrossoverCompletionInvariant(invariant, {
+  objectCount,
+  validation,
+} = {}) {
+  const reasons = [];
+  const pairedIdentityFields = [
+    'bundleGroupUuid',
+    'meshUuid',
+    'geometryUuid',
+    'materialUuid',
+    'matrixAttributeId',
+    'visibleIdsAttributeId',
+    'indirectAttributeId',
+    'selectorChallengeAttributeId',
+    'bundleGroupVersion',
+    'matrixAttributeVersion',
+    'visibleIdsAttributeVersion',
+    'indirectAttributeVersion',
+    'selectorUniformUuid',
+    'renderTargetTextureUuid',
+    'renderTargetWidth',
+    'renderTargetHeight',
+    'renderTargetSamples',
+    'renderTargetDepthBuffer',
+    'cameraViewFnv64',
+    'cameraProjectionFnv64',
+  ];
+  const exactFields = [
+    'pass',
+    'kind',
+    'bundleGroupStatic',
+    'bundleRecordCallbackCountAtTimingStart',
+    'bundleRecordCallbackCountAtTimingEnd',
+    'meshCount',
+    'geometryIdentityCount',
+    'materialIdentityCount',
+    'configuredComputeDispatches',
+    'configuredComputeSubmissions',
+    'frontLaneBase',
+    'reverseLaneBase',
+    ...pairedIdentityFields.flatMap((field) => [
+      `${field}AtTimingStart`,
+      `${field}AtTimingEnd`,
+    ]),
+    'selectorWriteSerialAtTimingStart',
+    'selectorWriteSerialAtTimingEnd',
+    'selectorWritesDuringTiming',
+    'renderCallSerialAtTimingStart',
+    'renderCallSerialAtTimingEnd',
+    'renderCallsDuringTiming',
+    'computeCallSerialAtTimingStart',
+    'computeCallSerialAtTimingEnd',
+    'computeCallsDuringTiming',
+    'totalPipelineCacheEntriesAtTimingStart',
+    'totalPipelineCacheEntriesAtTimingEnd',
+    'computePipelineCacheEntriesAtTimingStart',
+    'computePipelineCacheEntriesAtTimingEnd',
+    'expectedTimedFrameCount',
+  ];
+  if (!exactKeys(
+    invariant,
+    exactFields,
+    'frozen crossover completion invariant',
+    reasons,
+  )) return reasons;
+
+  const expectedTimedFrameCount = FROZEN_CROSSOVER_WARMUP_FRAMES
+    + FROZEN_CROSSOVER_MEASURED_FRAMES;
+  const lifecycle = validation?.lifecycle;
+  requireEqual(invariant.pass, true, 'frozen crossover completion invariant pass', reasons);
+  requireEqual(
+    invariant.kind,
+    'frozen-depth-crossover-static-bundle-invariant',
+    'frozen crossover completion invariant kind',
+    reasons,
+  );
+  requireEqual(invariant.bundleGroupStatic, true, 'frozen completion static BundleGroup', reasons);
+  requireEqual(
+    invariant.bundleRecordCallbackCountAtTimingStart,
+    1,
+    'frozen completion timing-start bundle-record callback count',
+    reasons,
+  );
+  requireEqual(
+    invariant.bundleRecordCallbackCountAtTimingEnd,
+    invariant.bundleRecordCallbackCountAtTimingStart,
+    'frozen completion timing-end bundle-record callback count',
+    reasons,
+  );
+  requireEqual(
+    invariant.bundleRecordCallbackCountAtTimingStart,
+    lifecycle?.bundleRecordCallbackCount,
+    'frozen completion versus validation bundle-record callback count',
+    reasons,
+  );
+  for (const field of ['meshCount', 'geometryIdentityCount', 'materialIdentityCount']) {
+    requireEqual(invariant[field], 1, `frozen completion ${field}`, reasons);
+    requireEqual(invariant[field], lifecycle?.[field], `frozen completion ${field} versus validation`, reasons);
+  }
+  requireEqual(invariant.configuredComputeDispatches, 0, 'frozen completion compute dispatches', reasons);
+  requireEqual(invariant.configuredComputeSubmissions, 0, 'frozen completion compute submissions', reasons);
+  requireEqual(
+    invariant.configuredComputeDispatches,
+    lifecycle?.configuredComputeDispatches,
+    'frozen completion compute dispatches versus validation',
+    reasons,
+  );
+  requireEqual(
+    invariant.configuredComputeSubmissions,
+    lifecycle?.configuredComputeSubmissions,
+    'frozen completion compute submissions versus validation',
+    reasons,
+  );
+  requireEqual(
+    invariant.frontLaneBase,
+    validation?.laneOffsets?.['front-to-back'],
+    'frozen completion front lane base',
+    reasons,
+  );
+  requireEqual(
+    invariant.reverseLaneBase,
+    validation?.laneOffsets?.reverse,
+    'frozen completion reverse lane base',
+    reasons,
+  );
+  if (![0, objectCount].includes(invariant.frontLaneBase)
+    || ![0, objectCount].includes(invariant.reverseLaneBase)
+    || invariant.frontLaneBase === invariant.reverseLaneBase) {
+    reasons.push('frozen completion lane bases are not the exact two legal segment bases');
+  }
+
+  const lifecycleIdentityFields = pairedIdentityFields.filter(
+    (field) => !field.startsWith('renderTarget')
+      && !field.startsWith('camera'),
+  );
+  for (const field of pairedIdentityFields) {
+    const startField = `${field}AtTimingStart`;
+    const endField = `${field}AtTimingEnd`;
+    requireEqual(invariant[endField], invariant[startField], `frozen completion stable ${field}`, reasons);
+    if (lifecycleIdentityFields.includes(field)) {
+      requireEqual(
+        invariant[startField],
+        lifecycle?.[field],
+        `frozen completion ${field} versus validation`,
+        reasons,
+      );
+    }
+  }
+  for (const field of [
+    'bundleGroupUuid',
+    'meshUuid',
+    'geometryUuid',
+    'materialUuid',
+    'selectorUniformUuid',
+    'renderTargetTextureUuid',
+  ]) {
+    const value = invariant[`${field}AtTimingStart`];
+    if (typeof value !== 'string' || value.length === 0) {
+      reasons.push(`frozen completion ${field} is not a nonempty identity string`);
+    }
+  }
+  for (const field of ['cameraViewFnv64', 'cameraProjectionFnv64']) {
+    if (!/^[0-9a-f]{16}$/.test(invariant[`${field}AtTimingStart`] ?? '')) {
+      reasons.push(`frozen completion ${field} is not an FNV-1a-64 digest`);
+    }
+  }
+  for (const field of [
+    'matrixAttributeId',
+    'visibleIdsAttributeId',
+    'indirectAttributeId',
+    'selectorChallengeAttributeId',
+    'bundleGroupVersion',
+    'matrixAttributeVersion',
+    'visibleIdsAttributeVersion',
+    'indirectAttributeVersion',
+  ]) {
+    if (!isNonnegativeInteger(invariant[`${field}AtTimingStart`])) {
+      reasons.push(`frozen completion ${field} is not a nonnegative integer`);
+    }
+  }
+  requireEqual(invariant.renderTargetWidthAtTimingStart, 1280, 'frozen render-target width', reasons);
+  requireEqual(invariant.renderTargetHeightAtTimingStart, 720, 'frozen render-target height', reasons);
+  requireEqual(invariant.renderTargetSamplesAtTimingStart, 0, 'frozen render-target samples', reasons);
+  requireEqual(
+    invariant.renderTargetDepthBufferAtTimingStart,
+    true,
+    'frozen render-target depthBuffer',
+    reasons,
+  );
+
+  for (const field of [
+    'selectorWriteSerialAtTimingStart',
+    'selectorWriteSerialAtTimingEnd',
+    'renderCallSerialAtTimingStart',
+    'renderCallSerialAtTimingEnd',
+    'computeCallSerialAtTimingStart',
+    'computeCallSerialAtTimingEnd',
+    'totalPipelineCacheEntriesAtTimingStart',
+    'totalPipelineCacheEntriesAtTimingEnd',
+    'computePipelineCacheEntriesAtTimingStart',
+    'computePipelineCacheEntriesAtTimingEnd',
+  ]) {
+    if (!isNonnegativeInteger(invariant[field])) {
+      reasons.push(`frozen completion ${field} is not a nonnegative integer`);
+    }
+  }
+  requireEqual(
+    invariant.expectedTimedFrameCount,
+    expectedTimedFrameCount,
+    'frozen completion expected timed frame count',
+    reasons,
+  );
+  requireEqual(
+    invariant.selectorWritesDuringTiming,
+    expectedTimedFrameCount,
+    'frozen completion selector writes during timing',
+    reasons,
+  );
+  requireEqual(
+    invariant.selectorWriteSerialAtTimingEnd - invariant.selectorWriteSerialAtTimingStart,
+    expectedTimedFrameCount,
+    'frozen completion selector serial delta',
+    reasons,
+  );
+  requireEqual(
+    invariant.renderCallsDuringTiming,
+    expectedTimedFrameCount,
+    'frozen completion render calls during timing',
+    reasons,
+  );
+  requireEqual(
+    invariant.renderCallSerialAtTimingEnd - invariant.renderCallSerialAtTimingStart,
+    expectedTimedFrameCount,
+    'frozen completion render-call serial delta',
+    reasons,
+  );
+  requireEqual(invariant.computeCallsDuringTiming, 0, 'frozen completion compute calls', reasons);
+  requireEqual(
+    invariant.computeCallSerialAtTimingEnd,
+    invariant.computeCallSerialAtTimingStart,
+    'frozen completion compute-call serial stability',
+    reasons,
+  );
+  requireEqual(
+    invariant.totalPipelineCacheEntriesAtTimingEnd,
+    invariant.totalPipelineCacheEntriesAtTimingStart,
+    'frozen completion total pipeline-cache stability',
+    reasons,
+  );
+  requireEqual(
+    invariant.computePipelineCacheEntriesAtTimingEnd,
+    invariant.computePipelineCacheEntriesAtTimingStart,
+    'frozen completion compute pipeline-cache stability',
+    reasons,
+  );
+  if (isNonnegativeInteger(invariant.totalPipelineCacheEntriesAtTimingStart)
+    && isNonnegativeInteger(invariant.computePipelineCacheEntriesAtTimingStart)
+    && invariant.computePipelineCacheEntriesAtTimingStart
+      > invariant.totalPipelineCacheEntriesAtTimingStart) {
+    reasons.push('frozen completion compute pipeline-cache entries exceed total entries');
+  }
+  return [...new Set(reasons)];
+}
+
 export function validateDepthOrderingCompletionInvariant(invariant, {
   modeId,
   objectCount,
@@ -1411,6 +2334,12 @@ export function validateDepthOrderingCompletionInvariant(invariant, {
   scenarioManifest,
 } = {}) {
   const reasons = [];
+  if (modeId === FROZEN_DEPTH_CROSSOVER_MODE) {
+    return validateFrozenCrossoverCompletionInvariant(invariant, {
+      objectCount,
+      validation,
+    });
+  }
   if (depthModeProtocol(modeId)) {
     validateDepthCompletionInvariant(invariant, {
       modeId,
@@ -1427,14 +2356,179 @@ export function validateDepthOrderingCompletionInvariant(invariant, {
   return [...new Set(reasons)];
 }
 
+export function validateFrozenCrossoverTrialRows(spec, rows, pageSummary, validation, {
+  warmupFrames,
+  measuredFrames,
+  plannedScheduleSha256 = null,
+} = {}) {
+  const reasons = [];
+  if (spec?.modeId !== FROZEN_DEPTH_CROSSOVER_MODE) {
+    return [`frozen crossover row validation received modeId ${JSON.stringify(spec?.modeId)}`];
+  }
+  requireEqual(
+    warmupFrames,
+    FROZEN_CROSSOVER_WARMUP_FRAMES,
+    'frozen crossover protocol warmup frame count',
+    reasons,
+  );
+  requireEqual(
+    measuredFrames,
+    FROZEN_CROSSOVER_MEASURED_FRAMES,
+    'frozen crossover protocol measured frame count',
+    reasons,
+  );
+  if (!Array.isArray(rows)) return ['frozen crossover timed rows are not an array'];
+  requireEqual(
+    rows.length,
+    FROZEN_CROSSOVER_MEASURED_FRAMES,
+    'frozen crossover measured row count',
+    reasons,
+  );
+  if (!Array.isArray(spec.laneStorageOrder)
+    || spec.laneStorageOrder.length !== FROZEN_DEPTH_CROSSOVER_LANES.length
+    || new Set(spec.laneStorageOrder).size !== FROZEN_DEPTH_CROSSOVER_LANES.length
+    || FROZEN_DEPTH_CROSSOVER_LANES.some((lane) => !spec.laneStorageOrder.includes(lane))) {
+    reasons.push('frozen crossover planned lane storage order is not the exact lane pair');
+  }
+  if (spec.superblockOrientationOffset !== 0 && spec.superblockOrientationOffset !== 1) {
+    reasons.push('frozen crossover superblock orientation offset is not zero or one');
+  }
+  const expectedStorageOrder = frozenLogicalLane(spec.laneStorageOrder?.[0]);
+  requireEqual(
+    validation?.laneStorageOrder,
+    expectedStorageOrder,
+    'frozen crossover validation laneStorageOrder versus plan',
+    reasons,
+  );
+  const scheduleSha256 = (spec.superblockOrientationOffset === 0
+    || spec.superblockOrientationOffset === 1)
+    ? frozenCrossoverScheduleSha256(spec.superblockOrientationOffset)
+    : null;
+  if (plannedScheduleSha256 === null) {
+    reasons.push('frozen crossover planned schedule sha256 is missing');
+  } else {
+    requireEqual(
+      plannedScheduleSha256,
+      scheduleSha256,
+      'frozen crossover planned schedule sha256',
+      reasons,
+    );
+  }
+  requireEqual(
+    pageSummary?.expectedRenderTimestampUidCount,
+    1,
+    'frozen crossover summary expected render timestamp UID count',
+    reasons,
+  );
+  requireEqual(
+    pageSummary?.invalidRenderTimestampUidCountFrames,
+    0,
+    'frozen crossover summary invalid render timestamp UID-count frames',
+    reasons,
+  );
+
+  const invariant = pageSummary?.completionInvariant;
+  reasons.push(...validateFrozenCrossoverCompletionInvariant(invariant, {
+    objectCount: spec.objectCount,
+    validation,
+  }));
+  const laneCounts = Object.fromEntries(
+    FROZEN_DEPTH_CROSSOVER_LANES.map((laneId) => [laneId, 0]),
+  );
+  const completionIdentityFields = [
+    'bundleGroupUuid',
+    'meshUuid',
+    'geometryUuid',
+    'materialUuid',
+    'matrixAttributeId',
+    'visibleIdsAttributeId',
+    'indirectAttributeId',
+    'selectorChallengeAttributeId',
+    'bundleGroupVersion',
+    'matrixAttributeVersion',
+    'visibleIdsAttributeVersion',
+    'indirectAttributeVersion',
+    'selectorUniformUuid',
+    'renderTargetTextureUuid',
+    'renderTargetWidth',
+    'renderTargetHeight',
+    'renderTargetSamples',
+    'renderTargetDepthBuffer',
+    'cameraViewFnv64',
+    'cameraProjectionFnv64',
+  ];
+  for (let index = 0; index < rows.length; index += 1) {
+    const row = rows[index];
+    const prefix = `frozen frame ${index}`;
+    if (!isRecord(row)) continue;
+    if (spec.superblockOrientationOffset !== 0 && spec.superblockOrientationOffset !== 1) continue;
+    const scheduled = frozenCrossoverFrame(index, spec.superblockOrientationOffset);
+    const logicalLane = frozenLogicalLane(scheduled.laneId);
+    laneCounts[scheduled.laneId] += 1;
+    const expectedFields = {
+      expectedRenderTimestampUidCount: 1,
+      gpuRenderTimestampUidCount: 1,
+      plannedLaneStorageOrder: spec.laneStorageOrder?.join('|'),
+      plannedScheduleSha256: scheduleSha256,
+      superblockOrientationOffset: spec.superblockOrientationOffset,
+      frontLaneBase: validation?.laneOffsets?.['front-to-back'],
+      reverseLaneBase: validation?.laneOffsets?.reverse,
+      phaseFrameIndex: index,
+      crossoverBlockIndex: scheduled.crossoverBlockIndex,
+      withinBlockPosition: scheduled.withinBlockPosition,
+      crossoverPattern: scheduled.pattern,
+      crossoverPatternIndex: scheduled.patternIndex,
+      laneId: scheduled.laneId,
+      laneBase: validation?.laneOffsets?.[logicalLane],
+      selectorWriteSerialAtTimingStart: invariant?.selectorWriteSerialAtTimingStart,
+      selectorWriteSerial:
+        invariant?.selectorWriteSerialAtTimingStart
+          + FROZEN_CROSSOVER_WARMUP_FRAMES + index + 1,
+      renderCallSerialAtTimingStart: invariant?.renderCallSerialAtTimingStart,
+      renderCallSerial:
+        invariant?.renderCallSerialAtTimingStart
+          + FROZEN_CROSSOVER_WARMUP_FRAMES + index + 1,
+      computeCallSerialAtTimingStart: invariant?.computeCallSerialAtTimingStart,
+      totalPipelineCacheEntriesAtTimingStart:
+        invariant?.totalPipelineCacheEntriesAtTimingStart,
+      computePipelineCacheEntriesAtTimingStart:
+        invariant?.computePipelineCacheEntriesAtTimingStart,
+    };
+    for (const field of completionIdentityFields) {
+      expectedFields[`${field}AtTimingStart`] = invariant?.[`${field}AtTimingStart`];
+    }
+    for (const [field, expected] of Object.entries(expectedFields)) {
+      if (!(field in row)) reasons.push(`${prefix} is missing ${field}`);
+      else requireEqual(row[field], expected, `${prefix} ${field}`, reasons);
+    }
+  }
+  for (const laneId of FROZEN_DEPTH_CROSSOVER_LANES) {
+    requireEqual(
+      laneCounts[laneId],
+      FROZEN_EXPECTED_MEASURED_ROWS_PER_LANE,
+      `frozen crossover measured rows for ${laneId}`,
+      reasons,
+    );
+  }
+  requireEqual(
+    FROZEN_CROSSOVER_PATTERNS.length,
+    2,
+    'frozen crossover schedule pattern count',
+    reasons,
+  );
+  return [...new Set(reasons)];
+}
+
 export function validateTrialRows(spec, rows, pageSummary, validation, scenarioManifest, {
   schemaVersion,
   warmupFrames,
   measuredFrames,
+  plannedScheduleSha256 = null,
 } = {}) {
   const reasons = [];
   const shape = expectedStrategyShape(spec.modeId, spec.bucketCount, spec.objectCount);
   const depthProtocol = depthModeProtocol(spec.modeId);
+  const frozenCrossoverTrial = spec.modeId === FROZEN_DEPTH_CROSSOVER_MODE;
   const depthOrderingTrial = depthProtocol !== null
     || ['high-overlap', 'low-overlap'].includes(spec.layout);
   if (!shape) return [`unsupported modeId ${JSON.stringify(spec.modeId)}`];
@@ -1452,6 +2546,13 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
   }
   if (typeof pageSummary?.classification !== 'string' || pageSummary.classification.length === 0) {
     reasons.push('page summary timestamp classification is missing');
+  }
+  if (frozenCrossoverTrial) {
+    reasons.push(...validateFrozenCrossoverTrialRows(spec, rows, pageSummary, validation, {
+      warmupFrames,
+      measuredFrames,
+      plannedScheduleSha256,
+    }));
   }
   if (depthOrderingTrial) {
     if (!['high-overlap', 'low-overlap'].includes(spec.layout)) {
@@ -1487,7 +2588,9 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
       || scenarioManifest.depthBinRange.far <= scenarioManifest.depthBinRange.near) {
       reasons.push('depth-ordering scenario manifest depthBinRange is missing or invalid');
     }
-    if (depthProtocol) {
+    if (frozenCrossoverTrial) {
+      // The frozen path validates its stronger completion contract above.
+    } else if (depthProtocol) {
       reasons.push(...validateDepthOrderingCompletionInvariant(
         pageSummary?.completionInvariant,
         {
@@ -1579,8 +2682,12 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
       configuredRenderObjects: shape.configuredRenderObjects,
       configuredComputeDispatches: shape.configuredComputeDispatches,
       configuredComputeSubmissions: shape.configuredComputeSubmissions,
-      configuredSubmittedInstances: shape.configuredSubmittedInstances,
-      bundleRecordCallbackCountAtTimingStart: depthProtocol
+      configuredSubmittedInstances: frozenCrossoverTrial
+        ? scenarioManifest?.expectedVisibleCount
+        : shape.configuredSubmittedInstances,
+      bundleRecordCallbackCountAtTimingStart: frozenCrossoverTrial
+        ? 1
+        : depthProtocol
         ? 1
         : depthOrderingTrial && spec.modeId === 'fixed-slice'
           ? 1
