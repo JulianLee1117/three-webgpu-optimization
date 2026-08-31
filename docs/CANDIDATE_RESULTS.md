@@ -1,12 +1,12 @@
-# Candidate results: fixed-ownership compaction at 32 geometry buckets
+# Candidate results
 
 ## Status and scope
 
 These results are candidate evidence from one machine. They establish a reproducible result for the tested RTX 5070 Ti / D3D12 configuration; they do not establish a general WebGPU result.
 
-All headline runs used source commit `abbc5629cb5ce44bafd2ad0ced91fbbb07d6e8f2`, Three.js 0.185.1, Chrome 151.0.7922.174, a 1280 x 720 WebGPU viewport, 16,384 static objects, and 32 indexed geometry buckets. The fixtures contain positions, normals, UVs, full static TRS matrices, and matched `MeshStandardNodeMaterial` parameters. They are controlled procedural assets rather than production content.
+The fixed-ownership ecosystem runs used source commit `abbc5629cb5ce44bafd2ad0ced91fbbb07d6e8f2`, Three.js 0.185.1, Chrome 151.0.7922.174, a 1280 x 720 WebGPU viewport, 16,384 static objects, and 32 indexed geometry buckets. The fixtures contain positions, normals, UVs, full static TRS matrices, and matched `MeshStandardNodeMaterial` parameters. They are controlled procedural assets rather than production content.
 
-Each run contains six position-balanced repetitions at 20%, 80%, and 99% target visibility. Each trial uses 300 untimed warm-up frames followed by 240 measured frames. The values below are median paired deltas of per-trial p50s. The sign convention is fixed-slice minus comparator, so negative values favor fixed-slice.
+Each fixed-ownership ecosystem run contains six position-balanced repetitions at 20%, 80%, and 99% target visibility. Each trial uses 300 untimed warm-up frames followed by 240 measured frames. The values below are median paired deltas of per-trial p50s. The sign convention is fixed-slice minus comparator, so negative values favor fixed-slice.
 
 Every ecosystem run reported in the two tables below completed all 54 trials and 12,960 measured frames, passed exact survivor-membership and native indexed-command validation, retained stable source provenance, and passed artifact-manifest verification. GPU telemetry remained available throughout. GPU pass is the sum of timestamped compute and render durations; it is not presentation or end-to-end queue latency. Accounted CPU+GPU is the harness sum of synchronous CPU submission and timestamped GPU pass, not an assertion that the two execute serially.
 
@@ -57,6 +57,25 @@ The one-object representation reduced CPU render submission by 29.3-38.8% at 32 
 
 One earlier four-bucket artifact is excluded from this table because device memory moved between approximately 7.2 and 14.1 GiB during the run. The clean repeat held device memory between 7.1 and 7.3 GiB. This exclusion does not affect the two 32-bucket or two 128-bucket replications.
 
+## Coarse depth-ordering result
+
+The depth-ordering matrix used source commit `9637ad2552834a79d7b2f34386c516967d73614b`, the same RTX 5070 Ti / D3D12 system and browser, 65,536 objects, 32 buckets, 99% visibility, and eight physical depth bins. The two candidates were consecutive same-session replications on one device, not independent hardware replications. Front-to-back and reverse traversal used the same four kernels, shader operations, resources, static bundle, material, geometry, and 32 native indirect draws; only the traversal uniform differed. Atomic fixed-slice was a contextual whole-mechanism comparator.
+
+Each candidate completed all 36 trials and 8,640 measured frames. Both passed exact survivor, command, bin-layout, traversal-normalized sequence, full-frame color/depth/object-ID, static-bundle lifecycle, source-provenance, and artifact-integrity checks. The table reports median paired deltas of per-trial p50s. Negative front-to-back-minus-comparator values favor front-to-back.
+
+| Replication | High-overlap render: front-to-back minus reverse | Front-to-back wins | Low-overlap render control | High-overlap total GPU: front-to-back minus atomic | Low-overlap total GPU: front-to-back minus atomic | Preregistered result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| A | +0.094 ms (+4.1%) | 2 / 6 | +0.049 ms (+4.1%) | +1.063 ms (+55.1%) | +1.155 ms (+58.7%) | Fail |
+| B | -0.237 ms (-10.6%) | 5 / 6 | +0.050 ms (+2.1%) | +0.912 ms (+49.1%) | +1.216 ms (+66.5%) | Fail |
+
+Replication A failed the material high-overlap benefit and direction-stability gates. Replication B passed the aggregate high-overlap benefit and five-of-six win gates, but failed position stability: the two pairs with front-to-back in absolute position zero had a +0.128 ms median render delta. Both low-overlap controls remained inside the preregistered 0.10 ms and 10% equivalence bounds.
+
+The replications therefore do not establish a stable render-ordering benefit. Their high-overlap estimates changed sign, and the second result remained sensitive to trial position. This is consistent with a possible early-depth-rejection effect confounded by temporal or order drift, but it is not evidence sufficient to attribute or size that effect.
+
+The deterministic fourth kernel deliberately assigns one scatter owner per bucket so independently generated front-to-back and reverse survivor sequences can be proven identical. That diagnostic design costs approximately 0.84-0.86 ms of compute per frame, compared with approximately 0.004 ms for atomic fixed-slice, and makes the complete ordered mechanism materially slower. It is an attribution instrument, not a deployable optimization.
+
+The next experiment should remove compaction from the causal contrast: generate and validate frozen front-to-back and reverse survivor lists before timing, then alternate the two render orders within trials or short balanced blocks. It should retain the same bundle, draw, material, geometry, exact-output, and object-ID gates. A scalable parallel scan or radix compaction path is warranted only if that render-only signal is stable.
+
 ## Evidence identifiers
 
 | Comparison | Replication | Run identifier |
@@ -65,6 +84,8 @@ One earlier four-bucket artifact is excluded from this table because device memo
 | Three Blocks 0.10 historical | B | `ecosystem-o16384-b32-2026-08-31T20-05-45.150Z` |
 | Three Blocks 0.11 coalesced diagnostic | A | `ecosystem-o16384-b32-2026-08-31T20-09-51.773Z` |
 | Three Blocks 0.11 coalesced diagnostic | B | `ecosystem-o16384-b32-2026-08-31T20-13-07.746Z` |
+| Coarse depth ordering | A | `depth-ordering-o65536-b32-2026-08-31T22-21-43.907Z` |
+| Coarse depth ordering | B | `depth-ordering-o65536-b32-2026-08-31T22-24-21.618Z` |
 
 Generated run directories remain ignored source artifacts. Each identifier above names a manifest-bound local directory containing frame-level CSV data, metadata, trial summaries, validation payloads, workload manifests, GPU telemetry, and SHA-256 commitments. The analyzer rejects incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts.
 
@@ -74,6 +95,7 @@ Generated run directories remain ignored source artifacts. Each identifier above
 - The two-dispatch fixed-slice compute stage is reproducibly cheaper than both the published nine-dispatch historical heterogeneous path and the 128-dispatch current-package diagnostic.
 - One retained mesh/render object removes a CPU submission cost that grows with bucket count.
 - The current-package comparison has a real crossover: fixed-slice wins through compute efficiency while its render-only path is slower.
+- The tested bucket-serial depth-ordering mechanism is not a total-GPU optimization, and its render-only contrast was not stable enough to support an ordering claim.
 
 ## What remains open
 
@@ -81,6 +103,6 @@ Generated run directories remain ignored source artifacts. Each identifier above
 - The current-package result is a diagnostic comparison, not stock public-API timing.
 - Production assets, textures, dynamic cameras, moving objects, shadows, transparency, skinning, and morph targets are outside this result.
 - The benchmark does not measure presentation latency or queue overlap.
-- Atomic survivor order may affect early-depth efficiency in overlapping opaque scenes.
+- Whether coarse front-to-back traversal improves render-only time after within-trial temporal drift is controlled.
 
-The next GPU-side experiment should isolate the last point. A controlled depth-ordering matrix should preserve exact visible membership, geometry, transforms, material, and draw count while comparing front-to-back and reverse coarse depth bins in high-overlap and low-overlap scenes. It should proceed only with exact color, depth, object-ID, survivor, and command parity, and it should be rejected if its extra compute cost does not improve summed GPU pass time.
+The next GPU-side experiment should isolate the last point with frozen, prevalidated survivor buffers and tightly interleaved render-order measurements. Only a stable render benefit would justify implementing and timing a scalable GPU ordering pipeline.
