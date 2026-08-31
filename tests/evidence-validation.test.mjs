@@ -167,12 +167,46 @@ test('compute validation requires survivor digests bound to the scenario manifes
     };
     const options = {
       modeId: 'fixed-slice',
+      objectCount: scenario.objectCount,
       bucketCount: scenario.bucketCount,
       expectedVisibleCount: scenario.expectedVisibleCount,
       expectedVisibleIdsCanonicalSha256: scenarioManifest.expectedVisibleIdsCanonicalSha256,
       geometryManifest,
     };
     assert.deepEqual(validateExactValidation(validation, options).rejectionReasons, []);
+    const perBucketValidation = structuredClone(validation);
+    perBucketValidation.kind = 'fixed-slice-per-bucket-exact-membership';
+    perBucketValidation.representation = {
+      kind: 'shared-merged-geometry-per-bucket-render-objects',
+      bundleRecordCallbackCount: scenario.bucketCount,
+      geometryIdentityCount: 1,
+      materialIdentityCount: 1,
+      meshCount: scenario.bucketCount,
+      geometryInstanceCount: Math.ceil(scenario.objectCount / scenario.bucketCount),
+    };
+    const perBucketOptions = { ...options, modeId: 'fixed-slice-per-bucket' };
+    assert.deepEqual(
+      validateExactValidation(perBucketValidation, perBucketOptions).rejectionReasons,
+      [],
+    );
+    const badRepresentation = structuredClone(perBucketValidation);
+    badRepresentation.representation.geometryIdentityCount = scenario.bucketCount;
+    assert.match(
+      validateExactValidation(badRepresentation, perBucketOptions).rejectionReasons.join('; '),
+      /geometry identity count/,
+    );
+    const badFirstIndex = structuredClone(perBucketValidation);
+    badFirstIndex.commandValidation.records[1].actual.firstIndex = 0;
+    assert.match(
+      validateExactValidation(badFirstIndex, perBucketOptions).rejectionReasons.join('; '),
+      /actual\.firstIndex/,
+    );
+    const badOverflow = structuredClone(perBucketValidation);
+    badOverflow.overflow = 1;
+    assert.match(
+      validateExactValidation(badOverflow, perBucketOptions).rejectionReasons.join('; '),
+      /fixed-slice-per-bucket overflow/,
+    );
     const tampered = structuredClone(validation);
     tampered.membershipDigests.actual.sha256 = '0'.repeat(64);
     assert.match(
@@ -224,6 +258,7 @@ test('row audit validation rejects omitted protocol and configured-work fields',
     configuredComputeDispatches: 0,
     configuredComputeSubmissions: 0,
     configuredSubmittedInstances: 4_096,
+    bundleRecordCallbackCountAtTimingStart: null,
     timestampAvailable: true,
     frameIndex: 0,
     gpuFrameId: 10,
@@ -254,5 +289,126 @@ test('row audit validation rejects omitted protocol and configured-work fields',
   assert.match(
     validateTrialRows(spec, [omitted], summary, validation, scenario, protocol).join('; '),
     /missing configuredDrawCommands/,
+  );
+});
+
+test('per-bucket fixed-slice rows require the causal schedule and stable bundle recording', () => {
+  const spec = {
+    runId: 'run',
+    trialId: 'trial',
+    planIndex: 0,
+    repetitionIndex: 0,
+    modeId: 'fixed-slice-per-bucket',
+    modeOrder: ['fixed-slice-per-bucket', 'fixed-slice'],
+    modeOrderPosition: 0,
+    visibilityFraction: 0.2,
+    visibilityOrder: [0.2, 0.8, 0.99],
+    visibilityOrderPosition: 0,
+    objectCount: 4_096,
+    bucketCount: 4,
+  };
+  const validation = {
+    kind: 'fixed-slice-per-bucket-exact-membership',
+    representation: {
+      bundleRecordCallbackCount: 4,
+    },
+  };
+  const row = {
+    schemaVersion: 2,
+    runId: 'run',
+    trialId: 'trial',
+    planIndex: 0,
+    repetitionIndex: 0,
+    modeOrderPosition: 0,
+    visibilityOrderPosition: 0,
+    plannedModeOrder: spec.modeOrder.join('|'),
+    plannedVisibilityOrder: spec.visibilityOrder.join('|'),
+    protocolWarmupFrames: 300,
+    protocolMeasuredFrames: 1,
+    modeId: spec.modeId,
+    objectCount: spec.objectCount,
+    bucketCount: spec.bucketCount,
+    targetVisibilityFraction: spec.visibilityFraction,
+    expectedVisibleCount: 819,
+    validationKind: validation.kind,
+    validationPass: true,
+    usesCompute: true,
+    configuredDrawCommands: 4,
+    configuredRenderObjects: 4,
+    configuredComputeDispatches: 2,
+    configuredComputeSubmissions: 1,
+    configuredSubmittedInstances: null,
+    bundleRecordCallbackCountAtTimingStart: 4,
+    timestampAvailable: true,
+    frameIndex: 0,
+    gpuFrameId: 10,
+    cpuCommonUpdateMs: 0.01,
+    cpuComputeSubmitMs: 0.03,
+    cpuRenderSubmitMs: 0.1,
+    cpuSubmitTotalMs: 0.13,
+    cpuFrameBodyMs: 0.14,
+    gpuComputeMs: 0.02,
+    gpuRenderMs: 0.2,
+    gpuPassTotalMs: 0.22,
+  };
+  const summary = {
+    accepted: true,
+    timestampAvailable: true,
+    rowCount: 1,
+    missingRenderFrames: 0,
+    missingComputeFrames: 0,
+    quantumNs: 32,
+    classification: 'hardware-like',
+    completionInvariant: {
+      pass: true,
+      kind: 'fixed-slice-per-bucket-static-bundle-invariant',
+      bundleRecordCallbackCountAtTimingStart: 4,
+      bundleRecordCallbackCountAtTimingEnd: 4,
+      geometryIdentityCount: 1,
+      materialIdentityCount: 1,
+      meshCount: 4,
+      geometryInstanceCount: 1_024,
+    },
+  };
+  const scenario = { expectedVisibleCount: 819 };
+  const protocol = { schemaVersion: 2, warmupFrames: 300, measuredFrames: 1 };
+  assert.deepEqual(validateTrialRows(spec, [row], summary, validation, scenario, protocol), []);
+
+  for (const [field, badValue] of [
+    ['configuredRenderObjects', 1],
+    ['configuredComputeDispatches', 16],
+    ['configuredComputeSubmissions', 4],
+    ['bundleRecordCallbackCountAtTimingStart', 8],
+  ]) {
+    const tampered = { ...row, [field]: badValue };
+    assert.match(
+      validateTrialRows(spec, [tampered], summary, validation, scenario, protocol).join('; '),
+      new RegExp(field),
+    );
+  }
+  const rebuiltSummary = structuredClone(summary);
+  rebuiltSummary.completionInvariant.bundleRecordCallbackCountAtTimingEnd = 8;
+  assert.match(
+    validateTrialRows(spec, [row], rebuiltSummary, validation, scenario, protocol).join('; '),
+    /timing-end bundle-record callback count/,
+  );
+  assert.match(
+    validateTrialRows(
+      { ...spec, modeId: 'fixed-slice-typo' },
+      [row],
+      summary,
+      validation,
+      scenario,
+      protocol,
+    ).join('; '),
+    /unsupported modeId/,
+  );
+  assert.match(
+    validateExactValidation({}, {
+      modeId: 'fixed-slice-typo',
+      objectCount: 4_096,
+      bucketCount: 4,
+    }).rejectionReasons.join('; '),
+    /unsupported modeId/,
   );
 });

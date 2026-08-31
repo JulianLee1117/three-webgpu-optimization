@@ -12,7 +12,13 @@ function deferred() {
 
 function fakeRenderer() {
   return {
-    backend: { trackTimestamp: false },
+    backend: {
+      trackTimestamp: false,
+      timestampQueryPool: {
+        render: { frames: [2], timestamps: new Map([['render:f2', 0.2]]) },
+        compute: { frames: [2], timestamps: new Map([['compute:f2', 0.1]]) },
+      },
+    },
     rejection: null,
     async resolveTimestampsAsync() {
       if (this.rejection !== null) throw this.rejection;
@@ -75,7 +81,7 @@ test('warmup timestamp failure terminates the trial and reports the error', asyn
   assert.equal(controller.resolving, false);
   assert.equal(renderer.backend.trackTimestamp, false);
   assert.equal(completed, false);
-  assert.match(statuses.at(-1), /Trial failed while resolving timestamps: warmup timestamp map failed/);
+  assert.match(statuses.at(-1), /Trial failed: warmup timestamp map failed/);
 });
 
 test('measurement timestamp failure terminates the trial without completing it', async () => {
@@ -100,4 +106,79 @@ test('measurement timestamp failure terminates the trial without completing it',
   assert.equal(controller.phase, 'error');
   assert.equal(renderer.backend.trackTimestamp, false);
   assert.equal(completed, false);
+});
+
+for (const invariantPass of [true, false]) {
+  test(`completion invariant ${invariantPass ? 'accepts' : 'rejects'} an otherwise complete trial`, async () => {
+    const completed = deferred();
+    const contexts = [];
+    const statuses = [];
+    const { controller, renderer } = await startedController({
+      validateCompletion: (context) => {
+        contexts.push(context);
+        return { pass: invariantPass, kind: 'test-invariant' };
+      },
+      onStatus: (status) => statuses.push(status),
+      onComplete: (result) => completed.resolve(result),
+    });
+
+    controller.recordFrame({ gpuFrameId: 1 });
+    while (controller.phase !== 'measure') await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.recordFrame({
+      gpuFrameId: 2,
+      cpuSubmitTotalMs: 0.2,
+    });
+    const result = await completed.promise;
+
+    assert.equal(result.summary.accepted, invariantPass);
+    assert.deepEqual(result.summary.completionInvariant, {
+      pass: invariantPass,
+      kind: 'test-invariant',
+    });
+    assert.equal(contexts.length, 1);
+    assert.equal(renderer.backend.trackTimestamp, false);
+    assert.match(
+      statuses.at(-1),
+      invariantPass ? /Trial timing complete/ : /failed completion invariant/,
+    );
+  });
+}
+
+for (const invalidResult of [null, undefined]) {
+  test(`invalid ${String(invalidResult)} completion result fails closed`, async () => {
+    const completed = deferred();
+    const { controller } = await startedController({
+      validateCompletion: () => invalidResult,
+      onComplete: (result) => completed.resolve(result),
+    });
+
+    controller.recordFrame({ gpuFrameId: 1 });
+    while (controller.phase !== 'measure') await new Promise((resolve) => setTimeout(resolve, 0));
+    controller.recordFrame({ gpuFrameId: 2, cpuSubmitTotalMs: 0.2 });
+    const result = await completed.promise;
+    assert.equal(result.summary.accepted, false);
+    assert.deepEqual(result.summary.completionInvariant, {
+      pass: false,
+      kind: 'invalid-completion-invariant-result',
+    });
+  });
+}
+
+test('throwing completion invariant enters the generic surfaced error state', async () => {
+  const reported = deferred();
+  const statuses = [];
+  const failure = new Error('completion invariant crashed');
+  const { controller, renderer } = await startedController({
+    validateCompletion: () => { throw failure; },
+    onStatus: (status) => statuses.push(status),
+    onError: (error) => reported.resolve(error),
+  });
+
+  controller.recordFrame({ gpuFrameId: 1 });
+  while (controller.phase !== 'measure') await new Promise((resolve) => setTimeout(resolve, 0));
+  controller.recordFrame({ gpuFrameId: 2, cpuSubmitTotalMs: 0.2 });
+  assert.equal(await reported.promise, failure);
+  assert.equal(controller.phase, 'error');
+  assert.equal(renderer.backend.trackTimestamp, false);
+  assert.match(statuses.at(-1), /Trial failed: completion invariant crashed/);
 });

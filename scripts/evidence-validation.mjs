@@ -302,30 +302,50 @@ export function validateScenarioManifest(manifest, {
 }
 
 function expectedStrategyShape(modeId, bucketCount, objectCount) {
-  const compute = modeId !== 'draw-all';
-  return {
+  const shared = {
     kind: modeId === 'draw-all' ? 'draw-all-reference' : `${modeId}-exact-membership`,
-    compute,
     configuredDrawCommands: bucketCount,
-    configuredRenderObjects: modeId === 'fixed-slice' || modeId === 'three-blocks-historical'
-      ? 1
-      : bucketCount,
-    configuredComputeDispatches: modeId === 'draw-all'
-      ? 0
-      : modeId === 'fixed-slice'
-        ? 2
-        : modeId === 'three-blocks-historical'
-          ? 9
-          : bucketCount * 4,
-    configuredComputeSubmissions: modeId === 'draw-all'
-      ? 0
-      : modeId === 'fixed-slice'
-        || modeId === 'three-blocks-coalesced'
-        || modeId === 'three-blocks-historical'
-        ? 1
-        : bucketCount,
     configuredSubmittedInstances: modeId === 'draw-all' ? objectCount : null,
   };
+  const shapes = {
+    'draw-all': {
+      compute: false,
+      configuredRenderObjects: bucketCount,
+      configuredComputeDispatches: 0,
+      configuredComputeSubmissions: 0,
+    },
+    'fixed-slice': {
+      compute: true,
+      configuredRenderObjects: 1,
+      configuredComputeDispatches: 2,
+      configuredComputeSubmissions: 1,
+    },
+    'fixed-slice-per-bucket': {
+      compute: true,
+      configuredRenderObjects: bucketCount,
+      configuredComputeDispatches: 2,
+      configuredComputeSubmissions: 1,
+    },
+    'three-blocks-current': {
+      compute: true,
+      configuredRenderObjects: bucketCount,
+      configuredComputeDispatches: bucketCount * 4,
+      configuredComputeSubmissions: bucketCount,
+    },
+    'three-blocks-coalesced': {
+      compute: true,
+      configuredRenderObjects: bucketCount,
+      configuredComputeDispatches: bucketCount * 4,
+      configuredComputeSubmissions: 1,
+    },
+    'three-blocks-historical': {
+      compute: true,
+      configuredRenderObjects: 1,
+      configuredComputeDispatches: 9,
+      configuredComputeSubmissions: 1,
+    },
+  };
+  return shapes[modeId] ? { ...shared, ...shapes[modeId] } : null;
 }
 
 function commandSemanticRecord(validation, modeId) {
@@ -357,6 +377,7 @@ function commandSemanticRecord(validation, modeId) {
 
 export function validateExactValidation(validation, {
   modeId,
+  objectCount,
   bucketCount,
   expectedVisibleCount,
   expectedVisibleIdsCanonicalSha256,
@@ -364,6 +385,12 @@ export function validateExactValidation(validation, {
 } = {}) {
   const reasons = [];
   const shape = expectedStrategyShape(modeId, bucketCount, null);
+  if (!shape) {
+    return {
+      rejectionReasons: [`unsupported modeId ${JSON.stringify(modeId)}`],
+      semanticSha256: null,
+    };
+  }
   if (!isRecord(validation)) {
     return { rejectionReasons: ['exact validation is not an object'], semanticSha256: null };
   }
@@ -477,7 +504,9 @@ export function validateExactValidation(validation, {
           continue;
         }
         requireEqual(record.bucket, bucket, `${label}.bucket`, reasons);
-        const expectedFirstIndex = modeId === 'fixed-slice' || modeId === 'three-blocks-historical'
+        const expectedFirstIndex = modeId === 'fixed-slice'
+          || modeId === 'fixed-slice-per-bucket'
+          || modeId === 'three-blocks-historical'
           ? cumulativeFirstIndex
           : 0;
         requireEqual(record.expected.indexCount, geometry?.index?.count, `${label}.expected.indexCount`, reasons);
@@ -540,7 +569,59 @@ export function validateExactValidation(validation, {
     && (!Array.isArray(validation.readbackErrors) || validation.readbackErrors.length !== 0)) {
     reasons.push('validation readbackErrors is not empty');
   }
-  if (modeId === 'fixed-slice') requireEqual(validation.overflow, 0, 'fixed-slice overflow', reasons);
+  if (modeId === 'fixed-slice' || modeId === 'fixed-slice-per-bucket') {
+    requireEqual(validation.overflow, 0, `${modeId} overflow`, reasons);
+  }
+  if (modeId === 'fixed-slice-per-bucket') {
+    const representation = validation.representation;
+    if (!exactKeys(representation, [
+      'kind',
+      'bundleRecordCallbackCount',
+      'geometryIdentityCount',
+      'materialIdentityCount',
+      'meshCount',
+      'geometryInstanceCount',
+    ], 'fixed-slice-per-bucket representation', reasons)) {
+      // exactKeys records the structural rejection.
+    } else {
+      requireEqual(
+        representation.kind,
+        'shared-merged-geometry-per-bucket-render-objects',
+        'fixed-slice-per-bucket representation kind',
+        reasons,
+      );
+      requireEqual(
+        representation.bundleRecordCallbackCount,
+        bucketCount,
+        'fixed-slice-per-bucket bundle-record callback count',
+        reasons,
+      );
+      requireEqual(
+        representation.geometryIdentityCount,
+        1,
+        'fixed-slice-per-bucket geometry identity count',
+        reasons,
+      );
+      requireEqual(
+        representation.materialIdentityCount,
+        1,
+        'fixed-slice-per-bucket material identity count',
+        reasons,
+      );
+      requireEqual(
+        representation.meshCount,
+        bucketCount,
+        'fixed-slice-per-bucket mesh count',
+        reasons,
+      );
+      requireEqual(
+        representation.geometryInstanceCount,
+        Math.ceil(objectCount / bucketCount),
+        'fixed-slice-per-bucket geometry instanceCount',
+        reasons,
+      );
+    }
+  }
 
   const semanticRecord = {
     kind: validation.kind,
@@ -552,6 +633,7 @@ export function validateExactValidation(validation, {
       : null,
     overflow: validation.overflow ?? null,
     readbackErrors: validation.readbackErrors ?? null,
+    representation: validation.representation ?? null,
   };
   return {
     rejectionReasons: [...new Set(reasons)],
@@ -570,6 +652,7 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
 } = {}) {
   const reasons = [];
   const shape = expectedStrategyShape(spec.modeId, spec.bucketCount, spec.objectCount);
+  if (!shape) return [`unsupported modeId ${JSON.stringify(spec.modeId)}`];
   if (!Array.isArray(rows)) return ['timed rows are not an array'];
   if (rows.length !== measuredFrames) {
     reasons.push(`expected ${measuredFrames} rows, received ${rows.length}`);
@@ -584,6 +667,41 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
   }
   if (typeof pageSummary?.classification !== 'string' || pageSummary.classification.length === 0) {
     reasons.push('page summary timestamp classification is missing');
+  }
+  if (spec.modeId === 'fixed-slice-per-bucket') {
+    const invariant = pageSummary?.completionInvariant;
+    if (!isRecord(invariant)) {
+      reasons.push('fixed-slice-per-bucket completion invariant is missing');
+    } else {
+      requireEqual(invariant.pass, true, 'fixed-slice-per-bucket completion invariant pass', reasons);
+      requireEqual(
+        invariant.kind,
+        'fixed-slice-per-bucket-static-bundle-invariant',
+        'fixed-slice-per-bucket completion invariant kind',
+        reasons,
+      );
+      requireEqual(
+        invariant.bundleRecordCallbackCountAtTimingStart,
+        validation?.representation?.bundleRecordCallbackCount,
+        'fixed-slice-per-bucket timing-start bundle-record callback count',
+        reasons,
+      );
+      requireEqual(
+        invariant.bundleRecordCallbackCountAtTimingEnd,
+        invariant.bundleRecordCallbackCountAtTimingStart,
+        'fixed-slice-per-bucket timing-end bundle-record callback count',
+        reasons,
+      );
+      requireEqual(invariant.geometryIdentityCount, 1, 'completion geometry identity count', reasons);
+      requireEqual(invariant.materialIdentityCount, 1, 'completion material identity count', reasons);
+      requireEqual(invariant.meshCount, spec.bucketCount, 'completion mesh count', reasons);
+      requireEqual(
+        invariant.geometryInstanceCount,
+        Math.ceil(spec.objectCount / spec.bucketCount),
+        'completion geometry instanceCount',
+        reasons,
+      );
+    }
   }
 
   const frameIds = new Set();
@@ -619,6 +737,9 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
       configuredComputeDispatches: shape.configuredComputeDispatches,
       configuredComputeSubmissions: shape.configuredComputeSubmissions,
       configuredSubmittedInstances: shape.configuredSubmittedInstances,
+      bundleRecordCallbackCountAtTimingStart: spec.modeId === 'fixed-slice-per-bucket'
+        ? validation?.representation?.bundleRecordCallbackCount
+        : null,
       timestampAvailable: true,
       frameIndex: index,
     };

@@ -16,6 +16,14 @@ import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
 import { NvidiaTelemetryRecorder } from './nvidia-telemetry.mjs';
 import {
+  BENCHMARK_VISIBILITY_LEVELS,
+  FIXED_SLICE_REPRESENTATION_MODES,
+  assertBalancedModeOrders,
+  buildBenchmarkPlan,
+  createEcosystemModeOrders,
+  createRepresentationModeOrders,
+} from '../src/benchmark/plan.js';
+import {
   sha256Json,
   validateExactValidation,
   validateGeometryFixtureManifest,
@@ -46,10 +54,14 @@ const ALLOWED_HETEROGENEOUS_COMPARATORS = Object.freeze([
   'coalesced-v11',
   'historical-v10',
 ]);
+const ALLOWED_BENCHMARK_MATRICES = Object.freeze([
+  'ecosystem',
+  'fixed-slice-representation',
+]);
 const WARMUP_FRAMES = 300;
 const MEASURED_FRAMES = 240;
 const SCENARIO_SEED = 0xb1ad_2026;
-const VISIBILITY_LEVELS = Object.freeze([0.2, 0.8, 0.99]);
+const VISIBILITY_LEVELS = BENCHMARK_VISIBILITY_LEVELS;
 const BROWSER_ARGS = Object.freeze([
   '--enable-unsafe-webgpu',
   '--enable-webgpu-developer-features',
@@ -97,7 +109,19 @@ const HETEROGENEOUS_COMPARATOR = validatedStringEnvironmentChoice(
   'coalesced-v11',
   ALLOWED_HETEROGENEOUS_COMPARATORS,
 );
-if (BUCKET_COUNT === 1
+const BENCHMARK_MATRIX = validatedStringEnvironmentChoice(
+  'BENCHMARK_MATRIX',
+  'ecosystem',
+  ALLOWED_BENCHMARK_MATRICES,
+);
+if (BENCHMARK_MATRIX === 'fixed-slice-representation'
+  && process.env.BENCHMARK_HETEROGENEOUS_COMPARATOR !== undefined) {
+  throw new Error(
+    'BENCHMARK_HETEROGENEOUS_COMPARATOR does not apply to the fixed-slice-representation matrix.',
+  );
+}
+if (BENCHMARK_MATRIX === 'ecosystem'
+  && BUCKET_COUNT === 1
   && process.env.BENCHMARK_HETEROGENEOUS_COMPARATOR !== undefined
   && HETEROGENEOUS_COMPARATOR !== 'coalesced-v11') {
   throw new Error(
@@ -110,16 +134,17 @@ const THREE_BLOCKS_MODE = BUCKET_COUNT === 1
   : HETEROGENEOUS_COMPARATOR === 'historical-v10'
     ? 'three-blocks-historical'
     : 'three-blocks-coalesced';
-const MODES = Object.freeze(['draw-all', THREE_BLOCKS_MODE, 'fixed-slice']);
-const MODE_PERMUTATIONS = Object.freeze([
-  Object.freeze([MODES[0], MODES[1], MODES[2]]),
-  Object.freeze([MODES[1], MODES[2], MODES[0]]),
-  Object.freeze([MODES[2], MODES[0], MODES[1]]),
-  Object.freeze([MODES[2], MODES[1], MODES[0]]),
-  Object.freeze([MODES[1], MODES[0], MODES[2]]),
-  Object.freeze([MODES[0], MODES[2], MODES[1]]),
-]);
-const MATRIX_ID = `focused-o${OBJECT_COUNT}-b${BUCKET_COUNT}`;
+const ECOSYSTEM_MODES = Object.freeze(['draw-all', THREE_BLOCKS_MODE, 'fixed-slice']);
+const REPRESENTATION_MODES = FIXED_SLICE_REPRESENTATION_MODES;
+const MODES = BENCHMARK_MATRIX === 'fixed-slice-representation'
+  ? REPRESENTATION_MODES
+  : ECOSYSTEM_MODES;
+const MODE_ORDERS = BENCHMARK_MATRIX === 'fixed-slice-representation'
+  ? createRepresentationModeOrders(REPRESENTATION_MODES)
+  : createEcosystemModeOrders(MODES);
+
+assertBalancedModeOrders(MODES, MODE_ORDERS);
+const MATRIX_ID = `${BENCHMARK_MATRIX}-o${OBJECT_COUNT}-b${BUCKET_COUNT}`;
 const sourceProvenanceStart = await collectSourceProvenance(PROJECT_ROOT, {
   allowUnavailable: EVIDENCE_STATUS === 'development',
 });
@@ -135,40 +160,6 @@ if (EVIDENCE_STATUS !== 'development'
 
 function compactTimestamp(isoTimestamp) {
   return isoTimestamp.replaceAll(':', '-');
-}
-
-function rotate(values, offset) {
-  const normalized = offset % values.length;
-  return [...values.slice(normalized), ...values.slice(0, normalized)];
-}
-
-function buildPlan(runId) {
-  const plan = [];
-  for (let repetitionIndex = 0; repetitionIndex < MODE_PERMUTATIONS.length; repetitionIndex += 1) {
-    const modeOrder = [...MODE_PERMUTATIONS[repetitionIndex]];
-    const visibilityOrder = rotate(VISIBILITY_LEVELS, repetitionIndex);
-    for (let visibilityOrderPosition = 0; visibilityOrderPosition < visibilityOrder.length; visibilityOrderPosition += 1) {
-      const visibilityFraction = visibilityOrder[visibilityOrderPosition];
-      for (let modeOrderPosition = 0; modeOrderPosition < modeOrder.length; modeOrderPosition += 1) {
-        const modeId = modeOrder[modeOrderPosition];
-        const planIndex = plan.length;
-        plan.push({
-          trialId: `${runId}-t${String(planIndex + 1).padStart(2, '0')}`,
-          planIndex,
-          repetitionIndex,
-          modeId,
-          modeOrder,
-          modeOrderPosition,
-          visibilityFraction,
-          visibilityOrder,
-          visibilityOrderPosition,
-          objectCount: OBJECT_COUNT,
-          bucketCount: BUCKET_COUNT,
-        });
-      }
-    }
-  }
-  return plan;
 }
 
 function percentile(values, fraction) {
@@ -384,7 +375,13 @@ async function collectPostTrialEvidence(page) {
 const startedAt = new Date().toISOString();
 const runId = `${MATRIX_ID}-${compactTimestamp(startedAt)}`;
 const runDirectory = path.join(RESULT_ROOT, runId);
-const plan = buildPlan(runId).map((trial) => ({ ...trial, runId }));
+const plan = buildBenchmarkPlan({
+  runId,
+  modeOrders: MODE_ORDERS,
+  visibilityLevels: VISIBILITY_LEVELS,
+  objectCount: OBJECT_COUNT,
+  bucketCount: BUCKET_COUNT,
+}).map((trial) => ({ ...trial, runId }));
 const runStartedMonotonic = performance.now();
 const frameRows = [];
 const trialSummaries = [];
@@ -461,6 +458,7 @@ function inspectEvidenceCapture(spec, evidence) {
   rejectionReasons.push(...geometryRejectionReasons, ...scenarioRejectionReasons);
   const validationCheck = validateExactValidation(validation, {
     modeId: spec.modeId,
+    objectCount: spec.objectCount,
     bucketCount: spec.bucketCount,
     expectedVisibleCount: scenario?.expectedVisibleCount,
     expectedVisibleIdsCanonicalSha256: scenario?.expectedVisibleIdsCanonicalSha256,
@@ -972,24 +970,36 @@ const metadata = {
   },
   protocol: {
     matrix: MATRIX_ID,
+    matrixKind: BENCHMARK_MATRIX,
+    representationScaleRole: BENCHMARK_MATRIX === 'fixed-slice-representation'
+      ? BUCKET_COUNT === 1
+        ? 'negative-control-equal-mesh-render-object-count'
+        : 'primary-one-versus-b-mesh-render-object-representation-ablation'
+      : null,
     objectCount: OBJECT_COUNT,
     bucketCount: BUCKET_COUNT,
     allowedObjectCounts: [...ALLOWED_OBJECT_COUNTS],
     allowedBucketCounts: [...ALLOWED_BUCKET_COUNTS],
     allowedHeterogeneousComparators: [...ALLOWED_HETEROGENEOUS_COMPARATORS],
-    heterogeneousComparator: BUCKET_COUNT === 1 ? null : HETEROGENEOUS_COMPARATOR,
+    heterogeneousComparator: BENCHMARK_MATRIX === 'ecosystem' && BUCKET_COUNT !== 1
+      ? HETEROGENEOUS_COMPARATOR
+      : null,
     modes: [...MODES],
     visibilityLevels: [...VISIBILITY_LEVELS],
-    repetitions: MODE_PERMUTATIONS.length,
+    repetitions: MODE_ORDERS.length,
     warmupFrames: WARMUP_FRAMES,
     measuredFrames: MEASURED_FRAMES,
     maximumCpuTimerQuantumMs: MAXIMUM_CPU_TIMER_QUANTUM_MS,
-    ordering: 'all-six-mode-permutations-with-rotated-visibility-order',
-    threeBlocksScheduling: BUCKET_COUNT === 1
-      ? 'public explicit update'
-      : HETEROGENEOUS_COMPARATOR === 'historical-v10'
-        ? 'published v0.10 indirect-batching execution path with pinned diagnostic readback'
-        : 'version-pinned coalesced compute-node probe',
+    ordering: BENCHMARK_MATRIX === 'fixed-slice-representation'
+      ? 'six-repetition-balanced-ab-ba-with-rotated-visibility-order'
+      : 'all-six-mode-permutations-with-rotated-visibility-order',
+    threeBlocksScheduling: BENCHMARK_MATRIX === 'fixed-slice-representation'
+      ? null
+      : BUCKET_COUNT === 1
+        ? 'public explicit update'
+        : HETEROGENEOUS_COMPARATOR === 'historical-v10'
+          ? 'published v0.10 indirect-batching execution path with pinned diagnostic readback'
+          : 'version-pinned coalesced compute-node probe',
   },
   plan,
   expectedTrialCount: plan.length,

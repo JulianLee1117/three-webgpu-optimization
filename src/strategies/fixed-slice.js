@@ -41,7 +41,16 @@ function asUint32(buffer) {
   return new Uint32Array(buffer instanceof ArrayBuffer ? buffer : buffer.buffer);
 }
 
-export function buildFixedSliceStrategy({ scenario, sourceGeometries }) {
+function freezeStaticTransform(object) {
+  // Fixed-slice roots stay at identity; every instance transform comes from storage.
+  object.matrixAutoUpdate = false;
+  object.matrixWorldAutoUpdate = false;
+}
+
+function buildFixedSliceRepresentation(
+  { scenario, sourceGeometries },
+  { id, perBucketRenderObjects },
+) {
   const { geometry, firstIndexes } = createMergedIndexedBucketGeometry(
     sourceGeometries,
     scenario.bucketBases,
@@ -112,16 +121,54 @@ export function buildFixedSliceStrategy({ scenario, sourceGeometries }) {
     visibleIdsAttribute,
   });
   const root = new BundleGroup();
-  root.name = 'fixed-slice-merged-indexed-indirect-bundle';
-  geometry.setIndirect(indirectAttribute, Array.from(commandLayout.offsets));
-  const mesh = new Mesh(geometry, material);
-  mesh.frustumCulled = false;
-  root.add(mesh);
+  freezeStaticTransform(root);
+  root.name = perBucketRenderObjects
+    ? 'fixed-slice-per-bucket-merged-indexed-indirect-bundle'
+    : 'fixed-slice-merged-indexed-indirect-bundle';
+
+  let geometries;
+  let bundleRecordCallbackCount = 0;
+  if (perBucketRenderObjects) {
+    geometry.setIndirect(indirectAttribute, 0);
+    for (let bucket = 0; bucket < scenario.bucketCount; bucket += 1) {
+      const indirectOffset = commandLayout.offsets[bucket];
+      const mesh = new Mesh(geometry, material);
+      freezeStaticTransform(mesh);
+      mesh.frustumCulled = false;
+      mesh.onBeforeRender = (activeRenderer) => {
+        geometry.setIndirect(indirectAttribute, indirectOffset);
+        if (activeRenderer?._currentRenderBundle !== null
+          && activeRenderer?._currentRenderBundle !== undefined) {
+          bundleRecordCallbackCount += 1;
+        }
+      };
+      root.add(mesh);
+    }
+    geometries = [geometry];
+  } else {
+    geometry.setIndirect(indirectAttribute, Array.from(commandLayout.offsets));
+    const mesh = new Mesh(geometry, material);
+    freezeStaticTransform(mesh);
+    mesh.frustumCulled = false;
+    root.add(mesh);
+    geometries = [geometry];
+  }
+
+  const diagnostics = () => (perBucketRenderObjects
+    ? {
+      kind: 'shared-merged-geometry-per-bucket-render-objects',
+      bundleRecordCallbackCount,
+      geometryIdentityCount: new Set(root.children.map((child) => child.geometry)).size,
+      materialIdentityCount: new Set(root.children.map((child) => child.material)).size,
+      meshCount: root.children.length,
+      geometryInstanceCount: geometry.instanceCount,
+    }
+    : null);
 
   return {
-    id: 'fixed-slice',
+    id,
     root,
-    geometries: [geometry],
+    geometries,
     materials: [material],
     storageAttributes: [
       matrixAttribute,
@@ -137,10 +184,11 @@ export function buildFixedSliceStrategy({ scenario, sourceGeometries }) {
     computeNodes: [reset, cull],
     usesCompute: true,
     configuredDrawCommands: scenario.bucketCount,
-    configuredRenderObjects: 1,
+    configuredRenderObjects: perBucketRenderObjects ? scenario.bucketCount : 1,
     configuredComputeDispatches: 2,
     configuredComputeSubmissions: 1,
     configuredSubmittedInstances: null,
+    diagnostics,
     update(camera, renderer) {
       updateFrustumPlaneState(planeState, camera, renderer);
     },
@@ -183,17 +231,43 @@ export function buildFixedSliceStrategy({ scenario, sourceGeometries }) {
         bucketBases: scenario.bucketBases,
         capacities: scenario.bucketCounts,
       });
+      const representation = diagnostics();
+      const representationPass = !perBucketRenderObjects || (
+        representation?.kind === 'shared-merged-geometry-per-bucket-render-objects'
+        && representation.bundleRecordCallbackCount === scenario.bucketCount
+        && representation.geometryIdentityCount === 1
+        && representation.materialIdentityCount === 1
+        && representation.meshCount === scenario.bucketCount
+        && representation.geometryInstanceCount
+          === Math.ceil(scenario.objectCount / scenario.bucketCount)
+      );
       return {
         pass: membership.pass
           && membershipDigests.pass
           && commandValidation.pass
-          && overflow === 0,
-        kind: 'fixed-slice-exact-membership',
+          && overflow === 0
+          && representationPass,
+        kind: `${id}-exact-membership`,
         membership,
         membershipDigests,
         commandValidation,
         overflow,
+        representation,
       };
     },
   };
+}
+
+export function buildFixedSliceStrategy(options) {
+  return buildFixedSliceRepresentation(options, {
+    id: 'fixed-slice',
+    perBucketRenderObjects: false,
+  });
+}
+
+export function buildFixedSlicePerBucketStrategy(options) {
+  return buildFixedSliceRepresentation(options, {
+    id: 'fixed-slice-per-bucket',
+    perBucketRenderObjects: true,
+  });
 }

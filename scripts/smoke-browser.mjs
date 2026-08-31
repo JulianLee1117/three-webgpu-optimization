@@ -192,8 +192,79 @@ async function configureAndValidate(page, {
   }, { strategy, objectCount, bucketCount, visibilityFraction });
 }
 
-function assertFixedSliceTiming(timing, { label, bucketCount }) {
+function fixedSliceFamilyExpectations(strategy, bucketCount, objectCount = 4096) {
+  if (!['fixed-slice', 'fixed-slice-per-bucket'].includes(strategy)) {
+    throw new Error(`Unsupported fixed-slice family strategy: ${strategy}`);
+  }
+  const perBucket = strategy === 'fixed-slice-per-bucket';
+  return {
+    strategy,
+    objectCount,
+    bucketCount,
+    validationKind: `${strategy}-exact-membership`,
+    renderObjects: perBucket ? bucketCount : 1,
+    bundleRecordCallbackCount: perBucket ? bucketCount : null,
+    perBucket,
+  };
+}
+
+function exactRecordMatches(actual, expected) {
+  if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return false;
+  const actualKeys = Object.keys(actual).sort();
+  const expectedKeys = Object.keys(expected).sort();
+  return actualKeys.length === expectedKeys.length
+    && actualKeys.every((key, index) => key === expectedKeys[index])
+    && expectedKeys.every((key) => actual[key] === expected[key]);
+}
+
+function expectedPerBucketRepresentation({ bucketCount, objectCount }) {
+  return {
+    kind: 'shared-merged-geometry-per-bucket-render-objects',
+    bundleRecordCallbackCount: bucketCount,
+    geometryIdentityCount: 1,
+    materialIdentityCount: 1,
+    meshCount: bucketCount,
+    geometryInstanceCount: Math.ceil(objectCount / bucketCount),
+  };
+}
+
+function assertFixedSliceFamilyValidation(validation, {
+  label,
+  strategy,
+  bucketCount,
+  objectCount = 4096,
+}) {
+  const expected = fixedSliceFamilyExpectations(strategy, bucketCount, objectCount);
+  if (validation?.pass !== true
+    || validation.kind !== expected.validationKind
+    || validation.membership?.pass !== true
+    || validation.membershipDigests?.pass !== true
+    || validation.commandValidation?.pass !== true
+    || validation.commandValidation?.commandCount !== bucketCount
+    || validation.commandValidation?.records?.length !== bucketCount
+    || validation.overflow !== 0
+    || (expected.perBucket
+      ? !exactRecordMatches(
+        validation.representation,
+        expectedPerBucketRepresentation(expected),
+      )
+      : validation.representation !== null)) {
+    throw new Error(`${label} validation/representation failed: ${JSON.stringify(validation)}`);
+  }
+}
+
+function assertFixedSliceTiming(timing, {
+  label,
+  strategy,
+  bucketCount,
+  objectCount = 4096,
+}) {
+  const expected = fixedSliceFamilyExpectations(strategy, bucketCount, objectCount);
   if (timing.rowCount !== 240
+    || timing.summaryAccepted !== true
+    || timing.summaryRowCount !== 240
+    || timing.summaryMissingCompute !== 0
+    || timing.summaryMissingRender !== 0
     || timing.missingCompute !== 0
     || timing.missingRender !== 0
     || timing.badTotals !== 0
@@ -207,14 +278,52 @@ function assertFixedSliceTiming(timing, { label, bucketCount }) {
   if (timing.bucketCounts.length !== 1 || timing.bucketCounts[0] !== bucketCount) {
     throw new Error(`${label} reported the wrong bucket edge: ${JSON.stringify(timing)}`);
   }
+  if (timing.strategyIds.length !== 1 || timing.strategyIds[0] !== strategy) {
+    throw new Error(`${label} reported the wrong strategy: ${JSON.stringify(timing)}`);
+  }
+  const expectedInvariant = expected.perBucket
+    ? {
+      pass: true,
+      kind: 'fixed-slice-per-bucket-static-bundle-invariant',
+      bundleRecordCallbackCountAtTimingStart: bucketCount,
+      bundleRecordCallbackCountAtTimingEnd: bucketCount,
+      geometryIdentityCount: 1,
+      materialIdentityCount: 1,
+      meshCount: bucketCount,
+      geometryInstanceCount: Math.ceil(objectCount / bucketCount),
+    }
+    : {
+      pass: true,
+      kind: 'no-representation-specific-invariant',
+    };
+  if (!exactRecordMatches(timing.completionInvariant, expectedInvariant)) {
+    throw new Error(`${label} completion invariant failed: ${JSON.stringify(timing)}`);
+  }
 }
 
-async function readFixedSliceTiming(page, expectedBucketCount) {
-  return page.evaluate((bucketCount) => {
+async function readFixedSliceTiming(page, {
+  strategy,
+  bucketCount,
+  objectCount = 4096,
+}) {
+  const expected = fixedSliceFamilyExpectations(strategy, bucketCount, objectCount);
+  return page.evaluate((config) => {
     const rows = window.__WEBGPU_BENCH__.rows;
+    let summary = null;
+    try {
+      summary = JSON.parse(document.querySelector('#details').textContent);
+    } catch {
+      // The assertions below report the missing or malformed summary.
+    }
     return {
       rowCount: rows.length,
       bucketCounts: [...new Set(rows.map((row) => row.bucketCount))],
+      strategyIds: [...new Set(rows.map((row) => row.modeId))],
+      summaryAccepted: summary?.accepted ?? null,
+      summaryRowCount: summary?.rowCount ?? null,
+      summaryMissingCompute: summary?.missingComputeFrames ?? null,
+      summaryMissingRender: summary?.missingRenderFrames ?? null,
+      completionInvariant: summary?.completionInvariant ?? null,
       missingCompute: rows.filter((row) => !Number.isFinite(row.gpuComputeMs)).length,
       missingRender: rows.filter((row) => !Number.isFinite(row.gpuRenderMs)).length,
       badTotals: rows.filter((row) => (
@@ -222,15 +331,19 @@ async function readFixedSliceTiming(page, expectedBucketCount) {
         || Math.abs(row.gpuPassTotalMs - row.gpuComputeMs - row.gpuRenderMs) > 1e-9
       )).length,
       badSchedule: rows.filter((row) => (
-        row.bucketCount !== bucketCount
-        || row.configuredDrawCommands !== bucketCount
-        || row.configuredRenderObjects !== 1
+        row.modeId !== config.strategy
+        || row.objectCount !== config.objectCount
+        || row.bucketCount !== config.bucketCount
+        || row.configuredDrawCommands !== config.bucketCount
+        || row.configuredRenderObjects !== config.renderObjects
         || row.configuredComputeDispatches !== 2
         || row.configuredComputeSubmissions !== 1
+        || row.configuredSubmittedInstances !== null
+        || row.bundleRecordCallbackCountAtTimingStart !== config.bundleRecordCallbackCount
       )).length,
       failedValidation: rows.filter((row) => (
         row.validationPass !== true
-        || row.validationKind !== 'fixed-slice-exact-membership'
+        || row.validationKind !== config.validationKind
       )).length,
       badFrameSequence: rows.filter((row, index) => row.frameIndex !== index).length,
       uniqueGpuFrameIds: new Set(rows.map((row) => row.gpuFrameId)).size,
@@ -238,7 +351,7 @@ async function readFixedSliceTiming(page, expectedBucketCount) {
         index > 0 && row.gpuFrameId <= rows[index - 1].gpuFrameId
       )).length,
     };
-  }, expectedBucketCount);
+  }, expected);
 }
 
 function assertTrialEvidence(evidence, { label, bucketCount, validationKind }) {
@@ -258,6 +371,79 @@ function assertTrialEvidence(evidence, { label, bucketCount, validationKind }) {
   }
 }
 
+async function runFixedSliceTimingReplay(page, {
+  strategy,
+  bucketCount,
+  label,
+  referencePng,
+  objectCount = 4096,
+}) {
+  const expected = fixedSliceFamilyExpectations(strategy, bucketCount, objectCount);
+  const initialValidation = await configureAndValidate(page, {
+    strategy,
+    objectCount,
+    bucketCount,
+  });
+  assertFixedSliceFamilyValidation(initialValidation, { ...expected, label: `${label} initial` });
+
+  const evidence = await page.evaluate(
+    (context) => window.__WEBGPU_BENCH__.startTrial(context),
+    {
+      fixedSliceFamilySmokeRun: true,
+      fixedSliceFamilyStrategy: strategy,
+      fixedSliceFamilyBucketCount: bucketCount,
+    },
+  );
+  assertTrialEvidence(evidence, {
+    label,
+    bucketCount,
+    validationKind: expected.validationKind,
+  });
+  assertFixedSliceFamilyValidation(evidence.validation, {
+    ...expected,
+    label: `${label} timing-start`,
+  });
+  if (initialValidation.membershipDigests.expected.sha256
+    !== evidence.validation.membershipDigests.expected.sha256) {
+    throw new Error(`${label} changed membership evidence before timing.`);
+  }
+
+  await waitForTrial(page, label);
+  const timing = await readFixedSliceTiming(page, expected);
+  assertFixedSliceTiming(timing, { ...expected, label });
+
+  const replayValidation = await page.evaluate(() => window.__WEBGPU_BENCH__.validate());
+  assertFixedSliceFamilyValidation(replayValidation, {
+    ...expected,
+    label: `${label} replay`,
+  });
+  const startDigest = evidence.validation.membershipDigests.expected.sha256;
+  if (replayValidation.membershipDigests.expected.sha256 !== startDigest
+    || replayValidation.membershipDigests.actual.sha256 !== startDigest) {
+    throw new Error(`${label} replay membership digest changed: ${JSON.stringify({
+      startDigest,
+      replayExpectedDigest: replayValidation.membershipDigests.expected.sha256,
+      replayActualDigest: replayValidation.membershipDigests.actual.sha256,
+    })}`);
+  }
+
+  const replayCapture = await captureStableCanvas(page, `${label} replay`);
+  const replayComparison = await comparePngPixels(page, referencePng, replayCapture.png, 0);
+  if (!replayComparison.pass) {
+    throw new Error(`${label} replay screenshot differs: ${JSON.stringify(replayComparison)}`);
+  }
+
+  return {
+    strategy,
+    objectCount,
+    bucketCount,
+    initialValidation: summarizeValidation(initialValidation),
+    timing,
+    replayValidation: summarizeValidation(replayValidation),
+    replayComparison,
+  };
+}
+
 function sameTrackedMemory(left, right) {
   const fields = [
     'attributes',
@@ -267,10 +453,22 @@ function sameTrackedMemory(left, right) {
     'indexAttributesSize',
     'indirectStorageAttributes',
     'indirectStorageAttributesSize',
+    'programs',
+    'programsSize',
     'storageAttributes',
     'storageAttributesSize',
+    'uniformBuffers',
+    'uniformBuffersSize',
   ];
   return fields.every((field) => left?.[field] === right?.[field]);
+}
+
+function samePinnedCaches(left, right) {
+  return [
+    'totalPipelineCacheEntries',
+    'computePipelineCacheEntries',
+    'computeProgramEntries',
+  ].every((field) => left?.[field] === right?.[field]);
 }
 
 function summarizeValidation(validation) {
@@ -299,6 +497,7 @@ function summarizeValidation(validation) {
     },
     overflow: validation.overflow,
     readbackErrorCount: validation.readbackErrors?.length ?? 0,
+    representation: validation.representation ?? null,
   };
 }
 
@@ -372,6 +571,7 @@ try {
 
   const colorScreenshotParity = [];
   const fixedSliceReferencePng = new Map();
+  const fixedSlicePerBucketReferencePng = new Map();
   for (const bucketCount of [4, 32, 128]) {
     const drawAllValidation = await configureAndValidate(page, {
       strategy: 'draw-all',
@@ -388,27 +588,67 @@ try {
       strategy: 'fixed-slice',
       bucketCount,
     });
-    if (fixedSliceValidation?.pass !== true
-      || fixedSliceValidation?.kind !== 'fixed-slice-exact-membership'
-      || fixedSliceValidation?.membershipDigests?.pass !== true
-      || fixedSliceValidation?.commandValidation?.commandCount !== bucketCount) {
-      throw new Error(
-        `Fixed-slice B=${bucketCount} render candidate failed: ${JSON.stringify(fixedSliceValidation)}`,
-      );
-    }
+    assertFixedSliceFamilyValidation(fixedSliceValidation, {
+      label: `Fixed-slice B=${bucketCount} render candidate`,
+      strategy: 'fixed-slice',
+      bucketCount,
+    });
     const fixedSliceCapture = await captureStableCanvas(page, `Fixed-slice B=${bucketCount}`);
-    const comparison = await comparePngPixels(
+    const drawAllVsFixedSlice = await comparePngPixels(
       page,
       drawAllCapture.png,
       fixedSliceCapture.png,
       0,
     );
-    if (!comparison.pass) {
+    if (!drawAllVsFixedSlice.pass) {
       throw new Error(
-        `Draw-all/fixed-slice B=${bucketCount} decoded-RGBA screenshot differs: ${JSON.stringify(comparison)}`,
+        `Draw-all/fixed-slice B=${bucketCount} decoded-RGBA screenshot differs: ${JSON.stringify(drawAllVsFixedSlice)}`,
+      );
+    }
+
+    const perBucketValidation = await configureAndValidate(page, {
+      strategy: 'fixed-slice-per-bucket',
+      bucketCount,
+    });
+    assertFixedSliceFamilyValidation(perBucketValidation, {
+      label: `Fixed-slice-per-bucket B=${bucketCount} render candidate`,
+      strategy: 'fixed-slice-per-bucket',
+      bucketCount,
+    });
+    if (perBucketValidation.membershipDigests.expected.sha256
+      !== fixedSliceValidation.membershipDigests.expected.sha256
+      || perBucketValidation.membershipDigests.actual.sha256
+        !== fixedSliceValidation.membershipDigests.actual.sha256) {
+      throw new Error(
+        `Fixed-slice representations B=${bucketCount} produced different survivor digests.`,
+      );
+    }
+    const perBucketCapture = await captureStableCanvas(
+      page,
+      `Fixed-slice-per-bucket B=${bucketCount}`,
+    );
+    const drawAllVsPerBucket = await comparePngPixels(
+      page,
+      drawAllCapture.png,
+      perBucketCapture.png,
+      0,
+    );
+    const fixedSliceVsPerBucket = await comparePngPixels(
+      page,
+      fixedSliceCapture.png,
+      perBucketCapture.png,
+      0,
+    );
+    if (!drawAllVsPerBucket.pass || !fixedSliceVsPerBucket.pass) {
+      throw new Error(
+        `Fixed-slice-per-bucket B=${bucketCount} decoded-RGBA screenshot differs: ${JSON.stringify({
+          drawAllVsPerBucket,
+          fixedSliceVsPerBucket,
+        })}`,
       );
     }
     fixedSliceReferencePng.set(bucketCount, fixedSliceCapture.png);
+    fixedSlicePerBucketReferencePng.set(bucketCount, perBucketCapture.png);
     colorScreenshotParity.push({
       scope: 'fixed-camera-static-color-output',
       objectCount: 4096,
@@ -417,95 +657,43 @@ try {
       channelTolerance: 0,
       drawAllValidationKind: drawAllValidation.kind,
       fixedSliceValidationKind: fixedSliceValidation.kind,
+      fixedSlicePerBucketValidationKind: perBucketValidation.kind,
       fixedSliceMembershipDigest: fixedSliceValidation.membershipDigests.expected.sha256,
+      fixedSlicePerBucketMembershipDigest: perBucketValidation.membershipDigests.expected.sha256,
+      fixedSlicePerBucketRepresentation: perBucketValidation.representation,
       drawAllStability: drawAllCapture.stability,
       fixedSliceStability: fixedSliceCapture.stability,
-      comparison,
+      fixedSlicePerBucketStability: perBucketCapture.stability,
+      drawAllVsFixedSlice,
+      drawAllVsPerBucket,
+      fixedSliceVsPerBucket,
     });
   }
 
-  const fixedSlice128Evidence = await page.evaluate(
-    () => window.__WEBGPU_BENCH__.startTrial({ fixedSlice128EdgeSmokeRun: true }),
-  );
-  assertTrialEvidence(fixedSlice128Evidence, {
-    label: 'Fixed-slice B=128 timing edge',
-    bucketCount: 128,
-    validationKind: 'fixed-slice-exact-membership',
-  });
-  await waitForTrial(page, 'Fixed-slice B=128 timing edge');
-  const fixedSlice128Timing = await readFixedSliceTiming(page, 128);
-  assertFixedSliceTiming(fixedSlice128Timing, {
-    label: 'Fixed-slice B=128 timing edge',
-    bucketCount: 128,
-  });
-  const fixedSlice128ReplayValidation = await page.evaluate(
-    () => window.__WEBGPU_BENCH__.validate(),
-  );
-  const fixedSlice128ReplayCapture = await captureStableCanvas(page, 'Fixed-slice B=128 replay');
-  const fixedSlice128ReplayComparison = await comparePngPixels(
-    page,
-    fixedSliceReferencePng.get(128),
-    fixedSlice128ReplayCapture.png,
-    0,
-  );
-  if (fixedSlice128ReplayValidation?.pass !== true || !fixedSlice128ReplayComparison.pass) {
-    throw new Error(`Fixed-slice B=128 replay failed: ${JSON.stringify({
-      validation: fixedSlice128ReplayValidation,
-      comparison: fixedSlice128ReplayComparison,
-    })}`);
-  }
-  const fixedSlice128Edge = {
-    timing: fixedSlice128Timing,
-    replayValidationKind: fixedSlice128ReplayValidation.kind,
-    replayMembershipDigest: fixedSlice128ReplayValidation.membershipDigests.expected.sha256,
-    replayComparison: fixedSlice128ReplayComparison,
-  };
-
-  const fixedSlice32Validation = await configureAndValidate(page, {
+  const fixedSlice128Edge = await runFixedSliceTimingReplay(page, {
     strategy: 'fixed-slice',
-    bucketCount: 32,
+    label: 'Fixed-slice B=128 timing edge',
+    bucketCount: 128,
+    referencePng: fixedSliceReferencePng.get(128),
   });
-  if (fixedSlice32Validation?.pass !== true) {
-    throw new Error(
-      `Fixed-slice B=32 sustained validation failed: ${JSON.stringify(fixedSlice32Validation)}`,
-    );
-  }
-  const fixedSlice32Evidence = await page.evaluate(
-    () => window.__WEBGPU_BENCH__.startTrial({ fixedSliceSustainedSmokeRun: true }),
-  );
-  assertTrialEvidence(fixedSlice32Evidence, {
+  const fixedSlicePerBucket128Edge = await runFixedSliceTimingReplay(page, {
+    strategy: 'fixed-slice-per-bucket',
+    label: 'Fixed-slice-per-bucket B=128 timing edge',
+    bucketCount: 128,
+    referencePng: fixedSlicePerBucketReferencePng.get(128),
+  });
+  const fixedSlice32Sustained = await runFixedSliceTimingReplay(page, {
+    strategy: 'fixed-slice',
     label: 'Fixed-slice B=32 sustained timing',
     bucketCount: 32,
-    validationKind: 'fixed-slice-exact-membership',
+    referencePng: fixedSliceReferencePng.get(32),
   });
-  await waitForTrial(page, 'Fixed-slice B=32 sustained timing');
-  const fixedSlice32Timing = await readFixedSliceTiming(page, 32);
-  assertFixedSliceTiming(fixedSlice32Timing, {
-    label: 'Fixed-slice B=32 sustained timing',
+  const fixedSlicePerBucket32Sustained = await runFixedSliceTimingReplay(page, {
+    strategy: 'fixed-slice-per-bucket',
+    label: 'Fixed-slice-per-bucket B=32 sustained timing',
     bucketCount: 32,
+    referencePng: fixedSlicePerBucketReferencePng.get(32),
   });
-  const fixedSlice32ReplayValidation = await page.evaluate(
-    () => window.__WEBGPU_BENCH__.validate(),
-  );
-  const fixedSlice32ReplayCapture = await captureStableCanvas(page, 'Fixed-slice B=32 replay');
-  const fixedSlice32ReplayComparison = await comparePngPixels(
-    page,
-    fixedSliceReferencePng.get(32),
-    fixedSlice32ReplayCapture.png,
-    0,
-  );
-  if (fixedSlice32ReplayValidation?.pass !== true || !fixedSlice32ReplayComparison.pass) {
-    throw new Error(`Fixed-slice B=32 sustained replay failed: ${JSON.stringify({
-      validation: fixedSlice32ReplayValidation,
-      comparison: fixedSlice32ReplayComparison,
-    })}`);
-  }
-  const fixedSlice32Sustained = {
-    timing: fixedSlice32Timing,
-    replayValidationKind: fixedSlice32ReplayValidation.kind,
-    replayMembershipDigest: fixedSlice32ReplayValidation.membershipDigests.expected.sha256,
-    replayComparison: fixedSlice32ReplayComparison,
-  };
 
   const v11Lifecycle = await page.evaluate(async () => {
     document.querySelector('#objects').value = '4096';
@@ -575,12 +763,66 @@ try {
     );
   }
 
+  const fixedSlicePerBucketLifecycle = await page.evaluate(async () => {
+    document.querySelector('#objects').value = '4096';
+    document.querySelector('#buckets').value = '32';
+    document.querySelector('#visibility').value = '0.2';
+    document.querySelector('#strategy').value = 'draw-all';
+    await window.__WEBGPU_BENCH__.rebuild();
+    await window.__WEBGPU_BENCH__.validate();
+    const baseline = window.__WEBGPU_BENCH__.cacheDiagnostics();
+    const cycles = [];
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      document.querySelector('#strategy').value = 'fixed-slice-per-bucket';
+      await window.__WEBGPU_BENCH__.rebuild();
+      const validation = await window.__WEBGPU_BENCH__.validate();
+      const active = window.__WEBGPU_BENCH__.cacheDiagnostics();
+      document.querySelector('#strategy').value = 'draw-all';
+      await window.__WEBGPU_BENCH__.rebuild();
+      await window.__WEBGPU_BENCH__.validate();
+      const disposed = window.__WEBGPU_BENCH__.cacheDiagnostics();
+      cycles.push({ validation, active, disposed });
+    }
+    return { baseline, cycles };
+  });
+  for (const [cycleIndex, cycle] of fixedSlicePerBucketLifecycle.cycles.entries()) {
+    assertFixedSliceFamilyValidation(cycle.validation, {
+      label: `Fixed-slice-per-bucket lifecycle cycle ${cycleIndex}`,
+      strategy: 'fixed-slice-per-bucket',
+      bucketCount: 32,
+    });
+  }
+  if (fixedSlicePerBucketLifecycle.baseline?.available !== true
+    || fixedSlicePerBucketLifecycle.cycles.length !== 3
+    || fixedSlicePerBucketLifecycle.cycles.some((cycle) => (
+      cycle.active?.memory?.storageAttributes
+        <= fixedSlicePerBucketLifecycle.baseline.memory.storageAttributes
+      || cycle.active?.memory?.indirectStorageAttributes
+        <= fixedSlicePerBucketLifecycle.baseline.memory.indirectStorageAttributes
+      || cycle.active?.memory?.uniformBuffers
+        <= fixedSlicePerBucketLifecycle.baseline.memory.uniformBuffers
+      || !sameTrackedMemory(
+        cycle.disposed?.memory,
+        fixedSlicePerBucketLifecycle.baseline.memory,
+      )
+      || !samePinnedCaches(cycle.disposed, fixedSlicePerBucketLifecycle.baseline)
+    ))) {
+    throw new Error(
+      `Fixed-slice-per-bucket lifecycle stress failed: ${JSON.stringify(fixedSlicePerBucketLifecycle)}`,
+    );
+  }
+
   const fourBucketControl = await page.evaluate(async () => {
     document.querySelector('#objects').value = '4096';
     document.querySelector('#buckets').value = '4';
     document.querySelector('#visibility').value = '0.2';
     const validations = {};
-    for (const strategy of ['draw-all', 'fixed-slice', 'three-blocks-coalesced']) {
+    for (const strategy of [
+      'draw-all',
+      'fixed-slice',
+      'fixed-slice-per-bucket',
+      'three-blocks-coalesced',
+    ]) {
       document.querySelector('#strategy').value = strategy;
       await window.__WEBGPU_BENCH__.rebuild();
       validations[strategy] = await window.__WEBGPU_BENCH__.validate();
@@ -805,9 +1047,12 @@ try {
     environment,
     colorScreenshotParity,
     fixedSlice128Edge,
+    fixedSlicePerBucket128Edge,
     fixedSlice32Sustained,
+    fixedSlicePerBucket32Sustained,
     v11Lifecycle: summarizeLifecycle(v11Lifecycle),
     fixedSliceLifecycle: summarizeLifecycle(fixedSliceLifecycle),
+    fixedSlicePerBucketLifecycle: summarizeLifecycle(fixedSlicePerBucketLifecycle),
     fourBucketControl: summarizeValidationMap(fourBucketControl),
     drawAll: summarizeValidation(drawAll),
     fixedSlice: summarizeValidation(fixedSlice),

@@ -15,12 +15,15 @@ The active heterogeneous experiment uses 32 indexed geometry buckets. "Compute s
 | Three Blocks coalesced probe | 128 | 1 | 32 | Same package cullers and dispatch work with a guarded, pinned scheduling change |
 | Three Blocks historical baseline | 9 | 1 | 1 | Published v0.10 heterogeneous indirect-batching execution path |
 | Fixed-slice | 2 | 1 | 1 | Shared reset-and-compact implementation with merged immutable fixture storage |
+| Fixed-slice per-bucket control | 2 | 1 | 32 | Same fixed-slice compute and draw payload retained by one mesh/render object per bucket |
 
 These are strategy-declared configuration values that the runner checks against each lane's expected schedule. They are not runtime counters observed from the GPU command stream.
 
 The standard 240-frame GPU-timestamp matrix compares bundled draw all, one explicitly selected heterogeneous package comparator, and fixed-slice. `BENCHMARK_HETEROGENEOUS_COMPARATOR` accepts `coalesced-v11` (the default) or `historical-v10`; the resulting modes remain exactly draw all, the selected comparator, and fixed-slice. Historical v0.10 runs require `indirect-first-instance` and are rejected at startup when the page reports that the feature is unavailable. The 32-submission public v0.11 lane remains the authoritative public-API correctness and scheduling baseline, but it is excluded from that timestamp window because it exceeds Three.js r185's timestamp-query capacity and its per-call timestamp identifiers collide. It must not be silently replaced by the coalesced probe when describing package behavior.
 
 Single-geometry trials continue to use the public Three Blocks v0.11 lane directly. The heterogeneous comparator selector applies to 4-, 32-, and 128-bucket runs. Four buckets provide the merge-aware control with exactly one asset from each topology family. Stock Three.js `BatchedMesh`, 512-bucket scaling, moving cameras, and production assets remain subsequent comparison stages rather than evidence already supplied by the 32-bucket matrix.
+
+A separate `fixed-slice-representation` matrix isolates retained representation topology. It compares only fixed-slice per-bucket against fixed-slice, uses six alternating AB/BA repetitions, rotates the three visibility levels by repetition, and places each within-visibility pair adjacently. The runner and analyzer both require the exact 36-cell plan. One-bucket runs are equal-count negative controls; the scaling interpretation applies only when B is greater than one.
 
 ## Controlled scene
 
@@ -75,6 +78,12 @@ Fixed-slice assigns each geometry a permanent survivor range sized to its object
 
 Both nodes are passed in one `renderer.compute()` call. Fixed-slice therefore changes more than scheduling: compared with the coalesced Three Blocks probe, it also changes buffer layout, compaction work, dispatch count, render-object count, mesh type, and material/vertex-transform wiring. GPU compute and render durations must be reported separately, and a render-pass difference cannot be attributed solely to compaction.
 
+## Fixed-slice representation ablation
+
+The per-bucket control is constructed from the same scenario and reproduces the fixed-slice merged attribute and index bytes, storage payloads, five-word indirect command buffer, material parameters, two-dispatch compute schedule, one compute submission, and B native indexed draws. Both lanes freeze their identity object transforms. Fixed-slice retains one mesh whose geometry carries an array of B indirect offsets. The control retains B meshes that share exactly one geometry and one material; while the static `BundleGroup` is recorded, each mesh selects its scalar indirect offset.
+
+Timing is refused unless the initial render records exactly B callbacks, the shared-geometry/material and mesh-count diagnostics match the preregistered representation, and those callback counts remain unchanged through warmup and measurement. This proves cached-bundle reuse rather than per-frame bundle reconstruction. The estimand is the full one-versus-B retained mesh/render-object topology, including scene traversal, bindings, and encoded render-bundle representation. It is not described as a private Three.js `RenderObject` scan in isolation.
+
 ## Comparison interpretation
 
 - Public Three Blocks versus coalesced Three Blocks isolates submission topology, including renderer calls and compute-pass/command-buffer grouping, while retaining the same four package nodes and dispatches per bucket.
@@ -82,6 +91,7 @@ Both nodes are passed in one `renderer.compute()` call. Fixed-slice therefore ch
 - Historical Three Blocks versus fixed-slice directly compares two heterogeneous one-call designs, but still changes package algorithms, command layout, compaction storage, mesh representation, and material integration.
 - Draw all versus either culling lane measures net compute-plus-render behavior at a specified visibility fraction.
 - Single-geometry Three Blocks versus fixed-slice provides the closest package/kernel parity check without heterogeneous submission scaling.
+- Fixed-slice versus the per-bucket fixed-slice control isolates the cost of one versus B retained mesh/render-object topology while holding the logical compute and indexed-draw workload constant.
 
 No one comparison alone attributes a difference to every layer of the system.
 
@@ -96,11 +106,12 @@ Timing begins only after the currently implemented lane-specific checks pass, an
 - no ID is duplicate, hidden, assigned to the wrong bucket, or out of range;
 - Three Blocks survivor readback length agrees with the command-declared total; fixed-slice validates each command-declared prefix within its capacity-sized readback;
 - fixed-slice reports no in-capacity overflow;
+- the per-bucket fixed-slice control reports one geometry identity, one material identity, B meshes, merged maximum instance capacity, exactly B callbacks during the initial bundle recording, and no bundle rebuild during timing;
 - the browser reports no page or console error during the validation path.
 
 Three Blocks v0.11 returns bucket-local survivor IDs, which the adapter maps to global IDs using `bucketBases` before applying the common membership check. Historical v0.10 retains stable global instance IDs; the adapter slices its flat survivor buffer using each command's `firstInstance` and reconstructs the common bucket-major validation layout. Aggregate and per-bucket SHA-256 commitments over sorted survivor IDs bind both validations to the scenario's expected-membership commitment. Historical allocation offsets and survivor ordering may vary, so its pre/post comparison ignores allocation placement only after command semantics and those canonical membership digests agree. Diagnostic readbacks and workload fingerprinting are outside timed frames.
 
-For the fixed-camera 4,096-object, 20%-visibility scene, the automated browser smoke captures native PNGs and requires zero-tolerance decoded-RGBA screenshot agreement between draw all and fixed-slice at 4, 32, and 128 buckets; the 32- and 128-bucket cells are checked again after timed replay. PNG byte equality is reported separately as a diagnostic. This is static color-output smoke coverage, not an independent reference image or candidate-run artifact. Linear-depth, object-ID, deterministic moving-camera, explicit bundle-rebuild, and mutation validation remain open.
+For the fixed-camera 4,096-object, 20%-visibility scene, the automated browser smoke captures native PNGs and requires zero-tolerance decoded-RGBA screenshot agreement among draw all, fixed-slice, and the per-bucket control at 4, 32, and 128 buckets; both fixed-slice representations are checked again after timed replay at 32 and 128 buckets. PNG byte equality is reported separately as a diagnostic. This is static color-output smoke coverage, not an independent reference image or candidate-run artifact. Linear-depth, object-ID, deterministic moving-camera, explicit bundle-rebuild, and mutation validation remain open.
 
 ## Timing environment and precision
 
@@ -156,6 +167,7 @@ Summed pass durations are not described as presentation latency. Queue gaps, bro
 - Warm 300 frames, resolve warmup timestamps, then measure 240 frames.
 - Use six repetitions of each focused cell.
 - Rotate all mode permutations and rotate visibility order by repetition.
+- For the representation ablation, alternate AB/BA mode order exactly three times each and keep each within-visibility pair adjacent.
 - Retain frame-level samples, not only per-trial summaries.
 - Report medians, tail distributions, absolute milliseconds, and frame-budget context.
 - Treat raw result files as immutable inputs to versioned analysis.

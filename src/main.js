@@ -15,7 +15,10 @@ import {
 import { createIndexedGeometryFixtures } from './scenes/geometry-fixtures.js';
 import { createFixedSubsetScenario } from './scenes/fixed-subsets.js';
 import { buildDrawAllStrategy } from './strategies/draw-all.js';
-import { buildFixedSliceStrategy } from './strategies/fixed-slice.js';
+import {
+  buildFixedSlicePerBucketStrategy,
+  buildFixedSliceStrategy,
+} from './strategies/fixed-slice.js';
 import { disposeStrategyResources } from './strategies/resources.js';
 import {
   buildThreeBlocksCoalescedStrategy,
@@ -84,13 +87,40 @@ let validating = false;
 let lastRows = [];
 let lastValidation = null;
 
+function validateTrialCompletion(context) {
+  const diagnostics = strategy?.diagnostics?.() ?? null;
+  if (context.modeId !== 'fixed-slice-per-bucket') {
+    return {
+      pass: context.bundleRecordCallbackCountAtTimingStart === null && diagnostics === null,
+      kind: 'no-representation-specific-invariant',
+    };
+  }
+  return {
+    pass: diagnostics?.kind === 'shared-merged-geometry-per-bucket-render-objects'
+      && diagnostics.geometryIdentityCount === 1
+      && diagnostics.materialIdentityCount === 1
+      && diagnostics.meshCount === context.bucketCount
+      && diagnostics.geometryInstanceCount === Math.ceil(context.objectCount / context.bucketCount)
+      && context.bundleRecordCallbackCountAtTimingStart === context.bucketCount
+      && diagnostics.bundleRecordCallbackCount
+        === context.bundleRecordCallbackCountAtTimingStart,
+    kind: 'fixed-slice-per-bucket-static-bundle-invariant',
+    bundleRecordCallbackCountAtTimingStart: context.bundleRecordCallbackCountAtTimingStart,
+    bundleRecordCallbackCountAtTimingEnd: diagnostics?.bundleRecordCallbackCount ?? null,
+    geometryIdentityCount: diagnostics?.geometryIdentityCount ?? null,
+    materialIdentityCount: diagnostics?.materialIdentityCount ?? null,
+    meshCount: diagnostics?.meshCount ?? null,
+    geometryInstanceCount: diagnostics?.geometryInstanceCount ?? null,
+  };
+}
+
 const trial = new TrialController(renderer, {
   warmupFrames: DEVELOPMENT_PROTOCOL.warmupFrames,
   measuredFrames: DEVELOPMENT_PROTOCOL.measuredFrames,
   onStatus: setStatus,
   onComplete: ({ rows, summary }) => {
     lastRows = rows;
-    elements.export.disabled = rows.length === 0;
+    elements.export.disabled = rows.length === 0 || summary.accepted !== true;
     elements['gpu-summary'].textContent = `${formatMs(summary.gpuPassP50Ms)} / ${formatMs(summary.gpuPassP95Ms)}`;
     elements['cpu-summary'].textContent = `${formatMs(summary.cpuSubmitP50Ms)} / ${formatMs(summary.cpuSubmitP95Ms)}`;
     elements['timestamp-quantum'].textContent = summary.quantumNs === null
@@ -105,6 +135,7 @@ const trial = new TrialController(renderer, {
     elements.details.textContent = error?.stack ?? String(error);
     setControlsLocked(false);
   },
+  validateCompletion: validateTrialCompletion,
 });
 
 function selectedConfig() {
@@ -176,6 +207,7 @@ async function rebuild() {
     const builders = {
       'draw-all': buildDrawAllStrategy,
       'fixed-slice': buildFixedSliceStrategy,
+      'fixed-slice-per-bucket': buildFixedSlicePerBucketStrategy,
       'three-blocks-coalesced': buildThreeBlocksCoalescedStrategy,
       'three-blocks-current': buildThreeBlocksCurrentStrategy,
       'three-blocks-historical': buildThreeBlocksHistoricalStrategy,
@@ -227,6 +259,7 @@ async function startTrial(extraContext = {}) {
   setControlsLocked(true);
   const config = selectedConfig();
   const workload = await fingerprintWorkload();
+  const representationDiagnostics = strategy.diagnostics?.() ?? null;
   await trial.start({
     ...extraContext,
     schemaVersion: 2,
@@ -241,6 +274,8 @@ async function startTrial(extraContext = {}) {
     configuredRenderObjects: strategy.configuredRenderObjects,
     configuredComputeDispatches: strategy.configuredComputeDispatches,
     configuredComputeSubmissions: strategy.configuredComputeSubmissions,
+    bundleRecordCallbackCountAtTimingStart:
+      representationDiagnostics?.bundleRecordCallbackCount ?? null,
     timestampAvailable,
   });
   return {
@@ -345,8 +380,12 @@ function pinnedRendererCacheDiagnostics() {
       'indexAttributesSize',
       'indirectStorageAttributes',
       'indirectStorageAttributesSize',
+      'programs',
+      'programsSize',
       'storageAttributes',
       'storageAttributesSize',
+      'uniformBuffers',
+      'uniformBuffersSize',
     ].map((name) => [name, memory[name]])),
   };
 }

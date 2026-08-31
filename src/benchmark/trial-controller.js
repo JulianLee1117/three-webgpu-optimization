@@ -12,13 +12,21 @@ function percentile(values, fraction) {
 }
 
 export class TrialController {
-  constructor(renderer, { warmupFrames, measuredFrames, onStatus, onComplete, onError }) {
+  constructor(renderer, {
+    warmupFrames,
+    measuredFrames,
+    onStatus,
+    onComplete,
+    onError,
+    validateCompletion = null,
+  }) {
     this.renderer = renderer;
     this.warmupFrames = warmupFrames;
     this.measuredFrames = measuredFrames;
     this.onStatus = onStatus;
     this.onComplete = onComplete;
     this.onError = onError;
+    this.validateCompletion = validateCompletion;
     this.phase = 'idle';
     this.remaining = 0;
     this.rows = [];
@@ -32,7 +40,7 @@ export class TrialController {
     this.phase = 'error';
     this.error = error instanceof Error ? error : new Error(String(error));
     const message = this.error.message;
-    this.onStatus?.(`Trial failed while resolving timestamps: ${message}`);
+    this.onStatus?.(`Trial failed: ${message}`);
     this.onError?.(this.error);
   }
 
@@ -118,6 +126,15 @@ export class TrialController {
       : 0;
     const resolution = timestampResolution(maps);
     const gpuTotals = joined.map((row) => row.gpuPassTotalMs).filter(Number.isFinite);
+    const completionResult = this.validateCompletion === null
+      ? { pass: true }
+      : this.validateCompletion(this.context);
+    const completionInvariant = completionResult !== null
+      && typeof completionResult === 'object'
+      && !Array.isArray(completionResult)
+      && typeof completionResult.pass === 'boolean'
+      ? completionResult
+      : { pass: false, kind: 'invalid-completion-invariant-result' };
     const summary = {
       rowCount: joined.length,
       missingRenderFrames,
@@ -128,13 +145,19 @@ export class TrialController {
       cpuSubmitP95Ms: percentile(joined.map((row) => row.cpuSubmitTotalMs), 0.95),
       gpuPassP50Ms: percentile(gpuTotals, 0.5),
       gpuPassP95Ms: percentile(gpuTotals, 0.95),
+      completionInvariant,
       accepted: joined.length === this.measuredFrames
         && missingRenderFrames === 0
-        && missingComputeFrames === 0,
+        && missingComputeFrames === 0
+        && completionInvariant.pass === true,
     };
     setTimestampTracking(this.renderer, false);
     this.phase = 'complete';
-    this.onStatus?.(summary.accepted ? 'Trial timing complete.' : 'Trial rejected: missing timestamp frames.');
+    this.onStatus?.(
+      summary.accepted
+        ? 'Trial timing complete.'
+        : 'Trial rejected: incomplete timestamps or failed completion invariant.',
+    );
     this.onComplete?.({ rows: joined, summary, context: this.context });
   }
 }

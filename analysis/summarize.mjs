@@ -15,6 +15,19 @@ const REQUIRED_RUN_ARTIFACTS = Object.freeze([
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const ALLOWED_EVIDENCE_STATUSES = new Set(['development', 'candidate']);
+const FIXED_SLICE_REPRESENTATION_MATRIX = 'fixed-slice-representation';
+const FIXED_SLICE_REPRESENTATION_MODES = Object.freeze([
+  'fixed-slice-per-bucket',
+  'fixed-slice',
+]);
+const FIXED_SLICE_REPRESENTATION_VISIBILITIES = Object.freeze([0.2, 0.8, 0.99]);
+const FIXED_SLICE_REPRESENTATION_REPETITIONS = 6;
+const FIXED_SLICE_REPRESENTATION_WARMUP_FRAMES = 300;
+const FIXED_SLICE_REPRESENTATION_MEASURED_FRAMES = 240;
+const FIXED_SLICE_REPRESENTATION_OBJECT_COUNTS = Object.freeze([4_096, 16_384, 65_536]);
+const FIXED_SLICE_REPRESENTATION_BUCKET_COUNTS = Object.freeze([1, 4, 32, 128]);
+const FIXED_SLICE_REPRESENTATION_ORDERING =
+  'six-repetition-balanced-ab-ba-with-rotated-visibility-order';
 const PROVENANCE_STABILITY_FIELDS = Object.freeze([
   'commit',
   'tree',
@@ -200,6 +213,24 @@ function optionalBoolean(value, field, recordNumber) {
   throw new Error(`Record ${recordNumber} has invalid ${field}: ${JSON.stringify(value)}.`);
 }
 
+function optionalNonnegativeInteger(value, field, recordNumber) {
+  if (value === undefined || value.trim() === '') return null;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0) {
+    throw new Error(`Record ${recordNumber} has invalid ${field}: ${JSON.stringify(value)}.`);
+  }
+  return number;
+}
+
+function optionalNonemptyString(value, field, recordNumber) {
+  if (value === undefined || value.trim() === '') return null;
+  const normalized = value.trim();
+  if (normalized.length === 0) {
+    throw new Error(`Record ${recordNumber} has invalid ${field}: ${JSON.stringify(value)}.`);
+  }
+  return normalized;
+}
+
 function normalizedRepetition(value, recordNumber) {
   const text = value.trim();
   if (text.length === 0) throw new Error(`Record ${recordNumber} has no repetition identifier.`);
@@ -239,6 +270,8 @@ function parseFrameRecords(parsed) {
   requireColumns(parsed.headers);
   const headerSet = new Set(parsed.headers);
   const repetitionColumn = REPETITION_COLUMNS.find((column) => headerSet.has(column)) ?? null;
+  const hasModeOrderPosition = headerSet.has('modeOrderPosition');
+  const hasPlannedModeOrder = headerSet.has('plannedModeOrder');
 
   const frames = parsed.records.map((record, index) => {
     const recordNumber = index + 2;
@@ -300,6 +333,12 @@ function parseFrameRecords(parsed) {
       modeId,
       targetVisibilityFraction,
       repetition,
+      modeOrderPosition: hasModeOrderPosition
+        ? optionalNonnegativeInteger(record.modeOrderPosition, 'modeOrderPosition', recordNumber)
+        : null,
+      plannedModeOrder: hasPlannedModeOrder
+        ? optionalNonemptyString(record.plannedModeOrder, 'plannedModeOrder', recordNumber)
+        : null,
       usesCompute,
       gpuPassTotalMs,
       gpuComputeMs,
@@ -357,11 +396,22 @@ function groupFrames(frames) {
     const key = repetitionKey(frame.repetition);
     let trial = group.trials.get(key);
     if (trial === undefined) {
-      trial = { repetition: frame.repetition, usesCompute: frame.usesCompute, frames: [] };
+      trial = {
+        repetition: frame.repetition,
+        usesCompute: frame.usesCompute,
+        modeOrderPosition: frame.modeOrderPosition,
+        plannedModeOrder: frame.plannedModeOrder,
+        frames: [],
+      };
       group.trials.set(key, trial);
     } else if (trial.usesCompute !== frame.usesCompute) {
       throw new Error(
         `Mode ${frame.modeId}, visibility ${frame.targetVisibilityFraction}, repetition ${frame.repetition} mixes usesCompute values.`,
+      );
+    } else if (trial.modeOrderPosition !== frame.modeOrderPosition
+      || trial.plannedModeOrder !== frame.plannedModeOrder) {
+      throw new Error(
+        `Mode ${frame.modeId}, visibility ${frame.targetVisibilityFraction}, repetition ${frame.repetition} mixes order audit values.`,
       );
     }
     trial.frames.push(frame);
@@ -377,6 +427,8 @@ function groupFrames(frames) {
         .sort((left, right) => compareRepetitions(left.repetition, right.repetition))
         .map((trial) => ({
           repetition: trial.repetition,
+          modeOrderPosition: trial.modeOrderPosition,
+          plannedModeOrder: trial.plannedModeOrder,
           nFrames: trial.frames.length,
           p50: metricP50(trial.frames),
         }));
@@ -424,55 +476,156 @@ function summarizePairedDeltas(pairs) {
   }));
 }
 
-function comparisonsAgainst(groups, baselineModeId) {
-  const fixedGroups = groups.filter((group) => group.modeId === 'fixed-slice');
-  const baselineByVisibility = new Map(
+function resolvedModeOrderPosition(trial, modeId) {
+  let position = trial.modeOrderPosition;
+  if (trial.plannedModeOrder !== null) {
+    const order = trial.plannedModeOrder.split('|');
+    const plannedPosition = order.indexOf(modeId);
+    if (plannedPosition < 0 || new Set(order).size !== order.length) {
+      throw new Error(
+        `Mode ${modeId}, repetition ${trial.repetition} has an invalid plannedModeOrder.`,
+      );
+    }
+    if (position !== null && position !== plannedPosition) {
+      throw new Error(
+        `Mode ${modeId}, repetition ${trial.repetition} has inconsistent order audit values.`,
+      );
+    }
+    position = plannedPosition;
+  }
+  return position;
+}
+
+function pairedOrderAudit(leftTrial, rightTrial, leftModeId, rightModeId) {
+  if (leftTrial.plannedModeOrder !== null
+    && rightTrial.plannedModeOrder !== null
+    && leftTrial.plannedModeOrder !== rightTrial.plannedModeOrder) {
+    throw new Error(
+      `Modes ${leftModeId} and ${rightModeId}, repetition ${leftTrial.repetition} have different plannedModeOrder values.`,
+    );
+  }
+  const leftModeOrderPosition = resolvedModeOrderPosition(leftTrial, leftModeId);
+  const rightModeOrderPosition = resolvedModeOrderPosition(rightTrial, rightModeId);
+  if (leftModeOrderPosition === null || rightModeOrderPosition === null) {
+    return {
+      status: 'unavailable',
+      orderStratum: null,
+      leftModeOrderPosition,
+      rightModeOrderPosition,
+      plannedModeOrder: leftTrial.plannedModeOrder ?? rightTrial.plannedModeOrder,
+    };
+  }
+  if (leftModeOrderPosition === rightModeOrderPosition) {
+    throw new Error(
+      `Modes ${leftModeId} and ${rightModeId}, repetition ${leftTrial.repetition} claim the same mode-order position.`,
+    );
+  }
+  return {
+    status: 'classified',
+    orderStratum: leftModeOrderPosition < rightModeOrderPosition ? 'left-first' : 'right-first',
+    leftModeOrderPosition,
+    rightModeOrderPosition,
+    plannedModeOrder: leftTrial.plannedModeOrder ?? rightTrial.plannedModeOrder,
+  };
+}
+
+function summarizeOrderStratification(pairs) {
+  const classified = pairs.filter((pair) => pair.orderAudit.status === 'classified');
+  const strata = ['left-first', 'right-first'].map((orderStratum) => {
+    const stratumPairs = classified.filter((pair) => pair.orderAudit.orderStratum === orderStratum);
+    return {
+      orderStratum,
+      nPairs: stratumPairs.length,
+      medianPairedDelta: summarizePairedDeltas(stratumPairs),
+    };
+  });
+  return {
+    status: pairs.length === 0 || classified.length === 0
+      ? 'unavailable'
+      : classified.length === pairs.length
+        ? 'complete'
+        : 'partial',
+    classifiedPairs: classified.length,
+    unclassifiedPairs: pairs.length - classified.length,
+    strata,
+  };
+}
+
+function pairedContrasts(groups, leftModeId, rightModeId) {
+  const leftGroups = groups.filter((group) => group.modeId === leftModeId);
+  const rightByVisibility = new Map(
     groups
-      .filter((group) => group.modeId === baselineModeId)
+      .filter((group) => group.modeId === rightModeId)
       .map((group) => [group.targetVisibilityFraction, group]),
   );
 
-  return fixedGroups
-    .map((fixedGroup) => {
-      const baselineGroup = baselineByVisibility.get(fixedGroup.targetVisibilityFraction);
-      if (baselineGroup === undefined) return null;
-      const baselineTrials = new Map(
-        baselineGroup.perTrialP50.map((trial) => [repetitionKey(trial.repetition), trial]),
+  return leftGroups
+    .map((leftGroup) => {
+      const rightGroup = rightByVisibility.get(leftGroup.targetVisibilityFraction);
+      if (rightGroup === undefined) return null;
+      const rightTrials = new Map(
+        rightGroup.perTrialP50.map((trial) => [repetitionKey(trial.repetition), trial]),
       );
-      const fixedTrials = new Map(
-        fixedGroup.perTrialP50.map((trial) => [repetitionKey(trial.repetition), trial]),
+      const leftTrials = new Map(
+        leftGroup.perTrialP50.map((trial) => [repetitionKey(trial.repetition), trial]),
       );
-      const pairs = fixedGroup.perTrialP50
-        .map((fixedTrial) => {
-          const baselineTrial = baselineTrials.get(repetitionKey(fixedTrial.repetition));
-          if (baselineTrial === undefined) return null;
+      const pairs = leftGroup.perTrialP50
+        .map((leftTrial) => {
+          const rightTrial = rightTrials.get(repetitionKey(leftTrial.repetition));
+          if (rightTrial === undefined) return null;
+          const orderAudit = pairedOrderAudit(
+            leftTrial,
+            rightTrial,
+            leftModeId,
+            rightModeId,
+          );
           return {
-            repetition: fixedTrial.repetition,
-            fixedSliceP50: fixedTrial.p50,
-            baselineP50: baselineTrial.p50,
-            delta: pairedDelta(fixedTrial.p50, baselineTrial.p50),
+            repetition: leftTrial.repetition,
+            leftP50: leftTrial.p50,
+            rightP50: rightTrial.p50,
+            delta: pairedDelta(leftTrial.p50, rightTrial.p50),
+            orderAudit,
           };
         })
         .filter(Boolean);
-      const unmatchedFixedSliceRepetitions = fixedGroup.perTrialP50
-        .filter((trial) => !baselineTrials.has(repetitionKey(trial.repetition)))
+      const unmatchedLeftRepetitions = leftGroup.perTrialP50
+        .filter((trial) => !rightTrials.has(repetitionKey(trial.repetition)))
         .map((trial) => trial.repetition);
-      const unmatchedBaselineRepetitions = baselineGroup.perTrialP50
-        .filter((trial) => !fixedTrials.has(repetitionKey(trial.repetition)))
+      const unmatchedRightRepetitions = rightGroup.perTrialP50
+        .filter((trial) => !leftTrials.has(repetitionKey(trial.repetition)))
         .map((trial) => trial.repetition);
 
       return {
-        targetVisibilityFraction: fixedGroup.targetVisibilityFraction,
-        baselineModeId,
+        targetVisibilityFraction: leftGroup.targetVisibilityFraction,
+        leftModeId,
+        rightModeId,
         nPairs: pairs.length,
         pairs,
         medianPairedDelta: summarizePairedDeltas(pairs),
-        unmatchedFixedSliceRepetitions,
-        unmatchedBaselineRepetitions,
+        orderStratification: summarizeOrderStratification(pairs),
+        unmatchedLeftRepetitions,
+        unmatchedRightRepetitions,
       };
     })
     .filter(Boolean)
     .sort((left, right) => left.targetVisibilityFraction - right.targetVisibilityFraction);
+}
+
+function comparisonsAgainst(groups, baselineModeId) {
+  return pairedContrasts(groups, 'fixed-slice', baselineModeId).map((contrast) => ({
+    targetVisibilityFraction: contrast.targetVisibilityFraction,
+    baselineModeId,
+    nPairs: contrast.nPairs,
+    pairs: contrast.pairs.map((pair) => ({
+      repetition: pair.repetition,
+      fixedSliceP50: pair.leftP50,
+      baselineP50: pair.rightP50,
+      delta: pair.delta,
+    })),
+    medianPairedDelta: contrast.medianPairedDelta,
+    unmatchedFixedSliceRepetitions: contrast.unmatchedLeftRepetitions,
+    unmatchedBaselineRepetitions: contrast.unmatchedRightRepetitions,
+  }));
 }
 
 function isRecord(value) {
@@ -754,6 +907,61 @@ function validateCandidateProvenance(metadata) {
   }
 }
 
+function orderedValuesMatch(actual, expected) {
+  return Array.isArray(actual)
+    && actual.length === expected.length
+    && actual.every((value, index) => value === expected[index]);
+}
+
+export function validateProtocolMatrix(protocol) {
+  requireRecord(protocol, 'metadata.json protocol');
+  if (protocol.matrixKind !== FIXED_SLICE_REPRESENTATION_MATRIX) return;
+  if (!orderedValuesMatch(protocol.modes, FIXED_SLICE_REPRESENTATION_MODES)) {
+    failVerification(
+      'fixed-slice-representation protocol modes must be exactly fixed-slice-per-bucket, fixed-slice.',
+    );
+  }
+  if (protocol.repetitions !== FIXED_SLICE_REPRESENTATION_REPETITIONS) {
+    failVerification('fixed-slice-representation protocol must use exactly six repetitions.');
+  }
+  if (!orderedValuesMatch(
+    protocol.visibilityLevels,
+    FIXED_SLICE_REPRESENTATION_VISIBILITIES,
+  )) {
+    failVerification(
+      'fixed-slice-representation visibility levels must be exactly 0.2, 0.8, 0.99.',
+    );
+  }
+  if (protocol.heterogeneousComparator !== null) {
+    failVerification('fixed-slice-representation heterogeneousComparator must be null.');
+  }
+  if (protocol.ordering !== FIXED_SLICE_REPRESENTATION_ORDERING) {
+    failVerification(
+      `fixed-slice-representation ordering must be ${JSON.stringify(FIXED_SLICE_REPRESENTATION_ORDERING)}.`,
+    );
+  }
+  if (protocol.warmupFrames !== FIXED_SLICE_REPRESENTATION_WARMUP_FRAMES
+    || protocol.measuredFrames !== FIXED_SLICE_REPRESENTATION_MEASURED_FRAMES) {
+    failVerification(
+      'fixed-slice-representation protocol must use 300 warmup and 240 measured frames.',
+    );
+  }
+  if (!FIXED_SLICE_REPRESENTATION_OBJECT_COUNTS.includes(protocol.objectCount)
+    || !FIXED_SLICE_REPRESENTATION_BUCKET_COUNTS.includes(protocol.bucketCount)) {
+    failVerification('fixed-slice-representation protocol has an unsupported workload size.');
+  }
+  if (protocol.matrix
+    !== `${FIXED_SLICE_REPRESENTATION_MATRIX}-o${protocol.objectCount}-b${protocol.bucketCount}`) {
+    failVerification('fixed-slice-representation matrix identifier does not match its workload.');
+  }
+  const expectedScaleRole = protocol.bucketCount === 1
+    ? 'negative-control-equal-mesh-render-object-count'
+    : 'primary-one-versus-b-mesh-render-object-representation-ablation';
+  if (protocol.representationScaleRole !== expectedScaleRole) {
+    failVerification('fixed-slice-representation scale role does not match its bucket count.');
+  }
+}
+
 function requireMetadataCompleteness(metadata, manifest) {
   requireRecord(metadata, 'metadata.json');
   if (metadata.schemaVersion !== 2) {
@@ -809,6 +1017,7 @@ function requireMetadataCompleteness(metadata, manifest) {
   if (visibilityLevels.length === 0 || visibilityLevels.some((value) => !Number.isFinite(value))) {
     failVerification('metadata.json protocol.visibilityLevels must contain finite values.');
   }
+  validateProtocolMatrix(protocol);
   const plan = requireArray(metadata.plan, 'metadata.json plan');
   if (plan.length === 0) failVerification('metadata.json plan is empty.');
   requireInteger(metadata.expectedTrialCount, 'metadata.json expectedTrialCount', { minimum: 1 });
@@ -846,20 +1055,59 @@ function requireMatchingIdentity(actual, expected, label) {
   }
 }
 
-function indexPlan(plan, metadata) {
+function requireExactPermutation(value, expectedValues, label) {
+  const order = requireArray(value, label);
+  if (order.length !== expectedValues.length
+    || new Set(order).size !== order.length
+    || expectedValues.some((expected) => !order.includes(expected))) {
+    failVerification(`${label} must be an exact permutation of the protocol values.`);
+  }
+  return order;
+}
+
+export function validateBenchmarkPlan(plan, metadata) {
+  validateProtocolMatrix(metadata.protocol);
   const byTrialId = new Map();
   const byPlanIndex = new Map();
+  const matrixCells = new Set();
+  const repetitionOrders = new Map();
+  const modes = metadata.protocol.modes;
+  const visibilityLevels = metadata.protocol.visibilityLevels;
   for (const [arrayIndex, item] of plan.entries()) {
     requireRecord(item, `metadata.json plan[${arrayIndex}]`);
     const trialId = requireNonemptyString(item.trialId, `metadata.json plan[${arrayIndex}].trialId`);
     requireInteger(item.planIndex, `metadata.json plan[${arrayIndex}].planIndex`);
     requireInteger(item.repetitionIndex, `metadata.json plan[${arrayIndex}].repetitionIndex`);
     requireNonemptyString(item.modeId, `metadata.json plan[${arrayIndex}].modeId`);
+    const modeOrder = requireExactPermutation(
+      item.modeOrder,
+      modes,
+      `metadata.json plan[${arrayIndex}].modeOrder`,
+    );
+    requireInteger(
+      item.modeOrderPosition,
+      `metadata.json plan[${arrayIndex}].modeOrderPosition`,
+    );
+    if (modeOrder[item.modeOrderPosition] !== item.modeId) {
+      failVerification(`metadata.json plan[${arrayIndex}] mode position is inconsistent.`);
+    }
     requireFiniteNumber(
       item.visibilityFraction,
       `metadata.json plan[${arrayIndex}].visibilityFraction`,
       { minimum: 0 },
     );
+    const visibilityOrder = requireExactPermutation(
+      item.visibilityOrder,
+      visibilityLevels,
+      `metadata.json plan[${arrayIndex}].visibilityOrder`,
+    );
+    requireInteger(
+      item.visibilityOrderPosition,
+      `metadata.json plan[${arrayIndex}].visibilityOrderPosition`,
+    );
+    if (visibilityOrder[item.visibilityOrderPosition] !== item.visibilityFraction) {
+      failVerification(`metadata.json plan[${arrayIndex}] visibility position is inconsistent.`);
+    }
     if (item.runId !== metadata.runId) failVerification(`metadata.json plan[${arrayIndex}] has the wrong runId.`);
     requireInteger(item.objectCount, `metadata.json plan[${arrayIndex}].objectCount`, { minimum: 1 });
     requireInteger(item.bucketCount, `metadata.json plan[${arrayIndex}].bucketCount`, { minimum: 1 });
@@ -876,8 +1124,115 @@ function indexPlan(plan, metadata) {
     if (byTrialId.has(trialId) || byPlanIndex.has(item.planIndex)) {
       failVerification('metadata.json plan has duplicate trial identities.');
     }
+    const cellKey = JSON.stringify([
+      item.repetitionIndex,
+      item.modeId,
+      item.visibilityFraction,
+    ]);
+    if (matrixCells.has(cellKey)) {
+      failVerification('metadata.json plan duplicates a repetition/mode/visibility cell.');
+    }
+    matrixCells.add(cellKey);
+
+    const orderRecord = repetitionOrders.get(item.repetitionIndex);
+    const modeOrderSignature = JSON.stringify(modeOrder);
+    const visibilityOrderSignature = JSON.stringify(visibilityOrder);
+    if (orderRecord === undefined) {
+      repetitionOrders.set(item.repetitionIndex, {
+        modeOrder: [...modeOrder],
+        visibilityOrder: [...visibilityOrder],
+        modeOrderSignature,
+        visibilityOrderSignature,
+      });
+    } else if (orderRecord.modeOrderSignature !== modeOrderSignature
+      || orderRecord.visibilityOrderSignature !== visibilityOrderSignature) {
+      failVerification('metadata.json plan changes an order within one repetition.');
+    }
     byTrialId.set(trialId, item);
     byPlanIndex.set(item.planIndex, item);
+  }
+
+  for (let repetition = 0; repetition < metadata.protocol.repetitions; repetition += 1) {
+    if (!repetitionOrders.has(repetition)) {
+      failVerification(`metadata.json plan omits repetition ${repetition}.`);
+    }
+    for (const mode of modes) {
+      for (const visibility of visibilityLevels) {
+        const cellKey = JSON.stringify([repetition, mode, visibility]);
+        if (!matrixCells.has(cellKey)) {
+          failVerification('metadata.json plan omits a repetition/mode/visibility cell.');
+        }
+      }
+    }
+  }
+
+  let executionIndex = 0;
+  for (let repetition = 0; repetition < metadata.protocol.repetitions; repetition += 1) {
+    const orderRecord = repetitionOrders.get(repetition);
+    if (metadata.protocol.matrixKind === FIXED_SLICE_REPRESENTATION_MATRIX) {
+      const expectedModeOrder = repetition % 2 === 0
+        ? [...FIXED_SLICE_REPRESENTATION_MODES]
+        : [...FIXED_SLICE_REPRESENTATION_MODES].reverse();
+      const visibilityOffset = repetition % FIXED_SLICE_REPRESENTATION_VISIBILITIES.length;
+      const expectedVisibilityOrder = [
+        ...FIXED_SLICE_REPRESENTATION_VISIBILITIES.slice(visibilityOffset),
+        ...FIXED_SLICE_REPRESENTATION_VISIBILITIES.slice(0, visibilityOffset),
+      ];
+      if (!orderedValuesMatch(orderRecord.modeOrder, expectedModeOrder)) {
+        failVerification(
+          'fixed-slice-representation mode orders must alternate AB/BA by repetition.',
+        );
+      }
+      if (!orderedValuesMatch(orderRecord.visibilityOrder, expectedVisibilityOrder)) {
+        failVerification(
+          'fixed-slice-representation visibility orders must rotate by repetition.',
+        );
+      }
+    }
+    for (let visibilityPosition = 0;
+      visibilityPosition < orderRecord.visibilityOrder.length;
+      visibilityPosition += 1) {
+      for (let modePosition = 0;
+        modePosition < orderRecord.modeOrder.length;
+        modePosition += 1) {
+        const item = plan[executionIndex];
+        if (item.repetitionIndex !== repetition
+          || item.visibilityOrderPosition !== visibilityPosition
+          || item.visibilityFraction !== orderRecord.visibilityOrder[visibilityPosition]
+          || item.modeOrderPosition !== modePosition
+          || item.modeId !== orderRecord.modeOrder[modePosition]) {
+          failVerification(
+            'metadata.json plan execution order must be repetition-contiguous with visibility outer and mode inner.',
+          );
+        }
+        executionIndex += 1;
+      }
+    }
+  }
+
+  if (metadata.protocol.repetitions % modes.length === 0) {
+    const expectedPerPosition = metadata.protocol.repetitions / modes.length;
+    for (const mode of modes) {
+      for (let position = 0; position < modes.length; position += 1) {
+        const count = [...repetitionOrders.values()]
+          .filter((record) => record.modeOrder[position] === mode).length;
+        if (count !== expectedPerPosition) {
+          failVerification('metadata.json mode ordering is not position-balanced.');
+        }
+      }
+    }
+  }
+  if (metadata.protocol.repetitions % visibilityLevels.length === 0) {
+    const expectedPerPosition = metadata.protocol.repetitions / visibilityLevels.length;
+    for (const visibility of visibilityLevels) {
+      for (let position = 0; position < visibilityLevels.length; position += 1) {
+        const count = [...repetitionOrders.values()]
+          .filter((record) => record.visibilityOrder[position] === visibility).length;
+        if (count !== expectedPerPosition) {
+          failVerification('metadata.json visibility ordering is not position-balanced.');
+        }
+      }
+    }
   }
   return { byTrialId, byPlanIndex };
 }
@@ -1164,6 +1519,14 @@ function validateVerifiedFrames(parsed, metadata, planIndex, summariesByTrialId)
     'validationPass',
     'timestampAvailable',
   ];
+  if (metadata.protocol.matrixKind === FIXED_SLICE_REPRESENTATION_MATRIX) {
+    requiredAuditColumns.push(
+      'modeOrderPosition',
+      'visibilityOrderPosition',
+      'plannedModeOrder',
+      'plannedVisibilityOrder',
+    );
+  }
   const headers = new Set(parsed.headers);
   const missing = requiredAuditColumns.filter((column) => !headers.has(column));
   if (missing.length > 0) {
@@ -1193,6 +1556,15 @@ function validateVerifiedFrames(parsed, metadata, planIndex, summariesByTrialId)
       || exactCsvInteger(record.objectCount, `${label} objectCount`) !== metadata.protocol.objectCount
       || exactCsvInteger(record.bucketCount, `${label} bucketCount`) !== metadata.protocol.bucketCount) {
       failVerification(`${label} does not match its planned trial.`);
+    }
+    if (metadata.protocol.matrixKind === FIXED_SLICE_REPRESENTATION_MATRIX
+      && (exactCsvInteger(record.modeOrderPosition, `${label} modeOrderPosition`)
+          !== planned.modeOrderPosition
+        || exactCsvInteger(record.visibilityOrderPosition, `${label} visibilityOrderPosition`)
+          !== planned.visibilityOrderPosition
+        || record.plannedModeOrder !== planned.modeOrder.join('|')
+        || record.plannedVisibilityOrder !== planned.visibilityOrder.join('|'))) {
+      failVerification(`${label} order audit fields do not match its planned trial.`);
     }
     if (record.validationPass !== 'true' || record.timestampAvailable !== 'true') {
       failVerification(`${label} lacks accepted validation or GPU timestamps.`);
@@ -1245,7 +1617,7 @@ export async function verifyRunDirectory(runDirectory) {
     'gpu-telemetry-summary.json',
   );
   const { plan } = requireMetadataCompleteness(metadata, manifest);
-  const planIndex = indexPlan(plan, metadata);
+  const planIndex = validateBenchmarkPlan(plan, metadata);
   const summariesByTrialId = validateTrialSummaries(
     trialSummaries,
     metadata,
@@ -1305,7 +1677,7 @@ export function summarizeCsv(text) {
       acrossTrials: 'arithmetic midpoint for even sample counts',
     },
     repetitionColumn: repetitionColumn ?? '(implicit single trial)',
-    deltaConvention: 'fixed-slice minus baseline; negative values mean fixed-slice is faster',
+    deltaConvention: 'left mode minus right mode; negative values mean the left mode is faster',
     nFrames: frames.length,
     groups,
     comparisons: {
@@ -1313,6 +1685,13 @@ export function summarizeCsv(text) {
       fixedSliceVsThreeBlocksCurrent: comparisonsAgainst(groups, 'three-blocks-current'),
       fixedSliceVsThreeBlocksCoalesced: comparisonsAgainst(groups, 'three-blocks-coalesced'),
       fixedSliceVsThreeBlocksHistorical: comparisonsAgainst(groups, 'three-blocks-historical'),
+    },
+    causalContrasts: {
+      mergedFixedSliceVsPerBucketRepresentation: pairedContrasts(
+        groups,
+        'fixed-slice',
+        'fixed-slice-per-bucket',
+      ),
     },
   };
 }

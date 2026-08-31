@@ -10,6 +10,8 @@ import {
   parseCsv,
   summarizeCsv,
   summarizeInput,
+  validateBenchmarkPlan,
+  validateProtocolMatrix,
   verifyRunDirectory,
 } from '../analysis/summarize.mjs';
 
@@ -25,6 +27,69 @@ function sha256(value) {
 
 function jsonBytes(value) {
   return Buffer.from(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+function causalProtocol(overrides = {}) {
+  return {
+    matrix: 'fixed-slice-representation-o4096-b4',
+    matrixKind: 'fixed-slice-representation',
+    objectCount: 4_096,
+    bucketCount: 4,
+    modes: ['fixed-slice-per-bucket', 'fixed-slice'],
+    visibilityLevels: [0.2, 0.8, 0.99],
+    repetitions: 6,
+    warmupFrames: 300,
+    measuredFrames: 240,
+    heterogeneousComparator: null,
+    ordering: 'six-repetition-balanced-ab-ba-with-rotated-visibility-order',
+    representationScaleRole: 'primary-one-versus-b-mesh-render-object-representation-ablation',
+    ...overrides,
+  };
+}
+
+function causalPlan(protocol, {
+  modeOrderForRepetition = (repetition) => (
+    repetition % 2 === 0 ? [...protocol.modes] : [...protocol.modes].reverse()
+  ),
+  visibilityOrderForRepetition = (repetition) => {
+    const offset = repetition % protocol.visibilityLevels.length;
+    return [
+      ...protocol.visibilityLevels.slice(offset),
+      ...protocol.visibilityLevels.slice(0, offset),
+    ];
+  },
+} = {}) {
+  const plan = [];
+  for (let repetitionIndex = 0;
+    repetitionIndex < protocol.repetitions;
+    repetitionIndex += 1) {
+    const modeOrder = modeOrderForRepetition(repetitionIndex);
+    const visibilityOrder = visibilityOrderForRepetition(repetitionIndex);
+    for (let visibilityOrderPosition = 0;
+      visibilityOrderPosition < visibilityOrder.length;
+      visibilityOrderPosition += 1) {
+      for (let modeOrderPosition = 0;
+        modeOrderPosition < modeOrder.length;
+        modeOrderPosition += 1) {
+        const planIndex = plan.length;
+        plan.push({
+          runId: 'causal-run',
+          trialId: `causal-run-t${String(planIndex + 1).padStart(2, '0')}`,
+          planIndex,
+          repetitionIndex,
+          modeId: modeOrder[modeOrderPosition],
+          modeOrder: [...modeOrder],
+          modeOrderPosition,
+          visibilityFraction: visibilityOrder[visibilityOrderPosition],
+          visibilityOrder: [...visibilityOrder],
+          visibilityOrderPosition,
+          objectCount: protocol.objectCount,
+          bucketCount: protocol.bucketCount,
+        });
+      }
+    }
+  }
+  return plan;
 }
 
 async function createVerifiedRunFixture(t, mutate = () => undefined) {
@@ -56,7 +121,11 @@ async function createVerifiedRunFixture(t, mutate = () => undefined) {
     planIndex: 0,
     repetitionIndex: 0,
     modeId: 'fixed-slice',
+    modeOrder: ['fixed-slice'],
+    modeOrderPosition: 0,
     visibilityFraction: 0.2,
+    visibilityOrder: [0.2],
+    visibilityOrderPosition: 0,
     objectCount: 4096,
     bucketCount: 4,
     selectedConfig: { modeId: 'fixed-slice' },
@@ -73,7 +142,11 @@ async function createVerifiedRunFixture(t, mutate = () => undefined) {
     planIndex: 0,
     repetitionIndex: 0,
     modeId: 'fixed-slice',
+    modeOrder: ['fixed-slice'],
+    modeOrderPosition: 0,
     visibilityFraction: 0.2,
+    visibilityOrder: [0.2],
+    visibilityOrderPosition: 0,
     objectCount: 4096,
     bucketCount: 4,
   };
@@ -250,6 +323,186 @@ test('analysis pairs modes by repetitionIndex within a visibility cell', () => {
   assert.ok(Math.abs(versusDrawAll.medianPairedDelta.cpuCommonUpdateMs.absoluteMs - 0.25) < 1e-12);
   assert.ok(Math.abs(versusThreeBlocks.medianPairedDelta.cpuFrameBodyMs.absoluteMs + 1.2) < 1e-12);
   assert.ok(Math.abs(versusHistorical.medianPairedDelta.cpuSubmitTotalMs.absoluteMs + 0.3) < 1e-12);
+});
+
+test('analysis reports the fixed-slice representation ablation as a dedicated causal contrast', () => {
+  const csv = [
+    'modeId,targetVisibilityFraction,repetitionIndex,usesCompute,gpuPassTotalMs,gpuComputeMs,gpuRenderMs,cpuCommonUpdateMs,cpuComputeSubmitMs,cpuRenderSubmitMs,cpuFrameBodyMs,cpuSubmitTotalMs',
+    'fixed-slice-per-bucket,0.2,0,true,6,1,5,0.3,0.7,1.4,2.6,2.1',
+    'fixed-slice,0.2,0,true,4,1,3,0.3,0.5,0.8,1.8,1.3',
+    'fixed-slice,0.2,1,true,5,1,4,0.4,0.6,0.9,2,1.5',
+    'fixed-slice-per-bucket,0.2,1,true,7,1,6,0.4,0.8,1.5,2.9,2.3',
+  ].join('\n');
+
+  const summary = summarizeCsv(csv);
+  const contrasts = summary.causalContrasts.mergedFixedSliceVsPerBucketRepresentation;
+  assert.equal(contrasts.length, 1);
+  const contrast = contrasts[0];
+  assert.equal(contrast.leftModeId, 'fixed-slice');
+  assert.equal(contrast.rightModeId, 'fixed-slice-per-bucket');
+  assert.equal(contrast.nPairs, 2);
+  assert.deepEqual(contrast.unmatchedLeftRepetitions, []);
+  assert.deepEqual(contrast.unmatchedRightRepetitions, []);
+  assert.equal(contrast.medianPairedDelta.gpuComputeMs.absoluteMs, 0);
+  assert.equal(contrast.medianPairedDelta.gpuRenderMs.absoluteMs, -2);
+  assert.ok(Math.abs(contrast.medianPairedDelta.cpuRenderSubmitMs.absoluteMs + 0.6) < 1e-12);
+  assert.ok(Math.abs(contrast.medianPairedDelta.cpuSubmitTotalMs.absoluteMs + 0.8) < 1e-12);
+  assert.ok(contrast.medianPairedDelta.accountedCpuSubmitPlusGpuPassMs.absoluteMs < 0);
+  assert.equal(contrast.orderStratification.status, 'unavailable');
+  assert.equal(contrast.orderStratification.classifiedPairs, 0);
+  assert.deepEqual(summary.comparisons.fixedSliceVsDrawAll, []);
+});
+
+test('causal analysis stratifies paired deltas by AB versus BA order when audit columns exist', () => {
+  const csv = [
+    'modeId,targetVisibilityFraction,repetitionIndex,modeOrderPosition,plannedModeOrder,usesCompute,gpuPassTotalMs,gpuComputeMs,gpuRenderMs,cpuCommonUpdateMs,cpuComputeSubmitMs,cpuRenderSubmitMs,cpuFrameBodyMs,cpuSubmitTotalMs',
+    'fixed-slice-per-bucket,0.2,0,0,fixed-slice-per-bucket|fixed-slice,true,6,1,5,0.3,0.7,1.4,2.6,2.1',
+    'fixed-slice,0.2,0,1,fixed-slice-per-bucket|fixed-slice,true,4,1,3,0.3,0.5,0.8,1.8,1.3',
+    'fixed-slice,0.2,1,0,fixed-slice|fixed-slice-per-bucket,true,6,1,5,0.4,0.6,0.9,2,1.5',
+    'fixed-slice-per-bucket,0.2,1,1,fixed-slice|fixed-slice-per-bucket,true,7,1,6,0.4,0.8,1.5,2.9,2.3',
+  ].join('\n');
+
+  const contrast = summarizeCsv(csv)
+    .causalContrasts.mergedFixedSliceVsPerBucketRepresentation[0];
+  assert.equal(contrast.orderStratification.status, 'complete');
+  assert.equal(contrast.orderStratification.classifiedPairs, 2);
+  assert.equal(contrast.orderStratification.unclassifiedPairs, 0);
+  const leftFirst = contrast.orderStratification.strata
+    .find((stratum) => stratum.orderStratum === 'left-first');
+  const rightFirst = contrast.orderStratification.strata
+    .find((stratum) => stratum.orderStratum === 'right-first');
+  assert.equal(leftFirst.nPairs, 1);
+  assert.equal(rightFirst.nPairs, 1);
+  assert.equal(leftFirst.medianPairedDelta.gpuRenderMs.absoluteMs, -1);
+  assert.equal(rightFirst.medianPairedDelta.gpuRenderMs.absoluteMs, -2);
+  assert.equal(contrast.pairs[0].orderAudit.orderStratum, 'right-first');
+  assert.equal(contrast.pairs[1].orderAudit.orderStratum, 'left-first');
+});
+
+test('plan verification rejects a same-size duplicate/missing causal matrix cell', () => {
+  const protocol = {
+    modes: ['fixed-slice-per-bucket', 'fixed-slice'],
+    visibilityLevels: [0.2],
+    repetitions: 1,
+    objectCount: 4_096,
+    bucketCount: 4,
+  };
+  const base = {
+    runId: 'run',
+    repetitionIndex: 0,
+    modeOrder: [...protocol.modes],
+    visibilityFraction: 0.2,
+    visibilityOrder: [0.2],
+    visibilityOrderPosition: 0,
+    objectCount: 4_096,
+    bucketCount: 4,
+  };
+  const plan = [
+    {
+      ...base,
+      trialId: 'run-t01',
+      planIndex: 0,
+      modeId: 'fixed-slice-per-bucket',
+      modeOrderPosition: 0,
+    },
+    {
+      ...base,
+      trialId: 'run-t02',
+      planIndex: 1,
+      modeId: 'fixed-slice-per-bucket',
+      modeOrderPosition: 0,
+    },
+  ];
+  assert.throws(
+    () => validateBenchmarkPlan(plan, { runId: 'run', protocol }),
+    /duplicates a repetition\/mode\/visibility cell/,
+  );
+});
+
+test('causal protocol requires the exact modes, repetitions, visibility levels, and isolation fields', () => {
+  const valid = causalProtocol();
+  assert.doesNotThrow(() => validateProtocolMatrix(valid));
+  assert.doesNotThrow(() => validateProtocolMatrix(causalProtocol({
+    matrix: 'fixed-slice-representation-o4096-b1',
+    bucketCount: 1,
+    representationScaleRole: 'negative-control-equal-mesh-render-object-count',
+  })));
+  for (const [mutate, pattern] of [
+    [
+      (protocol) => { protocol.modes = [...protocol.modes].reverse(); },
+      /protocol modes must be exactly/,
+    ],
+    [
+      (protocol) => { protocol.repetitions = 4; },
+      /exactly six repetitions/,
+    ],
+    [
+      (protocol) => { protocol.visibilityLevels = [0.2, 0.99, 0.8]; },
+      /visibility levels must be exactly/,
+    ],
+    [
+      (protocol) => { protocol.heterogeneousComparator = 'coalesced-v11'; },
+      /heterogeneousComparator must be null/,
+    ],
+    [
+      (protocol) => { protocol.ordering = 'balanced-but-unspecified'; },
+      /ordering must be/,
+    ],
+    [
+      (protocol) => { protocol.measuredFrames = 1; },
+      /300 warmup and 240 measured/,
+    ],
+    [
+      (protocol) => { protocol.bucketCount = 2; },
+      /unsupported workload size/,
+    ],
+    [
+      (protocol) => { protocol.matrix = 'fixed-slice-representation-o4096-b32'; },
+      /matrix identifier does not match/,
+    ],
+    [
+      (protocol) => { protocol.representationScaleRole = 'primary'; },
+      /scale role does not match/,
+    ],
+  ]) {
+    const invalid = structuredClone(valid);
+    mutate(invalid);
+    assert.throws(() => validateProtocolMatrix(invalid), pattern);
+  }
+});
+
+test('causal plan verification requires all 36 trials in canonical AB/BA execution order', () => {
+  const protocol = causalProtocol();
+  const metadata = { runId: 'causal-run', protocol };
+  const valid = causalPlan(protocol);
+  const index = validateBenchmarkPlan(valid, metadata);
+  assert.equal(valid.length, 36);
+  assert.equal(index.byTrialId.size, 36);
+
+  const shuffled = structuredClone(valid);
+  [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
+  shuffled[0].planIndex = 0;
+  shuffled[1].planIndex = 1;
+  assert.throws(
+    () => validateBenchmarkPlan(shuffled, metadata),
+    /execution order must be repetition-contiguous with visibility outer and mode inner/,
+  );
+
+  const nonAlternating = causalPlan(protocol, {
+    modeOrderForRepetition: () => [...protocol.modes],
+  });
+  assert.throws(
+    () => validateBenchmarkPlan(nonAlternating, metadata),
+    /mode orders must alternate AB\/BA/,
+  );
+
+  const nonRotating = causalPlan(protocol, {
+    visibilityOrderForRepetition: () => [...protocol.visibilityLevels],
+  });
+  assert.throws(
+    () => validateBenchmarkPlan(nonRotating, metadata),
+    /visibility orders must rotate by repetition/,
+  );
 });
 
 test('analysis rejects missing GPU compute data for compute modes', () => {
