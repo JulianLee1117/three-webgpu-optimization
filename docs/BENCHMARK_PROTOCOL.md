@@ -25,6 +25,8 @@ Single-geometry trials continue to use the public Three Blocks v0.11 lane direct
 
 A separate `fixed-slice-representation` matrix isolates retained representation topology. It compares only fixed-slice per-bucket against fixed-slice, uses six alternating AB/BA repetitions, rotates the three visibility levels by repetition, and places each within-visibility pair adjacently. The runner and analyzer both require the exact 36-cell plan. One-bucket runs are equal-count negative controls; the scaling interpretation applies only when B is greater than one.
 
+The separate `depth-ordering` matrix compares atomic fixed-slice compaction with eight-bin front-to-back and reverse traversal under high- and low-overlap layouts. Its fixed 65,536-object, 32-bucket design, reversed-depth requirement, exact offscreen parity gate, balanced 36-trial order, and decision thresholds are specified in [Coarse depth-ordering protocol](DEPTH_ORDERING_PROTOCOL.md).
+
 ## Controlled scene
 
 The focused 32-bucket cells hold constant:
@@ -111,7 +113,7 @@ Timing begins only after the currently implemented lane-specific checks pass, an
 
 Three Blocks v0.11 returns bucket-local survivor IDs, which the adapter maps to global IDs using `bucketBases` before applying the common membership check. Historical v0.10 retains stable global instance IDs; the adapter slices its flat survivor buffer using each command's `firstInstance` and reconstructs the common bucket-major validation layout. Aggregate and per-bucket SHA-256 commitments over sorted survivor IDs bind both validations to the scenario's expected-membership commitment. Historical allocation offsets and survivor ordering may vary, so its pre/post comparison ignores allocation placement only after command semantics and those canonical membership digests agree. Diagnostic readbacks and workload fingerprinting are outside timed frames.
 
-For the fixed-camera 4,096-object, 20%-visibility scene, the automated browser smoke captures native PNGs and requires zero-tolerance decoded-RGBA screenshot agreement among draw all, fixed-slice, and the per-bucket control at 4, 32, and 128 buckets; both fixed-slice representations are checked again after timed replay at 32 and 128 buckets. PNG byte equality is reported separately as a diagnostic. This is static color-output smoke coverage, not an independent reference image or candidate-run artifact. Linear-depth, object-ID, deterministic moving-camera, explicit bundle-rebuild, and mutation validation remain open.
+For the fixed-camera 4,096-object, 20%-visibility scene, the automated browser smoke captures native PNGs and requires zero-tolerance decoded-RGBA screenshot agreement among draw all, fixed-slice, and the per-bucket control at 4, 32, and 128 buckets; both fixed-slice representations are checked again after timed replay at 32 and 128 buckets. PNG byte equality is reported separately as a diagnostic. This is static color-output smoke coverage, not an independent reference image or candidate-run artifact. The depth-ordering matrix adds exact depth32float and object-ID evidence for its fixed scenes; deterministic moving-camera, explicit bundle-rebuild, and mutation validation remain open.
 
 ## Timing environment and precision
 

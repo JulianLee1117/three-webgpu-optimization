@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import test from 'node:test';
 import { PerspectiveCamera, Vector3, WebGPUCoordinateSystem } from 'three';
 import { CAMERA } from '../src/config.js';
+import { computeScenarioDepthBinRange } from '../src/scenes/depth-range.js';
 import { createIndexedGeometryFixtures } from '../src/scenes/geometry-fixtures.js';
 import {
   allocateBalancedCounts,
@@ -96,4 +97,65 @@ test('fixed subsets retain transforms and match independent CPU frustum visibili
   }
 
   geometries.forEach((geometry) => geometry.dispose());
+});
+
+test('depth-overlap layouts preserve membership, depth, rotation, and scale', () => {
+  const geometries = createIndexedGeometryFixtures(4, 'low');
+  try {
+    const common = {
+      objectCount: 4096,
+      bucketCount: 4,
+      visibilityFraction: 0.99,
+      geometrySpheres: geometries.map((geometry) => geometry.boundingSphere.clone()),
+      seed: 0xb1ad_2026,
+    };
+    const lowOverlap = createFixedSubsetScenario({ ...common, layout: 'low-overlap' });
+    const highOverlap = createFixedSubsetScenario({ ...common, layout: 'high-overlap' });
+
+    const camera = new PerspectiveCamera(CAMERA.fov, CAMERA.aspect, CAMERA.near, CAMERA.far);
+    camera.position.fromArray(CAMERA.position);
+    camera.lookAt(new Vector3().fromArray(CAMERA.target));
+    camera.updateProjectionMatrix();
+
+    assert.deepEqual(
+      [...cpuVisibleIds(lowOverlap, camera, WebGPUCoordinateSystem)],
+      [...lowOverlap.expectedVisibleIds],
+    );
+    assert.deepEqual(
+      [...cpuVisibleIds(highOverlap, camera, WebGPUCoordinateSystem)],
+      [...highOverlap.expectedVisibleIds],
+    );
+    assert.deepEqual(
+      [...lowOverlap.expectedVisibleIds],
+      [...highOverlap.expectedVisibleIds],
+    );
+    assert.deepEqual([...lowOverlap.objectBuckets], [...highOverlap.objectBuckets]);
+
+    const rotationScaleIndices = [0, 1, 2, 4, 5, 6, 8, 9, 10];
+    let changedPositions = 0;
+    for (const objectId of lowOverlap.expectedVisibleIds) {
+      const offset = objectId * 16;
+      for (const component of rotationScaleIndices) {
+        assert.equal(
+          lowOverlap.matrices[offset + component],
+          highOverlap.matrices[offset + component],
+        );
+      }
+      assert.equal(lowOverlap.matrices[offset + 14], highOverlap.matrices[offset + 14]);
+      const boundOffset = objectId * 4;
+      assert.equal(lowOverlap.bounds[boundOffset + 2], highOverlap.bounds[boundOffset + 2]);
+      assert.equal(lowOverlap.bounds[boundOffset + 3], highOverlap.bounds[boundOffset + 3]);
+      if (lowOverlap.matrices[offset + 12] !== highOverlap.matrices[offset + 12]
+        || lowOverlap.matrices[offset + 13] !== highOverlap.matrices[offset + 13]) {
+        changedPositions += 1;
+      }
+    }
+    assert.equal(changedPositions, lowOverlap.expectedVisibleCount);
+
+    lowOverlap.depthBinRange = computeScenarioDepthBinRange(lowOverlap, camera);
+    highOverlap.depthBinRange = computeScenarioDepthBinRange(highOverlap, camera);
+    assert.deepEqual(lowOverlap.depthBinRange, highOverlap.depthBinRange);
+  } finally {
+    geometries.forEach((geometry) => geometry.dispose());
+  }
 });

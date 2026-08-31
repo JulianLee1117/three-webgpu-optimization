@@ -26,6 +26,8 @@
               <option value="three-blocks-historical">Three Blocks 0.10 indirect batching</option>
               <option value="fixed-slice">Fixed-slice compacted</option>
               <option value="fixed-slice-per-bucket">Fixed-slice per-bucket render objects</option>
+              <option value="fixed-slice-depth-front-to-back">Fixed-slice depth bins, front to back</option>
+              <option value="fixed-slice-depth-reverse">Fixed-slice depth bins, reverse</option>
             </select>
           </label>
           <label>Objects
@@ -48,6 +50,13 @@
               <option value="0.2" selected>20%</option>
               <option value="0.8">80%</option>
               <option value="0.99">99%</option>
+            </select>
+          </label>
+          <label>Scene layout
+            <select id="layout">
+              <option value="baseline" selected>Baseline spread</option>
+              <option value="low-overlap">Low overlap</option>
+              <option value="high-overlap">High overlap</option>
             </select>
           </label>
           <div class="actions">

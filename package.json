@@ -20,6 +20,7 @@
     "build": "vite build",
     "test": "node --test tests/*.test.mjs",
     "smoke:browser": "node scripts/smoke-browser.mjs",
+    "smoke:depth": "node scripts/smoke-depth-ordering.mjs",
     "benchmark:focused": "node scripts/run-benchmark.mjs",
     "analyze": "node analysis/summarize.mjs"
   },

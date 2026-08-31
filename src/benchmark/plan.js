@@ -5,6 +5,19 @@ export const FIXED_SLICE_REPRESENTATION_MODES = Object.freeze([
 
 export const BENCHMARK_VISIBILITY_LEVELS = Object.freeze([0.2, 0.8, 0.99]);
 
+export const DEPTH_ORDERING_MODES = Object.freeze([
+  'fixed-slice',
+  'fixed-slice-depth-front-to-back',
+  'fixed-slice-depth-reverse',
+]);
+
+export const DEPTH_ORDERING_LAYOUTS = Object.freeze([
+  'high-overlap',
+  'low-overlap',
+]);
+
+export const DEPTH_ORDERING_VISIBILITY = 0.99;
+
 export function createRepresentationModeOrders(modes = FIXED_SLICE_REPRESENTATION_MODES) {
   if (modes.length !== 2 || new Set(modes).size !== 2) {
     throw new Error('The fixed-slice representation design requires exactly two distinct modes.');
@@ -85,6 +98,63 @@ export function buildBenchmarkPlan({
           visibilityFraction,
           visibilityOrder: [...visibilityOrder],
           visibilityOrderPosition,
+          layout: 'baseline',
+          layoutOrder: ['baseline'],
+          layoutOrderPosition: 0,
+          objectCount,
+          bucketCount,
+        });
+      }
+    }
+  }
+  return plan;
+}
+
+export function buildDepthOrderingPlan({
+  runId,
+  modeOrders,
+  objectCount,
+  bucketCount,
+  layouts = DEPTH_ORDERING_LAYOUTS,
+  visibilityFraction = DEPTH_ORDERING_VISIBILITY,
+}) {
+  if (layouts.length !== 2 || new Set(layouts).size !== 2) {
+    throw new Error('The depth-ordering design requires exactly two distinct layouts.');
+  }
+  if (!Number.isFinite(visibilityFraction)
+    || visibilityFraction <= 0
+    || visibilityFraction > 1) {
+    throw new RangeError('Depth-ordering visibilityFraction must be in (0, 1].');
+  }
+
+  const plan = [];
+  for (let repetitionIndex = 0; repetitionIndex < modeOrders.length; repetitionIndex += 1) {
+    const modeOrder = [...modeOrders[repetitionIndex]];
+    const layoutOrder = repetitionIndex % 2 === 0
+      ? [...layouts]
+      : [...layouts].reverse();
+    for (let layoutOrderPosition = 0;
+      layoutOrderPosition < layoutOrder.length;
+      layoutOrderPosition += 1) {
+      const layout = layoutOrder[layoutOrderPosition];
+      for (let modeOrderPosition = 0;
+        modeOrderPosition < modeOrder.length;
+        modeOrderPosition += 1) {
+        const modeId = modeOrder[modeOrderPosition];
+        const planIndex = plan.length;
+        plan.push({
+          trialId: `${runId}-t${String(planIndex + 1).padStart(2, '0')}`,
+          planIndex,
+          repetitionIndex,
+          modeId,
+          modeOrder: [...modeOrder],
+          modeOrderPosition,
+          visibilityFraction,
+          visibilityOrder: [visibilityFraction],
+          visibilityOrderPosition: 0,
+          layout,
+          layoutOrder: [...layoutOrder],
+          layoutOrderPosition,
           objectCount,
           bucketCount,
         });

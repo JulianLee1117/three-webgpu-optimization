@@ -12,9 +12,14 @@ import {
   fingerprintFixedSubsetScenario,
   fingerprintGeometryFixtures,
 } from './scenes/geometry-fingerprints.js';
+import { computeScenarioDepthBinRange } from './scenes/depth-range.js';
 import { createIndexedGeometryFixtures } from './scenes/geometry-fixtures.js';
 import { createFixedSubsetScenario } from './scenes/fixed-subsets.js';
 import { buildDrawAllStrategy } from './strategies/draw-all.js';
+import {
+  buildDepthBinnedFrontToBackStrategy,
+  buildDepthBinnedReverseStrategy,
+} from './strategies/depth-binned-fixed-slice.js';
 import {
   buildFixedSlicePerBucketStrategy,
   buildFixedSliceStrategy,
@@ -26,10 +31,11 @@ import {
 } from './strategies/three-blocks-current.js';
 import { buildThreeBlocksHistoricalStrategy } from './strategies/three-blocks-historical.js';
 import { cpuVisibleIds } from './validation/membership.js';
+import { captureExactRenderParity } from './validation/render-parity.js';
 import './styles.css';
 
 const elements = Object.fromEntries([
-  'strategy', 'objects', 'buckets', 'visibility', 'rebuild', 'validate', 'trial', 'export',
+  'strategy', 'objects', 'buckets', 'visibility', 'layout', 'rebuild', 'validate', 'trial', 'export',
   'status', 'backend', 'expected-visible', 'validation', 'gpu-summary', 'cpu-summary',
   'timestamp-quantum', 'details', 'canvas-host',
 ].map((id) => [id, document.getElementById(id)]));
@@ -51,6 +57,7 @@ if (!WebGPU.isAvailable()) {
 const renderer = new THREE.WebGPURenderer({
   antialias: false,
   powerPreference: 'high-performance',
+  reversedDepthBuffer: true,
   trackTimestamp: true,
 });
 renderer.setPixelRatio(VIEWPORT.devicePixelRatio);
@@ -87,8 +94,92 @@ let validating = false;
 let lastRows = [];
 let lastValidation = null;
 
+const DEPTH_STRATEGY_IDS = new Set([
+  'fixed-slice-depth-front-to-back',
+  'fixed-slice-depth-reverse',
+]);
+const DEPTH_ORDERING_LAYOUT_IDS = new Set(['high-overlap', 'low-overlap']);
+
 function validateTrialCompletion(context) {
   const diagnostics = strategy?.diagnostics?.() ?? null;
+  const lifecycleDiagnostics = strategy?.lifecycleDiagnostics?.() ?? null;
+  if (DEPTH_STRATEGY_IDS.has(context.modeId)) {
+    const expectedOrder = context.modeId === 'fixed-slice-depth-front-to-back'
+      ? 'front-to-back'
+      : 'reverse';
+    const expectedTraversal = expectedOrder === 'front-to-back'
+      ? [0, 1, 2, 3, 4, 5, 6, 7]
+      : [7, 6, 5, 4, 3, 2, 1, 0];
+    const expectedWorkItems = [
+      context.bucketCount * 8,
+      context.objectCount,
+      context.bucketCount,
+      context.bucketCount,
+    ];
+    return {
+      pass: diagnostics?.kind === 'single-merged-geometry-depth-binned-fixed-slice'
+        && diagnostics.depthBinCount === 8
+        && diagnostics.depthOrder === expectedOrder
+        && diagnostics.binTraversal?.length === expectedTraversal.length
+        && diagnostics.binTraversal?.every((value, index) => value === expectedTraversal[index])
+        && diagnostics.depthBinRange?.near === context.depthBinRangeNear
+        && diagnostics.depthBinRange?.far === context.depthBinRangeFar
+        && diagnostics.reverseOrderUniformValue === (expectedOrder === 'reverse')
+        && diagnostics.meshCount === 1
+        && diagnostics.geometryIdentityCount === 1
+        && diagnostics.materialIdentityCount === 1
+        && diagnostics.commandCount === context.bucketCount
+        && diagnostics.zeroFirstInstanceCount === context.bucketCount
+        && diagnostics.computeDispatchCount === 4
+        && diagnostics.computeDispatchWorkItems?.length === expectedWorkItems.length
+        && diagnostics.computeDispatchWorkItems?.every(
+          (value, index) => value === expectedWorkItems[index],
+        )
+        && context.bundleRecordCallbackCountAtTimingStart === 1
+        && diagnostics.bundleRecordCallbackCount
+          === context.bundleRecordCallbackCountAtTimingStart,
+      kind: 'depth-binned-static-bundle-invariant',
+      depthBinCount: diagnostics?.depthBinCount ?? null,
+      depthOrder: diagnostics?.depthOrder ?? null,
+      binTraversal: diagnostics?.binTraversal ?? null,
+      depthBinRange: diagnostics?.depthBinRange ?? null,
+      reverseOrderUniformValue: diagnostics?.reverseOrderUniformValue ?? null,
+      bundleRecordCallbackCountAtTimingStart:
+        context.bundleRecordCallbackCountAtTimingStart,
+      bundleRecordCallbackCountAtTimingEnd:
+        diagnostics?.bundleRecordCallbackCount ?? null,
+      meshCount: diagnostics?.meshCount ?? null,
+      geometryIdentityCount: diagnostics?.geometryIdentityCount ?? null,
+      materialIdentityCount: diagnostics?.materialIdentityCount ?? null,
+      commandCount: diagnostics?.commandCount ?? null,
+      zeroFirstInstanceCount: diagnostics?.zeroFirstInstanceCount ?? null,
+      computeDispatchCount: diagnostics?.computeDispatchCount ?? null,
+      computeDispatchWorkItems: diagnostics?.computeDispatchWorkItems ?? null,
+    };
+  }
+  if (context.modeId === 'fixed-slice'
+    && DEPTH_ORDERING_LAYOUT_IDS.has(context.scenarioLayout)) {
+    return {
+      pass: lifecycleDiagnostics?.kind
+          === 'single-merged-geometry-atomic-fixed-slice-lifecycle'
+        && lifecycleDiagnostics.bundleGroupStatic === true
+        && lifecycleDiagnostics.meshCount === 1
+        && lifecycleDiagnostics.geometryIdentityCount === 1
+        && lifecycleDiagnostics.materialIdentityCount === 1
+        && context.bundleRecordCallbackCountAtTimingStart === 1
+        && lifecycleDiagnostics.bundleRecordCallbackCount
+          === context.bundleRecordCallbackCountAtTimingStart,
+      kind: 'atomic-fixed-slice-static-bundle-invariant',
+      bundleGroupStatic: lifecycleDiagnostics?.bundleGroupStatic ?? null,
+      bundleRecordCallbackCountAtTimingStart:
+        context.bundleRecordCallbackCountAtTimingStart,
+      bundleRecordCallbackCountAtTimingEnd:
+        lifecycleDiagnostics?.bundleRecordCallbackCount ?? null,
+      meshCount: lifecycleDiagnostics?.meshCount ?? null,
+      geometryIdentityCount: lifecycleDiagnostics?.geometryIdentityCount ?? null,
+      materialIdentityCount: lifecycleDiagnostics?.materialIdentityCount ?? null,
+    };
+  }
   if (context.modeId !== 'fixed-slice-per-bucket') {
     return {
       pass: context.bundleRecordCallbackCountAtTimingStart === null && diagnostics === null,
@@ -144,6 +235,7 @@ function selectedConfig() {
     objectCount: Number(elements.objects.value),
     bucketCount: Number(elements.buckets.value),
     visibilityFraction: Number(elements.visibility.value),
+    layout: elements.layout.value,
   };
 }
 
@@ -163,7 +255,7 @@ async function fingerprintWorkload() {
 }
 
 function setControlsLocked(locked) {
-  for (const id of ['strategy', 'objects', 'buckets', 'visibility', 'rebuild', 'validate', 'trial']) {
+  for (const id of ['strategy', 'objects', 'buckets', 'visibility', 'layout', 'rebuild', 'validate', 'trial']) {
     elements[id].disabled = locked;
   }
 }
@@ -189,7 +281,9 @@ async function rebuild() {
       visibilityFraction: config.visibilityFraction,
       geometrySpheres: sourceGeometries.map((geometry) => geometry.boundingSphere.clone()),
       seed: DEVELOPMENT_PROTOCOL.seed,
+      layout: config.layout,
     });
+    scenario.depthBinRange = computeScenarioDepthBinRange(scenario, camera);
     sourceScenarioManifest = await fingerprintFixedSubsetScenario(
       scenario,
       DEVELOPMENT_PROTOCOL.seed,
@@ -207,6 +301,8 @@ async function rebuild() {
     const builders = {
       'draw-all': buildDrawAllStrategy,
       'fixed-slice': buildFixedSliceStrategy,
+      'fixed-slice-depth-front-to-back': buildDepthBinnedFrontToBackStrategy,
+      'fixed-slice-depth-reverse': buildDepthBinnedReverseStrategy,
       'fixed-slice-per-bucket': buildFixedSlicePerBucketStrategy,
       'three-blocks-coalesced': buildThreeBlocksCoalescedStrategy,
       'three-blocks-current': buildThreeBlocksCurrentStrategy,
@@ -252,6 +348,34 @@ async function validateCurrent() {
   }
 }
 
+async function captureRenderParity() {
+  if (!strategy || validating || trial.active || trial.resolving) return null;
+  validating = true;
+  setControlsLocked(true);
+  setStatus('Capturing exact color, depth, and object-ID parity…');
+  try {
+    strategy.update(camera, renderer);
+    if (strategy.usesCompute) strategy.submitCompute(renderer);
+    const snapshotValidation = await strategy.validate(renderer, expectedCpuVisible);
+    lastValidation = snapshotValidation;
+    if (snapshotValidation?.pass !== true) {
+      throw new Error('Render parity refused because its computed snapshot failed validation.');
+    }
+    const parity = await captureExactRenderParity({
+      renderer,
+      camera,
+      strategy,
+      expectedIds: expectedCpuVisible,
+    });
+    const result = { ...parity, snapshotValidation };
+    setStatus(result.pass ? 'Render parity captured.' : 'Render parity capture was unstable.');
+    return result;
+  } finally {
+    validating = false;
+    setControlsLocked(false);
+  }
+}
+
 async function startTrial(extraContext = {}) {
   if (!strategy || trial.active || trial.resolving) return;
   const validation = await validateCurrent();
@@ -260,6 +384,9 @@ async function startTrial(extraContext = {}) {
   const config = selectedConfig();
   const workload = await fingerprintWorkload();
   const representationDiagnostics = strategy.diagnostics?.() ?? null;
+  const timingDiagnostics = DEPTH_ORDERING_LAYOUT_IDS.has(config.layout)
+    ? strategy.lifecycleDiagnostics?.() ?? representationDiagnostics
+    : representationDiagnostics;
   await trial.start({
     ...extraContext,
     schemaVersion: 2,
@@ -267,6 +394,9 @@ async function startTrial(extraContext = {}) {
     objectCount: scenario.objectCount,
     bucketCount: scenario.bucketCount,
     targetVisibilityFraction: config.visibilityFraction,
+    scenarioLayout: scenario.layout,
+    depthBinRangeNear: scenario.depthBinRange.near,
+    depthBinRangeFar: scenario.depthBinRange.far,
     expectedVisibleCount: scenario.expectedVisibleCount,
     validationKind: validation.kind,
     validationPass: true,
@@ -275,7 +405,7 @@ async function startTrial(extraContext = {}) {
     configuredComputeDispatches: strategy.configuredComputeDispatches,
     configuredComputeSubmissions: strategy.configuredComputeSubmissions,
     bundleRecordCallbackCountAtTimingStart:
-      representationDiagnostics?.bundleRecordCallbackCount ?? null,
+      timingDiagnostics?.bundleRecordCallbackCount ?? null,
     timestampAvailable,
   });
   return {
@@ -396,6 +526,9 @@ const environment = Object.freeze({
   rendererBackend: renderer.backend?.constructor?.name ?? null,
   coordinateSystem: renderer.coordinateSystem,
   reversedDepth: camera.reversedDepth,
+  rendererReversedDepthBuffer: renderer.reversedDepthBuffer === true,
+  maxStorageBuffersPerShaderStage:
+    renderer.backend?.device?.limits?.maxStorageBuffersPerShaderStage ?? null,
   timestampAvailable,
   indirectFirstInstanceAvailable: renderer.hasFeature('indirect-first-instance'),
   crossOriginIsolated: globalThis.crossOriginIsolated === true,
@@ -409,6 +542,7 @@ window.__WEBGPU_BENCH__ = {
   selectedConfig,
   rebuild,
   validate: validateCurrent,
+  captureRenderParity,
   startTrial,
   fingerprintWorkload,
   cacheDiagnostics: pinnedRendererCacheDiagnostics,

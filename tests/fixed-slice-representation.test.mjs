@@ -107,6 +107,21 @@ for (const bucketCount of [1, 4, 32, 128]) {
         )),
       );
 
+      assert.equal(merged.diagnostics(), null);
+      assert.deepEqual(merged.lifecycleDiagnostics(), {
+        kind: 'single-merged-geometry-atomic-fixed-slice-lifecycle',
+        bundleGroupStatic: true,
+        bundleRecordCallbackCount: 0,
+        geometryIdentityCount: 1,
+        materialIdentityCount: 1,
+        meshCount: 1,
+      });
+      merged.root.children[0].onBeforeRender({ _currentRenderBundle: {} });
+      assert.equal(merged.lifecycleDiagnostics().bundleRecordCallbackCount, 1);
+      merged.root.children[0].onBeforeRender({ _currentRenderBundle: null });
+      assert.equal(merged.lifecycleDiagnostics().bundleRecordCallbackCount, 1);
+      assert.equal(perBucket.lifecycleDiagnostics(), null);
+
       const before = perBucket.diagnostics();
       assert.deepEqual(before, {
         kind: 'shared-merged-geometry-per-bucket-render-objects',

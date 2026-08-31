@@ -150,6 +150,12 @@ function buildFixedSliceRepresentation(
     const mesh = new Mesh(geometry, material);
     freezeStaticTransform(mesh);
     mesh.frustumCulled = false;
+    mesh.onBeforeRender = (activeRenderer) => {
+      if (activeRenderer?._currentRenderBundle !== null
+        && activeRenderer?._currentRenderBundle !== undefined) {
+        bundleRecordCallbackCount += 1;
+      }
+    };
     root.add(mesh);
     geometries = [geometry];
   }
@@ -165,11 +171,27 @@ function buildFixedSliceRepresentation(
     }
     : null);
 
+  const lifecycleDiagnostics = () => (perBucketRenderObjects
+    ? null
+    : {
+      kind: 'single-merged-geometry-atomic-fixed-slice-lifecycle',
+      bundleGroupStatic: root.static === true,
+      bundleRecordCallbackCount,
+      geometryIdentityCount: new Set(root.children.map((child) => child.geometry)).size,
+      materialIdentityCount: new Set(root.children.map((child) => child.material)).size,
+      meshCount: root.children.length,
+    });
+
   return {
     id,
     root,
     geometries,
     materials: [material],
+    parityResources: Object.freeze({
+      matrixAttribute,
+      visibleIdsAttribute,
+      objectCount: scenario.objectCount,
+    }),
     storageAttributes: [
       matrixAttribute,
       boundsAttribute,
@@ -189,6 +211,7 @@ function buildFixedSliceRepresentation(
     configuredComputeSubmissions: 1,
     configuredSubmittedInstances: null,
     diagnostics,
+    lifecycleDiagnostics,
     update(camera, renderer) {
       updateFrustumPlaneState(planeState, camera, renderer);
     },

@@ -28,6 +28,12 @@ The coalesced lane is a diagnostic probe, not a supported Three Blocks capabilit
 
 The historical lane constructs and updates `IndirectBatchedMesh` through its published v0.10 entry point. Exact command and survivor readback uses a guarded, version-pinned diagnostic surface because that release has no public heterogeneous readback method. Its generated commands use nonzero `firstInstance` values, so the lane is available only when the adapter exposes WebGPU's optional `indirect-first-instance` feature.
 
+## Active depth-ordering experiment
+
+The next matrix tests whether per-bucket coarse GPU-generated front-to-back bin-block traversal reduces render cost under heavy overdraw. It compares atomic fixed-slice compaction with two eight-bin lanes: front-to-back and reverse traversal. The ordered pair retains the same four dispatches, shader operations, merged geometry, material, static bundle, 32 native indirect draws, and one compute submission; only one traversal uniform differs. Bucket draw order remains fixed.
+
+The fixed candidate cell uses 65,536 objects, 32 buckets, 99% visibility, a high-overlap layout, and a low-overlap negative control. Three.js reversed depth is enabled for every lane so dense-scene depth ties do not make output depend on draw order. Candidate timing is gated by exact survivor, command, bin-layout, traversal-normalized within-bin sequence, bundle-lifecycle, full-frame color, depth, and object-ID evidence. The preregistered design and falsification thresholds are in [Coarse depth-ordering protocol](docs/DEPTH_ORDERING_PROTOCOL.md).
+
 ## Current status
 
 The package baselines, scheduling probe, fixed-slice lane, and fixed-slice representation control are integrated with lane-specific correctness gates; every compute lane requires exact survivor membership and native indexed-command validation. The representation control additionally requires one shared geometry and material, exactly B retained meshes, exactly B bundle-record callbacks before timing, no bundle rebuild during timing, and exact decoded-pixel parity.
@@ -79,13 +85,24 @@ npm run benchmark:focused
 
 This matrix changes the retained mesh/render-object topology from B to one while holding the compute schedule, merged geometry payload, storage payload bytes, indirect commands, material parameters, and B native draws constant. A one-bucket run is labeled as an equal-count negative control rather than render-object scaling evidence.
 
+The depth-ordering matrix has a fixed 65,536-object, 32-bucket design:
+
+```sh
+BENCHMARK_MATRIX=depth-ordering npm run benchmark:focused
+```
+
+```powershell
+$env:BENCHMARK_MATRIX = 'depth-ordering'
+npm run benchmark:focused
+```
+
 A completed run can be summarized with:
 
 ```sh
 npm run analyze -- results/runs/<run-id>
 ```
 
-Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
+Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. For the depth matrix it evaluates the preregistered numeric gates, keeps front-to-back versus reverse under causal contrasts, and labels comparisons against atomic fixed-slice as contextual whole-mechanism comparisons. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
 
 The benchmark requires a WebGPU-capable device and records the actual adapter, backend, browser, timestamp support, and timer precision with each run. The browser smoke additionally requires zero-tolerance decoded-RGBA screenshot agreement among draw all, fixed-slice, and the per-bucket representation control at 4, 32, and 128 buckets, reports PNG byte equality as a diagnostic, verifies 32- and 128-bucket timed replay, and checks repeated strategy teardown against the renderer's resource and cache baseline. Results from a busy or changing device should be retained as development evidence rather than used for performance claims.
 

@@ -2,6 +2,24 @@ import { createHash } from 'node:crypto';
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const GEOMETRY_ATTRIBUTE_NAMES = Object.freeze(['normal', 'position', 'uv']);
+const DEPTH_BIN_COUNT = 8;
+const RENDER_PARITY_WIDTH = 1280;
+const RENDER_PARITY_HEIGHT = 720;
+const RENDER_PARITY_PIXEL_COUNT = RENDER_PARITY_WIDTH * RENDER_PARITY_HEIGHT;
+const RENDER_PARITY_BYTE_LENGTH = RENDER_PARITY_PIXEL_COUNT * 4;
+const DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS = 8;
+const DEPTH_MODE_PROTOCOLS = Object.freeze({
+  'fixed-slice-depth-front-to-back': Object.freeze({
+    order: 'front-to-back',
+    traversal: Object.freeze([0, 1, 2, 3, 4, 5, 6, 7]),
+    reverseOrderUniformValue: false,
+  }),
+  'fixed-slice-depth-reverse': Object.freeze({
+    order: 'reverse',
+    traversal: Object.freeze([7, 6, 5, 4, 3, 2, 1, 0]),
+    reverseOrderUniformValue: true,
+  }),
+});
 const SCENARIO_ARRAY_SCHEMA = Object.freeze({
   bucketCounts: Object.freeze({ arrayType: 'Uint32Array', length: ({ bucketCount }) => bucketCount }),
   bucketBases: Object.freeze({ arrayType: 'Uint32Array', length: ({ bucketCount }) => bucketCount }),
@@ -53,6 +71,21 @@ function requireSha256(value, label, reasons) {
 
 function requireEqual(actual, expected, label, reasons) {
   if (actual !== expected) reasons.push(`${label} is ${JSON.stringify(actual)}; expected ${JSON.stringify(expected)}`);
+}
+
+function requireExactArray(actual, expected, label, reasons) {
+  if (!Array.isArray(actual) || actual.length !== expected.length) {
+    reasons.push(`${label} has the wrong length`);
+    return false;
+  }
+  for (let index = 0; index < expected.length; index += 1) {
+    requireEqual(actual[index], expected[index], `${label}[${index}]`, reasons);
+  }
+  return true;
+}
+
+function depthModeProtocol(modeId) {
+  return DEPTH_MODE_PROTOCOLS[modeId] ?? null;
 }
 
 export function sha256Json(value) {
@@ -221,8 +254,11 @@ export function validateScenarioManifest(manifest, {
   bucketCount,
   visibilityFraction,
   seed,
+  layout = 'baseline',
 } = {}) {
   const reasons = [];
+  const hasLayoutExtension = isRecord(manifest)
+    && (Object.hasOwn(manifest, 'layout') || Object.hasOwn(manifest, 'depthBinRange'));
   const rootKeys = [
     'schemaVersion',
     'generator',
@@ -235,6 +271,7 @@ export function validateScenarioManifest(manifest, {
     'arrays',
     'sha256',
   ];
+  if (hasLayoutExtension) rootKeys.splice(6, 0, 'layout', 'depthBinRange');
   if (!exactKeys(manifest, rootKeys, 'scenario manifest', reasons)) return reasons;
   requireEqual(manifest.schemaVersion, 1, 'scenario manifest schemaVersion', reasons);
   requireEqual(manifest.generator, 'createFixedSubsetScenario', 'scenario manifest generator', reasons);
@@ -247,6 +284,26 @@ export function validateScenarioManifest(manifest, {
     'scenario manifest visibilityFraction',
     reasons,
   );
+  if (hasLayoutExtension) {
+    if (!['baseline', 'low-overlap', 'high-overlap'].includes(manifest.layout)) {
+      reasons.push('scenario manifest layout is unsupported');
+    }
+    requireEqual(manifest.layout, layout, 'scenario manifest layout', reasons);
+    if (manifest.depthBinRange !== null) {
+      if (exactKeys(
+        manifest.depthBinRange,
+        ['near', 'far'],
+        'scenario manifest depthBinRange',
+        reasons,
+      )) {
+        if (!Number.isFinite(manifest.depthBinRange.near)
+          || !Number.isFinite(manifest.depthBinRange.far)
+          || manifest.depthBinRange.far <= manifest.depthBinRange.near) {
+          reasons.push('scenario manifest depthBinRange is not a finite increasing range');
+        }
+      }
+    }
+  }
   const expectedVisibleCount = Math.round(objectCount * visibilityFraction);
   requireEqual(
     manifest.expectedVisibleCount,
@@ -290,6 +347,10 @@ export function validateScenarioManifest(manifest, {
       objectCount: manifest.objectCount,
       bucketCount: manifest.bucketCount,
       visibilityFraction: manifest.visibilityFraction,
+      ...(hasLayoutExtension ? {
+        layout: manifest.layout,
+        depthBinRange: manifest.depthBinRange,
+      } : {}),
       expectedVisibleCount: manifest.expectedVisibleCount,
       expectedVisibleIdsCanonicalSha256: manifest.expectedVisibleIdsCanonicalSha256,
       arrays: canonicalArrays,
@@ -302,8 +363,13 @@ export function validateScenarioManifest(manifest, {
 }
 
 function expectedStrategyShape(modeId, bucketCount, objectCount) {
+  const depthProtocol = depthModeProtocol(modeId);
   const shared = {
-    kind: modeId === 'draw-all' ? 'draw-all-reference' : `${modeId}-exact-membership`,
+    kind: modeId === 'draw-all'
+      ? 'draw-all-reference'
+      : depthProtocol
+        ? `${modeId}-exact-membership-and-depth-order`
+        : `${modeId}-exact-membership`,
     configuredDrawCommands: bucketCount,
     configuredSubmittedInstances: modeId === 'draw-all' ? objectCount : null,
   };
@@ -324,6 +390,18 @@ function expectedStrategyShape(modeId, bucketCount, objectCount) {
       compute: true,
       configuredRenderObjects: bucketCount,
       configuredComputeDispatches: 2,
+      configuredComputeSubmissions: 1,
+    },
+    'fixed-slice-depth-front-to-back': {
+      compute: true,
+      configuredRenderObjects: 1,
+      configuredComputeDispatches: 4,
+      configuredComputeSubmissions: 1,
+    },
+    'fixed-slice-depth-reverse': {
+      compute: true,
+      configuredRenderObjects: 1,
+      configuredComputeDispatches: 4,
       configuredComputeSubmissions: 1,
     },
     'three-blocks-current': {
@@ -375,6 +453,261 @@ function commandSemanticRecord(validation, modeId) {
   };
 }
 
+function validateDepthBinEvidence(depthBins, {
+  modeId,
+  bucketCount,
+  expectedVisibleCount,
+  membershipDigests,
+  commandValidation,
+}, reasons) {
+  const protocol = depthModeProtocol(modeId);
+  if (!protocol) return;
+  if (!exactKeys(depthBins, [
+    'pass',
+    'errors',
+    'binCount',
+    'order',
+    'traversal',
+    'expectedCounts',
+    'actualCounts',
+    'expectedStarts',
+    'actualStarts',
+    'expectedBucketTotals',
+    'commandCounts',
+    'physicalBinSequenceCommitment',
+  ], 'depth-bin validation', reasons)) return;
+
+  requireEqual(depthBins.pass, true, 'depth-bin validation pass', reasons);
+  if (!Array.isArray(depthBins.errors) || depthBins.errors.length !== 0) {
+    reasons.push('depth-bin validation errors is not empty');
+  }
+  requireEqual(depthBins.binCount, DEPTH_BIN_COUNT, 'depth-bin count', reasons);
+  requireEqual(depthBins.order, protocol.order, 'depth-bin order', reasons);
+  requireExactArray(depthBins.traversal, protocol.traversal, 'depth-bin traversal', reasons);
+
+  const sequence = depthBins.physicalBinSequenceCommitment;
+  if (exactKeys(sequence, [
+    'schemaVersion',
+    'hashAlgorithm',
+    'encoding',
+    'bucketCount',
+    'binCount',
+    'recordCount',
+    'survivorCount',
+    'sha256',
+  ], 'physical-bin sequence commitment', reasons)) {
+    requireEqual(sequence.schemaVersion, 1, 'physical-bin sequence schemaVersion', reasons);
+    requireEqual(sequence.hashAlgorithm, 'sha256', 'physical-bin sequence hash algorithm', reasons);
+    requireEqual(
+      sequence.encoding,
+      'bucket-major-physical-bin-major-tagged-uint32-little-endian',
+      'physical-bin sequence encoding',
+      reasons,
+    );
+    requireEqual(sequence.bucketCount, bucketCount, 'physical-bin sequence bucket count', reasons);
+    requireEqual(sequence.binCount, DEPTH_BIN_COUNT, 'physical-bin sequence bin count', reasons);
+    requireEqual(
+      sequence.recordCount,
+      bucketCount * DEPTH_BIN_COUNT,
+      'physical-bin sequence record count',
+      reasons,
+    );
+    requireEqual(
+      sequence.survivorCount,
+      expectedVisibleCount,
+      'physical-bin sequence survivor count',
+      reasons,
+    );
+    requireSha256(sequence.sha256, 'physical-bin sequence sha256', reasons);
+  }
+
+  const binRecordCount = bucketCount * DEPTH_BIN_COUNT;
+  const arrayFields = [
+    ['expectedCounts', binRecordCount],
+    ['actualCounts', binRecordCount],
+    ['expectedStarts', binRecordCount],
+    ['actualStarts', binRecordCount],
+    ['expectedBucketTotals', bucketCount],
+    ['commandCounts', bucketCount],
+  ];
+  let arraysWellFormed = true;
+  for (const [field, expectedLength] of arrayFields) {
+    const value = depthBins[field];
+    if (!Array.isArray(value) || value.length !== expectedLength) {
+      reasons.push(`depth-bin ${field} has the wrong length`);
+      arraysWellFormed = false;
+      continue;
+    }
+    for (let index = 0; index < value.length; index += 1) {
+      if (!isNonnegativeInteger(value[index]) || value[index] > 0xffff_ffff) {
+        reasons.push(`depth-bin ${field}[${index}] is not a uint32`);
+        arraysWellFormed = false;
+      }
+    }
+  }
+  if (!arraysWellFormed) return;
+
+  let aggregateCount = 0;
+  for (let bucket = 0; bucket < bucketCount; bucket += 1) {
+    let cursor = 0;
+    for (const physicalBin of protocol.traversal) {
+      const binIndex = bucket * DEPTH_BIN_COUNT + physicalBin;
+      requireEqual(
+        depthBins.actualCounts[binIndex],
+        depthBins.expectedCounts[binIndex],
+        `depth-bin bucket ${bucket} bin ${physicalBin} actual count`,
+        reasons,
+      );
+      requireEqual(
+        depthBins.expectedStarts[binIndex],
+        cursor,
+        `depth-bin bucket ${bucket} bin ${physicalBin} expected start`,
+        reasons,
+      );
+      requireEqual(
+        depthBins.actualStarts[binIndex],
+        cursor,
+        `depth-bin bucket ${bucket} bin ${physicalBin} actual start`,
+        reasons,
+      );
+      cursor += depthBins.expectedCounts[binIndex];
+      if (cursor > 0xffff_ffff) {
+        reasons.push(`depth-bin bucket ${bucket} count exceeds uint32 capacity`);
+      }
+    }
+    requireEqual(
+      depthBins.expectedBucketTotals[bucket],
+      cursor,
+      `depth-bin bucket ${bucket} recomputed total`,
+      reasons,
+    );
+    requireEqual(
+      depthBins.commandCounts[bucket],
+      cursor,
+      `depth-bin bucket ${bucket} command total`,
+      reasons,
+    );
+    requireEqual(
+      cursor,
+      membershipDigests?.perBucket?.[bucket]?.expected?.count,
+      `depth-bin bucket ${bucket} membership total`,
+      reasons,
+    );
+    requireEqual(
+      cursor,
+      commandValidation?.records?.[bucket]?.actual?.instanceCount,
+      `depth-bin bucket ${bucket} native-command total`,
+      reasons,
+    );
+    aggregateCount += cursor;
+  }
+  requireEqual(aggregateCount, expectedVisibleCount, 'depth-bin aggregate count', reasons);
+}
+
+export function physicalBinSequenceIdentity(validation) {
+  const sequence = validation?.depthBins?.physicalBinSequenceCommitment;
+  return typeof sequence?.sha256 === 'string' && /^[0-9a-f]{64}$/.test(sequence.sha256)
+    ? sequence.sha256
+    : null;
+}
+
+function validateDepthRepresentation(representation, {
+  modeId,
+  objectCount,
+  bucketCount,
+  scenarioManifest,
+}, reasons) {
+  const protocol = depthModeProtocol(modeId);
+  if (!protocol) return;
+  if (!exactKeys(representation, [
+    'kind',
+    'depthBinCount',
+    'depthOrder',
+    'binTraversal',
+    'depthBinRange',
+    'reverseOrderUniformValue',
+    'bundleRecordCallbackCount',
+    'meshCount',
+    'geometryIdentityCount',
+    'materialIdentityCount',
+    'commandCount',
+    'zeroFirstInstanceCount',
+    'computeDispatchCount',
+    'computeDispatchWorkItems',
+  ], 'depth-binned representation', reasons)) return;
+
+  requireEqual(
+    representation.kind,
+    'single-merged-geometry-depth-binned-fixed-slice',
+    'depth-binned representation kind',
+    reasons,
+  );
+  requireEqual(representation.depthBinCount, DEPTH_BIN_COUNT, 'representation depth-bin count', reasons);
+  requireEqual(representation.depthOrder, protocol.order, 'representation depth order', reasons);
+  requireExactArray(
+    representation.binTraversal,
+    protocol.traversal,
+    'representation bin traversal',
+    reasons,
+  );
+  requireEqual(
+    representation.reverseOrderUniformValue,
+    protocol.reverseOrderUniformValue,
+    'representation reverse-order uniform',
+    reasons,
+  );
+
+  const signedRange = scenarioManifest?.depthBinRange;
+  if (!isRecord(scenarioManifest)) {
+    reasons.push('depth-binned validation scenario manifest is missing');
+  } else if (!isRecord(signedRange)) {
+    reasons.push('depth-binned scenario manifest depthBinRange is missing');
+  }
+  if (exactKeys(
+    representation.depthBinRange,
+    ['near', 'far'],
+    'depth-binned representation depthBinRange',
+    reasons,
+  )) {
+    if (!Number.isFinite(representation.depthBinRange.near)
+      || !Number.isFinite(representation.depthBinRange.far)
+      || representation.depthBinRange.far <= representation.depthBinRange.near) {
+      reasons.push('depth-binned representation depthBinRange is not a finite increasing range');
+    }
+    requireEqual(
+      representation.depthBinRange.near,
+      signedRange?.near,
+      'representation depth range near versus scenario manifest',
+      reasons,
+    );
+    requireEqual(
+      representation.depthBinRange.far,
+      signedRange?.far,
+      'representation depth range far versus scenario manifest',
+      reasons,
+    );
+  }
+
+  requireEqual(representation.bundleRecordCallbackCount, 1, 'depth-binned bundle-record callback count', reasons);
+  requireEqual(representation.meshCount, 1, 'depth-binned mesh count', reasons);
+  requireEqual(representation.geometryIdentityCount, 1, 'depth-binned geometry identity count', reasons);
+  requireEqual(representation.materialIdentityCount, 1, 'depth-binned material identity count', reasons);
+  requireEqual(representation.commandCount, bucketCount, 'depth-binned command count', reasons);
+  requireEqual(
+    representation.zeroFirstInstanceCount,
+    bucketCount,
+    'depth-binned zero-first-instance count',
+    reasons,
+  );
+  requireEqual(representation.computeDispatchCount, 4, 'depth-binned compute dispatch count', reasons);
+  requireExactArray(
+    representation.computeDispatchWorkItems,
+    [bucketCount * DEPTH_BIN_COUNT, objectCount, bucketCount, bucketCount],
+    'depth-binned compute dispatch work items',
+    reasons,
+  );
+}
+
 export function validateExactValidation(validation, {
   modeId,
   objectCount,
@@ -382,6 +715,7 @@ export function validateExactValidation(validation, {
   expectedVisibleCount,
   expectedVisibleIdsCanonicalSha256,
   geometryManifest,
+  scenarioManifest = null,
 } = {}) {
   const reasons = [];
   const shape = expectedStrategyShape(modeId, bucketCount, null);
@@ -506,6 +840,8 @@ export function validateExactValidation(validation, {
         requireEqual(record.bucket, bucket, `${label}.bucket`, reasons);
         const expectedFirstIndex = modeId === 'fixed-slice'
           || modeId === 'fixed-slice-per-bucket'
+          || modeId === 'fixed-slice-depth-front-to-back'
+          || modeId === 'fixed-slice-depth-reverse'
           || modeId === 'three-blocks-historical'
           ? cumulativeFirstIndex
           : 0;
@@ -569,7 +905,9 @@ export function validateExactValidation(validation, {
     && (!Array.isArray(validation.readbackErrors) || validation.readbackErrors.length !== 0)) {
     reasons.push('validation readbackErrors is not empty');
   }
-  if (modeId === 'fixed-slice' || modeId === 'fixed-slice-per-bucket') {
+  if (modeId === 'fixed-slice'
+    || modeId === 'fixed-slice-per-bucket'
+    || depthModeProtocol(modeId)) {
     requireEqual(validation.overflow, 0, `${modeId} overflow`, reasons);
   }
   if (modeId === 'fixed-slice-per-bucket') {
@@ -622,6 +960,21 @@ export function validateExactValidation(validation, {
       );
     }
   }
+  if (depthModeProtocol(modeId)) {
+    validateDepthBinEvidence(validation.depthBins, {
+      modeId,
+      bucketCount,
+      expectedVisibleCount,
+      membershipDigests: digests,
+      commandValidation: command,
+    }, reasons);
+    validateDepthRepresentation(validation.representation, {
+      modeId,
+      objectCount,
+      bucketCount,
+      scenarioManifest,
+    }, reasons);
+  }
 
   const semanticRecord = {
     kind: validation.kind,
@@ -633,6 +986,7 @@ export function validateExactValidation(validation, {
       : null,
     overflow: validation.overflow ?? null,
     readbackErrors: validation.readbackErrors ?? null,
+    ...(depthModeProtocol(modeId) ? { depthBins: validation.depthBins ?? null } : {}),
     representation: validation.representation ?? null,
   };
   return {
@@ -641,8 +995,436 @@ export function validateExactValidation(validation, {
   };
 }
 
+function validateRenderParityChannel(record, label, expected, reasons) {
+  if (!exactKeys(
+    record,
+    ['format', 'arrayType', 'byteLength', 'sha256'],
+    label,
+    reasons,
+  )) return;
+  requireEqual(record.format, expected.format, `${label}.format`, reasons);
+  requireEqual(record.arrayType, expected.arrayType, `${label}.arrayType`, reasons);
+  requireEqual(record.byteLength, RENDER_PARITY_BYTE_LENGTH, `${label}.byteLength`, reasons);
+  requireSha256(record.sha256, `${label}.sha256`, reasons);
+}
+
+/**
+ * Validate the depth-ordering matrix's exact offscreen parity capture. The
+ * embedded exact validation is deliberately checked with the same fixture and
+ * scenario manifests as the surrounding trial so a valid-looking capture
+ * cannot be transplanted from another workload.
+ */
+export function validateRenderParity(parity, {
+  spec,
+  geometryManifest,
+  scenarioManifest,
+} = {}) {
+  const reasons = [];
+  if (!isRecord(parity)) return ['exact render-parity evidence is missing'];
+
+  requireEqual(parity.schemaVersion, 1, 'exact render-parity schemaVersion', reasons);
+  requireEqual(
+    parity.kind,
+    'fixed-camera-offscreen-exact-render-parity',
+    'exact render-parity kind',
+    reasons,
+  );
+  requireEqual(parity.pass, true, 'exact render-parity pass', reasons);
+  requireEqual(parity.captures, 2, 'exact render-parity capture count', reasons);
+  requireEqual(parity.width, RENDER_PARITY_WIDTH, 'exact render-parity width', reasons);
+  requireEqual(parity.height, RENDER_PARITY_HEIGHT, 'exact render-parity height', reasons);
+  requireEqual(
+    parity.reversedDepthBuffer,
+    true,
+    'exact render-parity reversedDepthBuffer',
+    reasons,
+  );
+  if (!isRecord(parity.material)) reasons.push('exact render-parity material record is missing');
+
+  const stability = parity.stability;
+  if (!isRecord(stability)) {
+    reasons.push('exact render-parity stability record is missing');
+  } else {
+    requireEqual(stability.pass, true, 'exact render-parity stability pass', reasons);
+    if (!exactKeys(
+      stability.first,
+      ['colorSha256', 'depthSha256', 'objectIdSha256'],
+      'exact render-parity stability.first',
+      reasons,
+    )) {
+      // exactKeys records the structural rejection.
+    }
+    if (!exactKeys(
+      stability.firstCapture,
+      ['color', 'depth', 'objectId'],
+      'exact render-parity stability.firstCapture',
+      reasons,
+    )) {
+      // exactKeys records the structural rejection.
+    }
+  }
+
+  const channels = Object.freeze({
+    color: Object.freeze({ format: 'rgba8unorm', arrayType: 'Uint8Array' }),
+    depth: Object.freeze({ format: 'depth32float', arrayType: 'Float32Array' }),
+    objectId: Object.freeze({
+      format: 'rgba8unorm-object-id-plus-one',
+      arrayType: 'Uint8Array',
+    }),
+  });
+  for (const [name, expected] of Object.entries(channels)) {
+    const label = `exact render-parity ${name}`;
+    validateRenderParityChannel(parity[name], label, expected, reasons);
+
+    const firstCapture = stability?.firstCapture?.[name];
+    validateRenderParityChannel(
+      firstCapture,
+      `exact render-parity stability.firstCapture.${name}`,
+      expected,
+      reasons,
+    );
+    if (isRecord(parity[name]) && isRecord(firstCapture)) {
+      for (const field of ['format', 'arrayType', 'byteLength', 'sha256']) {
+        requireEqual(
+          firstCapture[field],
+          parity[name][field],
+          `exact render-parity ${name} first-capture ${field}`,
+          reasons,
+        );
+      }
+    }
+    requireEqual(
+      stability?.first?.[`${name}Sha256`],
+      parity[name]?.sha256,
+      `exact render-parity ${name} stability digest`,
+      reasons,
+    );
+  }
+
+  const objectIdValidation = parity.objectIdValidation;
+  if (exactKeys(objectIdValidation, [
+    'pass',
+    'encoding',
+    'backgroundPixels',
+    'coveredPixels',
+    'outOfRangePixels',
+    'nonVisiblePixels',
+  ], 'exact render-parity objectIdValidation', reasons)) {
+    requireEqual(objectIdValidation.pass, true, 'object-ID validation pass', reasons);
+    requireEqual(
+      objectIdValidation.encoding,
+      'rgb24-object-id-plus-one-zero-background',
+      'object-ID validation encoding',
+      reasons,
+    );
+    if (!isNonnegativeInteger(objectIdValidation.backgroundPixels)) {
+      reasons.push('object-ID validation backgroundPixels is not a nonnegative integer');
+    }
+    if (!isPositiveInteger(objectIdValidation.coveredPixels)) {
+      reasons.push('object-ID validation coveredPixels is not a positive integer');
+    }
+    requireEqual(objectIdValidation.outOfRangePixels, 0, 'object-ID out-of-range pixels', reasons);
+    requireEqual(objectIdValidation.nonVisiblePixels, 0, 'object-ID non-visible pixels', reasons);
+    if (isNonnegativeInteger(objectIdValidation.backgroundPixels)
+      && isNonnegativeInteger(objectIdValidation.coveredPixels)) {
+      requireEqual(
+        objectIdValidation.backgroundPixels + objectIdValidation.coveredPixels,
+        RENDER_PARITY_PIXEL_COUNT,
+        'object-ID classified pixel total',
+        reasons,
+      );
+    }
+  }
+
+  const snapshotCheck = validateExactValidation(parity.snapshotValidation, {
+    modeId: spec?.modeId,
+    objectCount: spec?.objectCount,
+    bucketCount: spec?.bucketCount,
+    expectedVisibleCount: scenarioManifest?.expectedVisibleCount,
+    expectedVisibleIdsCanonicalSha256:
+      scenarioManifest?.expectedVisibleIdsCanonicalSha256,
+    geometryManifest,
+    scenarioManifest,
+  });
+  reasons.push(...snapshotCheck.rejectionReasons.map(
+    (reason) => `render-parity snapshot: ${reason}`,
+  ));
+
+  return [...new Set(reasons)];
+}
+
+export function renderParityIdentity(parity) {
+  return sha256Json({
+    width: parity?.width,
+    height: parity?.height,
+    reversedDepthBuffer: parity?.reversedDepthBuffer,
+    material: parity?.material,
+    color: parity?.color,
+    depth: parity?.depth,
+    objectId: parity?.objectId,
+    objectIdValidation: parity?.objectIdValidation,
+    membershipSha256:
+      parity?.snapshotValidation?.membershipDigests?.actual?.sha256 ?? null,
+  });
+}
+
+/**
+ * Bind depth-ordering protocol metadata to the renderer facts recorded by the
+ * page. Other benchmark matrices intentionally retain their legacy contract.
+ */
+export function validateBenchmarkProtocolEnvironment(protocol, pageEnvironment) {
+  if (protocol?.matrixKind !== 'depth-ordering') return [];
+
+  const reasons = [];
+  requireEqual(
+    protocol.reversedDepthBuffer,
+    true,
+    'depth-ordering protocol reversedDepthBuffer',
+    reasons,
+  );
+  requireEqual(
+    protocol.minimumStorageBuffersPerShaderStage,
+    DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS,
+    'depth-ordering protocol minimumStorageBuffersPerShaderStage',
+    reasons,
+  );
+  if (!isRecord(pageEnvironment)) {
+    reasons.push('depth-ordering benchmark page environment is missing');
+  } else {
+    requireEqual(
+      pageEnvironment.rendererReversedDepthBuffer,
+      true,
+      'depth-ordering page rendererReversedDepthBuffer',
+      reasons,
+    );
+    if (!Number.isInteger(pageEnvironment.maxStorageBuffersPerShaderStage)
+      || pageEnvironment.maxStorageBuffersPerShaderStage
+        < DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS) {
+      reasons.push(
+        `depth-ordering page maxStorageBuffersPerShaderStage must be an integer >= ${DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS}`,
+      );
+    }
+  }
+  return [...new Set(reasons)];
+}
+
 function finiteNonnegative(value) {
   return Number.isFinite(value) && value >= 0;
+}
+
+function validateDepthCompletionInvariant(invariant, {
+  modeId,
+  objectCount,
+  bucketCount,
+  validation,
+  scenarioManifest,
+}, reasons) {
+  const protocol = depthModeProtocol(modeId);
+  if (!protocol) return;
+  if (!exactKeys(invariant, [
+    'pass',
+    'kind',
+    'depthBinCount',
+    'depthOrder',
+    'binTraversal',
+    'depthBinRange',
+    'reverseOrderUniformValue',
+    'bundleRecordCallbackCountAtTimingStart',
+    'bundleRecordCallbackCountAtTimingEnd',
+    'meshCount',
+    'geometryIdentityCount',
+    'materialIdentityCount',
+    'commandCount',
+    'zeroFirstInstanceCount',
+    'computeDispatchCount',
+    'computeDispatchWorkItems',
+  ], 'depth-binned completion invariant', reasons)) return;
+
+  const representation = validation?.representation;
+  requireEqual(invariant.pass, true, 'depth-binned completion invariant pass', reasons);
+  requireEqual(
+    invariant.kind,
+    'depth-binned-static-bundle-invariant',
+    'depth-binned completion invariant kind',
+    reasons,
+  );
+  requireEqual(invariant.depthBinCount, DEPTH_BIN_COUNT, 'completion depth-bin count', reasons);
+  requireEqual(invariant.depthOrder, protocol.order, 'completion depth order', reasons);
+  requireExactArray(invariant.binTraversal, protocol.traversal, 'completion bin traversal', reasons);
+  requireEqual(
+    invariant.reverseOrderUniformValue,
+    protocol.reverseOrderUniformValue,
+    'completion reverse-order uniform',
+    reasons,
+  );
+  if (exactKeys(
+    invariant.depthBinRange,
+    ['near', 'far'],
+    'depth-binned completion depthBinRange',
+    reasons,
+  )) {
+    requireEqual(
+      invariant.depthBinRange.near,
+      scenarioManifest?.depthBinRange?.near,
+      'completion depth range near versus scenario manifest',
+      reasons,
+    );
+    requireEqual(
+      invariant.depthBinRange.far,
+      scenarioManifest?.depthBinRange?.far,
+      'completion depth range far versus scenario manifest',
+      reasons,
+    );
+    requireEqual(
+      invariant.depthBinRange.near,
+      representation?.depthBinRange?.near,
+      'completion depth range near versus validation',
+      reasons,
+    );
+    requireEqual(
+      invariant.depthBinRange.far,
+      representation?.depthBinRange?.far,
+      'completion depth range far versus validation',
+      reasons,
+    );
+  }
+  requireEqual(
+    invariant.bundleRecordCallbackCountAtTimingStart,
+    1,
+    'depth-binned timing-start bundle-record callback count',
+    reasons,
+  );
+  requireEqual(
+    invariant.bundleRecordCallbackCountAtTimingStart,
+    representation?.bundleRecordCallbackCount,
+    'depth-binned timing-start versus validation bundle-record callback count',
+    reasons,
+  );
+  requireEqual(
+    invariant.bundleRecordCallbackCountAtTimingEnd,
+    invariant.bundleRecordCallbackCountAtTimingStart,
+    'depth-binned timing-end bundle-record callback count',
+    reasons,
+  );
+  for (const field of ['meshCount', 'geometryIdentityCount', 'materialIdentityCount']) {
+    requireEqual(invariant[field], 1, `completion ${field}`, reasons);
+    requireEqual(invariant[field], representation?.[field], `completion ${field} versus validation`, reasons);
+  }
+  requireEqual(invariant.commandCount, bucketCount, 'completion command count', reasons);
+  requireEqual(
+    invariant.commandCount,
+    representation?.commandCount,
+    'completion command count versus validation',
+    reasons,
+  );
+  requireEqual(
+    invariant.zeroFirstInstanceCount,
+    bucketCount,
+    'completion zero-first-instance count',
+    reasons,
+  );
+  requireEqual(
+    invariant.zeroFirstInstanceCount,
+    representation?.zeroFirstInstanceCount,
+    'completion zero-first-instance count versus validation',
+    reasons,
+  );
+  requireEqual(invariant.computeDispatchCount, 4, 'completion compute dispatch count', reasons);
+  requireEqual(
+    invariant.computeDispatchCount,
+    representation?.computeDispatchCount,
+    'completion compute dispatch count versus validation',
+    reasons,
+  );
+  const expectedWorkItems = [
+    bucketCount * DEPTH_BIN_COUNT,
+    objectCount,
+    bucketCount,
+    bucketCount,
+  ];
+  requireExactArray(
+    invariant.computeDispatchWorkItems,
+    expectedWorkItems,
+    'completion compute dispatch work items',
+    reasons,
+  );
+  requireExactArray(
+    invariant.computeDispatchWorkItems,
+    representation?.computeDispatchWorkItems ?? [],
+    'completion versus validation compute dispatch work items',
+    reasons,
+  );
+}
+
+function validateAtomicFixedSliceCompletionInvariant(invariant, reasons) {
+  if (!exactKeys(invariant, [
+    'pass',
+    'kind',
+    'bundleGroupStatic',
+    'bundleRecordCallbackCountAtTimingStart',
+    'bundleRecordCallbackCountAtTimingEnd',
+    'meshCount',
+    'geometryIdentityCount',
+    'materialIdentityCount',
+  ], 'atomic fixed-slice completion invariant', reasons)) return;
+
+  requireEqual(invariant.pass, true, 'atomic fixed-slice completion invariant pass', reasons);
+  requireEqual(
+    invariant.kind,
+    'atomic-fixed-slice-static-bundle-invariant',
+    'atomic fixed-slice completion invariant kind',
+    reasons,
+  );
+  requireEqual(invariant.bundleGroupStatic, true, 'atomic fixed-slice static BundleGroup', reasons);
+  requireEqual(
+    invariant.bundleRecordCallbackCountAtTimingStart,
+    1,
+    'atomic fixed-slice timing-start bundle-record callback count',
+    reasons,
+  );
+  requireEqual(
+    invariant.bundleRecordCallbackCountAtTimingEnd,
+    invariant.bundleRecordCallbackCountAtTimingStart,
+    'atomic fixed-slice timing-end bundle-record callback count',
+    reasons,
+  );
+  requireEqual(invariant.meshCount, 1, 'atomic fixed-slice completion meshCount', reasons);
+  requireEqual(
+    invariant.geometryIdentityCount,
+    1,
+    'atomic fixed-slice completion geometryIdentityCount',
+    reasons,
+  );
+  requireEqual(
+    invariant.materialIdentityCount,
+    1,
+    'atomic fixed-slice completion materialIdentityCount',
+    reasons,
+  );
+}
+
+export function validateDepthOrderingCompletionInvariant(invariant, {
+  modeId,
+  objectCount,
+  bucketCount,
+  validation,
+  scenarioManifest,
+} = {}) {
+  const reasons = [];
+  if (depthModeProtocol(modeId)) {
+    validateDepthCompletionInvariant(invariant, {
+      modeId,
+      objectCount,
+      bucketCount,
+      validation,
+      scenarioManifest,
+    }, reasons);
+  } else if (modeId === 'fixed-slice') {
+    validateAtomicFixedSliceCompletionInvariant(invariant, reasons);
+  } else {
+    reasons.push(`unsupported depth-ordering completion mode ${JSON.stringify(modeId)}`);
+  }
+  return [...new Set(reasons)];
 }
 
 export function validateTrialRows(spec, rows, pageSummary, validation, scenarioManifest, {
@@ -652,6 +1434,9 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
 } = {}) {
   const reasons = [];
   const shape = expectedStrategyShape(spec.modeId, spec.bucketCount, spec.objectCount);
+  const depthProtocol = depthModeProtocol(spec.modeId);
+  const depthOrderingTrial = depthProtocol !== null
+    || ['high-overlap', 'low-overlap'].includes(spec.layout);
   if (!shape) return [`unsupported modeId ${JSON.stringify(spec.modeId)}`];
   if (!Array.isArray(rows)) return ['timed rows are not an array'];
   if (rows.length !== measuredFrames) {
@@ -667,6 +1452,64 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
   }
   if (typeof pageSummary?.classification !== 'string' || pageSummary.classification.length === 0) {
     reasons.push('page summary timestamp classification is missing');
+  }
+  if (depthOrderingTrial) {
+    if (!['high-overlap', 'low-overlap'].includes(spec.layout)) {
+      reasons.push('depth-ordering spec layout is unsupported');
+    }
+    if (!Array.isArray(spec.layoutOrder) || spec.layoutOrder.length !== 2
+      || new Set(spec.layoutOrder).size !== 2
+      || !spec.layoutOrder.includes('high-overlap')
+      || !spec.layoutOrder.includes('low-overlap')) {
+      reasons.push('depth-ordering spec layoutOrder is not the two-layout audit pair');
+    }
+    if (!Number.isInteger(spec.layoutOrderPosition)
+      || spec.layoutOrderPosition < 0
+      || spec.layoutOrderPosition >= (spec.layoutOrder?.length ?? 0)) {
+      reasons.push('depth-ordering spec layoutOrderPosition is invalid');
+    } else {
+      requireEqual(
+        spec.layoutOrder[spec.layoutOrderPosition],
+        spec.layout,
+        'depth-ordering spec selected layout position',
+        reasons,
+      );
+    }
+    requireEqual(
+      scenarioManifest?.layout,
+      spec.layout,
+      'depth-ordering scenario layout versus plan',
+      reasons,
+    );
+    if (!isRecord(scenarioManifest?.depthBinRange)
+      || !Number.isFinite(scenarioManifest.depthBinRange.near)
+      || !Number.isFinite(scenarioManifest.depthBinRange.far)
+      || scenarioManifest.depthBinRange.far <= scenarioManifest.depthBinRange.near) {
+      reasons.push('depth-ordering scenario manifest depthBinRange is missing or invalid');
+    }
+    if (depthProtocol) {
+      reasons.push(...validateDepthOrderingCompletionInvariant(
+        pageSummary?.completionInvariant,
+        {
+        modeId: spec.modeId,
+        objectCount: spec.objectCount,
+        bucketCount: spec.bucketCount,
+        validation,
+        scenarioManifest,
+        },
+      ));
+    } else if (spec.modeId === 'fixed-slice') {
+      reasons.push(...validateDepthOrderingCompletionInvariant(
+        pageSummary?.completionInvariant,
+        {
+          modeId: spec.modeId,
+          objectCount: spec.objectCount,
+          bucketCount: spec.bucketCount,
+          validation,
+          scenarioManifest,
+        },
+      ));
+    }
   }
   if (spec.modeId === 'fixed-slice-per-bucket') {
     const invariant = pageSummary?.completionInvariant;
@@ -737,11 +1580,22 @@ export function validateTrialRows(spec, rows, pageSummary, validation, scenarioM
       configuredComputeDispatches: shape.configuredComputeDispatches,
       configuredComputeSubmissions: shape.configuredComputeSubmissions,
       configuredSubmittedInstances: shape.configuredSubmittedInstances,
-      bundleRecordCallbackCountAtTimingStart: spec.modeId === 'fixed-slice-per-bucket'
-        ? validation?.representation?.bundleRecordCallbackCount
-        : null,
+      bundleRecordCallbackCountAtTimingStart: depthProtocol
+        ? 1
+        : depthOrderingTrial && spec.modeId === 'fixed-slice'
+          ? 1
+          : spec.modeId === 'fixed-slice-per-bucket'
+            ? validation?.representation?.bundleRecordCallbackCount
+            : null,
       timestampAvailable: true,
       frameIndex: index,
+      ...(depthOrderingTrial ? {
+        layoutOrderPosition: spec.layoutOrderPosition,
+        plannedLayoutOrder: spec.layoutOrder.join('|'),
+        scenarioLayout: spec.layout,
+        depthBinRangeNear: scenarioManifest?.depthBinRange?.near,
+        depthBinRangeFar: scenarioManifest?.depthBinRange?.far,
+      } : {}),
     };
     for (const [field, expected] of Object.entries(expectedFields)) {
       if (!(field in row)) {

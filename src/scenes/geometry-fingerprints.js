@@ -108,6 +108,13 @@ export async function fingerprintFixedSubsetScenario(scenario, seed) {
     objectCount: scenario.objectCount,
     bucketCount: scenario.bucketCount,
     visibilityFraction: scenario.visibilityFraction,
+    layout: scenario.layout ?? 'baseline',
+    depthBinRange: scenario.depthBinRange
+      ? {
+        near: scenario.depthBinRange.near,
+        far: scenario.depthBinRange.far,
+      }
+      : null,
     expectedVisibleCount: scenario.expectedVisibleCount,
     expectedVisibleIdsCanonicalSha256: await sha256CanonicalUint32(
       Uint32Array.from(scenario.expectedVisibleIds).sort(),

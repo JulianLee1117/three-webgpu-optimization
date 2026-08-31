@@ -31,6 +31,7 @@ export const TELEMETRY_CSV_FIELDS = Object.freeze([
   'repetitionIndex',
   'modeId',
   'visibilityFraction',
+  'layout',
   'phase',
   'gpuIndex',
   'gpuName',
@@ -413,6 +414,7 @@ export class NvidiaTelemetryRecorder {
       repetitionIndex: context.repetitionIndex ?? null,
       modeId: context.modeId ?? null,
       visibilityFraction: context.visibilityFraction ?? null,
+      layout: context.layout ?? null,
       phase: context.phase ?? 'unclassified',
       ...sample,
     });

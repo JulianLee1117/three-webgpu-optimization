@@ -3,6 +3,11 @@ import { readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
+import {
+  physicalBinSequenceIdentity,
+  validateDepthOrderingCompletionInvariant,
+  validateExactValidation,
+} from '../scripts/evidence-validation.mjs';
 
 const REQUIRED_RUN_ARTIFACTS = Object.freeze([
   'frames.csv',
@@ -28,6 +33,69 @@ const FIXED_SLICE_REPRESENTATION_OBJECT_COUNTS = Object.freeze([4_096, 16_384, 6
 const FIXED_SLICE_REPRESENTATION_BUCKET_COUNTS = Object.freeze([1, 4, 32, 128]);
 const FIXED_SLICE_REPRESENTATION_ORDERING =
   'six-repetition-balanced-ab-ba-with-rotated-visibility-order';
+const DEPTH_ORDERING_MATRIX = 'depth-ordering';
+const DEPTH_ORDERING_MODES = Object.freeze([
+  'fixed-slice',
+  'fixed-slice-depth-front-to-back',
+  'fixed-slice-depth-reverse',
+]);
+const DEPTH_ORDERING_LAYOUTS = Object.freeze([
+  'high-overlap',
+  'low-overlap',
+]);
+const DEPTH_ORDERING_VISIBILITIES = Object.freeze([0.99]);
+const DEPTH_ORDERING_REPETITIONS = 6;
+const DEPTH_ORDERING_WARMUP_FRAMES = 300;
+const DEPTH_ORDERING_MEASURED_FRAMES = 240;
+const DEPTH_ORDERING_OBJECT_COUNT = 65_536;
+const DEPTH_ORDERING_BUCKET_COUNT = 32;
+const DEPTH_ORDERING_BIN_COUNT = 8;
+const DEPTH_ORDERING_ORDERING =
+  'all-six-mode-permutations-with-alternating-high-low-layout-order';
+const DEPTH_ORDERING_RENDER_PARITY =
+  'same-snapshot exact validation plus two stable offscreen captures of rgba8 color, depth32float, and encoded object ID';
+const DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS = 8;
+const DEPTH_ORDERING_PARITY_WIDTH = 1280;
+const DEPTH_ORDERING_PARITY_HEIGHT = 720;
+const DEPTH_ORDERING_PARITY_BYTE_LENGTH =
+  DEPTH_ORDERING_PARITY_WIDTH * DEPTH_ORDERING_PARITY_HEIGHT * 4;
+const DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS = 6;
+const DEPTH_ORDERING_MINIMUM_DIRECTIONALLY_CONSISTENT_PAIRS = 5;
+const DEPTH_ORDERING_MATERIAL_PERCENT = 10;
+const DEPTH_ORDERING_MATERIAL_ABSOLUTE_MS = 0.10;
+const DEPTH_ORDERING_LOW_OVERLAP_MAX_REGRESSION_PERCENT = 5;
+const DEPTH_ORDERING_MODE_ORDERS = Object.freeze([
+  Object.freeze([
+    DEPTH_ORDERING_MODES[0],
+    DEPTH_ORDERING_MODES[1],
+    DEPTH_ORDERING_MODES[2],
+  ]),
+  Object.freeze([
+    DEPTH_ORDERING_MODES[1],
+    DEPTH_ORDERING_MODES[2],
+    DEPTH_ORDERING_MODES[0],
+  ]),
+  Object.freeze([
+    DEPTH_ORDERING_MODES[2],
+    DEPTH_ORDERING_MODES[0],
+    DEPTH_ORDERING_MODES[1],
+  ]),
+  Object.freeze([
+    DEPTH_ORDERING_MODES[2],
+    DEPTH_ORDERING_MODES[1],
+    DEPTH_ORDERING_MODES[0],
+  ]),
+  Object.freeze([
+    DEPTH_ORDERING_MODES[1],
+    DEPTH_ORDERING_MODES[0],
+    DEPTH_ORDERING_MODES[2],
+  ]),
+  Object.freeze([
+    DEPTH_ORDERING_MODES[0],
+    DEPTH_ORDERING_MODES[2],
+    DEPTH_ORDERING_MODES[1],
+  ]),
+]);
 const PROVENANCE_STABILITY_FIELDS = Object.freeze([
   'commit',
   'tree',
@@ -272,6 +340,8 @@ function parseFrameRecords(parsed) {
   const repetitionColumn = REPETITION_COLUMNS.find((column) => headerSet.has(column)) ?? null;
   const hasModeOrderPosition = headerSet.has('modeOrderPosition');
   const hasPlannedModeOrder = headerSet.has('plannedModeOrder');
+  const hasScenarioLayout = headerSet.has('scenarioLayout');
+  const hasLayout = headerSet.has('layout');
 
   const frames = parsed.records.map((record, index) => {
     const recordNumber = index + 2;
@@ -315,6 +385,15 @@ function parseFrameRecords(parsed) {
     const repetition = repetitionColumn === null
       ? 1
       : normalizedRepetition(record[repetitionColumn], recordNumber);
+    const scenarioLayout = hasScenarioLayout
+      ? optionalNonemptyString(record.scenarioLayout, 'scenarioLayout', recordNumber)
+      : null;
+    const layout = hasLayout
+      ? optionalNonemptyString(record.layout, 'layout', recordNumber)
+      : null;
+    if (scenarioLayout !== null && layout !== null && scenarioLayout !== layout) {
+      throw new Error(`Record ${recordNumber} has inconsistent scenarioLayout and layout values.`);
+    }
 
     const gpuPassTotalMs = finiteNumber(
       record.gpuPassTotalMs,
@@ -332,6 +411,7 @@ function parseFrameRecords(parsed) {
     return {
       modeId,
       targetVisibilityFraction,
+      layout: scenarioLayout ?? layout,
       repetition,
       modeOrderPosition: hasModeOrderPosition
         ? optionalNonnegativeInteger(record.modeOrderPosition, 'modeOrderPosition', recordNumber)
@@ -380,12 +460,13 @@ function metricP50(frames) {
 function groupFrames(frames) {
   const groups = new Map();
   for (const frame of frames) {
-    const groupKey = `${frame.modeId}\u0000${frame.targetVisibilityFraction}`;
+    const groupKey = `${frame.modeId}\u0000${frame.targetVisibilityFraction}\u0000${frame.layout ?? ''}`;
     let group = groups.get(groupKey);
     if (group === undefined) {
       group = {
         modeId: frame.modeId,
         targetVisibilityFraction: frame.targetVisibilityFraction,
+        layout: frame.layout,
         frames: [],
         trials: new Map(),
       };
@@ -406,12 +487,12 @@ function groupFrames(frames) {
       group.trials.set(key, trial);
     } else if (trial.usesCompute !== frame.usesCompute) {
       throw new Error(
-        `Mode ${frame.modeId}, visibility ${frame.targetVisibilityFraction}, repetition ${frame.repetition} mixes usesCompute values.`,
+        `Mode ${frame.modeId}, visibility ${frame.targetVisibilityFraction}, layout ${frame.layout ?? '(unspecified)'}, repetition ${frame.repetition} mixes usesCompute values.`,
       );
     } else if (trial.modeOrderPosition !== frame.modeOrderPosition
       || trial.plannedModeOrder !== frame.plannedModeOrder) {
       throw new Error(
-        `Mode ${frame.modeId}, visibility ${frame.targetVisibilityFraction}, repetition ${frame.repetition} mixes order audit values.`,
+        `Mode ${frame.modeId}, visibility ${frame.targetVisibilityFraction}, layout ${frame.layout ?? '(unspecified)'}, repetition ${frame.repetition} mixes order audit values.`,
       );
     }
     trial.frames.push(frame);
@@ -421,6 +502,7 @@ function groupFrames(frames) {
     .sort((left, right) => (
       left.modeId.localeCompare(right.modeId)
       || left.targetVisibilityFraction - right.targetVisibilityFraction
+      || String(left.layout ?? '').localeCompare(String(right.layout ?? ''))
     ))
     .map((group) => {
       const perTrialP50 = [...group.trials.values()]
@@ -440,6 +522,7 @@ function groupFrames(frames) {
       return {
         modeId: group.modeId,
         targetVisibilityFraction: group.targetVisibilityFraction,
+        ...(group.layout === null ? {} : { layout: group.layout }),
         nTrials: perTrialP50.length,
         nFrames: group.frames.length,
         perTrialP50,
@@ -553,15 +636,21 @@ function summarizeOrderStratification(pairs) {
 
 function pairedContrasts(groups, leftModeId, rightModeId) {
   const leftGroups = groups.filter((group) => group.modeId === leftModeId);
-  const rightByVisibility = new Map(
+  const rightByCell = new Map(
     groups
       .filter((group) => group.modeId === rightModeId)
-      .map((group) => [group.targetVisibilityFraction, group]),
+      .map((group) => [
+        JSON.stringify([group.targetVisibilityFraction, group.layout]),
+        group,
+      ]),
   );
 
   return leftGroups
     .map((leftGroup) => {
-      const rightGroup = rightByVisibility.get(leftGroup.targetVisibilityFraction);
+      const rightGroup = rightByCell.get(JSON.stringify([
+        leftGroup.targetVisibilityFraction,
+        leftGroup.layout,
+      ]));
       if (rightGroup === undefined) return null;
       const rightTrials = new Map(
         rightGroup.perTrialP50.map((trial) => [repetitionKey(trial.repetition), trial]),
@@ -597,6 +686,7 @@ function pairedContrasts(groups, leftModeId, rightModeId) {
 
       return {
         targetVisibilityFraction: leftGroup.targetVisibilityFraction,
+        ...(leftGroup.layout === undefined ? {} : { layout: leftGroup.layout }),
         leftModeId,
         rightModeId,
         nPairs: pairs.length,
@@ -608,12 +698,208 @@ function pairedContrasts(groups, leftModeId, rightModeId) {
       };
     })
     .filter(Boolean)
-    .sort((left, right) => left.targetVisibilityFraction - right.targetVisibilityFraction);
+    .sort((left, right) => (
+      left.targetVisibilityFraction - right.targetVisibilityFraction
+      || String(left.layout ?? '').localeCompare(String(right.layout ?? ''))
+    ));
+}
+
+function depthContrastForLayout(contrasts, layout) {
+  return contrasts.find((contrast) => contrast.layout === layout) ?? null;
+}
+
+function materialImprovementGate(contrast, metric) {
+  const observed = contrast?.medianPairedDelta?.[metric] ?? null;
+  const complete = contrast?.nPairs === DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS
+    && Number.isFinite(observed?.absoluteMs)
+    && Number.isFinite(observed?.percent);
+  return {
+    status: complete ? 'evaluated' : 'incomplete',
+    pass: complete && (
+      observed.absoluteMs <= -DEPTH_ORDERING_MATERIAL_ABSOLUTE_MS
+      || observed.percent <= -DEPTH_ORDERING_MATERIAL_PERCENT
+    ),
+    metric,
+    expectedPairs: DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS,
+    observedPairs: contrast?.nPairs ?? 0,
+    threshold: {
+      rule: 'median paired delta must be at most either threshold',
+      absoluteMs: -DEPTH_ORDERING_MATERIAL_ABSOLUTE_MS,
+      percent: -DEPTH_ORDERING_MATERIAL_PERCENT,
+    },
+    observed,
+  };
+}
+
+function noMaterialDifferenceGate(contrast, metric) {
+  const observed = contrast?.medianPairedDelta?.[metric] ?? null;
+  const complete = contrast?.nPairs === DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS
+    && Number.isFinite(observed?.absoluteMs)
+    && Number.isFinite(observed?.percent);
+  return {
+    status: complete ? 'evaluated' : 'incomplete',
+    pass: complete
+      && Math.abs(observed.absoluteMs) < DEPTH_ORDERING_MATERIAL_ABSOLUTE_MS
+      && Math.abs(observed.percent) < DEPTH_ORDERING_MATERIAL_PERCENT,
+    metric,
+    expectedPairs: DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS,
+    observedPairs: contrast?.nPairs ?? 0,
+    equivalenceBounds: {
+      rule: 'absolute median paired delta must remain strictly inside both bounds',
+      absoluteMs: DEPTH_ORDERING_MATERIAL_ABSOLUTE_MS,
+      percent: DEPTH_ORDERING_MATERIAL_PERCENT,
+    },
+    observed,
+  };
+}
+
+function maximumRegressionGate(contrast, metric) {
+  const observed = contrast?.medianPairedDelta?.[metric] ?? null;
+  const complete = contrast?.nPairs === DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS
+    && Number.isFinite(observed?.percent);
+  return {
+    status: complete ? 'evaluated' : 'incomplete',
+    pass: complete
+      && observed.percent <= DEPTH_ORDERING_LOW_OVERLAP_MAX_REGRESSION_PERCENT,
+    metric,
+    expectedPairs: DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS,
+    observedPairs: contrast?.nPairs ?? 0,
+    maximumRegressionPercent: DEPTH_ORDERING_LOW_OVERLAP_MAX_REGRESSION_PERCENT,
+    observed,
+  };
+}
+
+function absolutePositionStrata(pairs, field) {
+  return [0, 1, 2].map((position) => {
+    const selected = pairs.filter((pair) => pair.orderAudit[field] === position);
+    const medianGpuRenderDeltaMs = median(selected.map(
+      (pair) => pair.delta.gpuRenderMs.absoluteMs,
+    ));
+    return {
+      position,
+      expectedPairs: 2,
+      observedPairs: selected.length,
+      medianGpuRenderDeltaMs,
+      pass: selected.length === 2 && medianGpuRenderDeltaMs < 0,
+    };
+  });
+}
+
+function relativeOrderStrata(pairs) {
+  return ['left-first', 'right-first'].map((orderStratum) => {
+    const selected = pairs.filter(
+      (pair) => pair.orderAudit.orderStratum === orderStratum,
+    );
+    const medianGpuRenderDeltaMs = median(selected.map(
+      (pair) => pair.delta.gpuRenderMs.absoluteMs,
+    ));
+    return {
+      orderStratum,
+      expectedPairs: 3,
+      observedPairs: selected.length,
+      medianGpuRenderDeltaMs,
+      pass: selected.length === 3 && medianGpuRenderDeltaMs < 0,
+    };
+  });
+}
+
+function directionStabilityGate(contrast) {
+  const pairs = contrast?.pairs ?? [];
+  const finitePairs = pairs.filter(
+    (pair) => Number.isFinite(pair.delta.gpuRenderMs.absoluteMs),
+  );
+  const frontFasterPairs = finitePairs.filter(
+    (pair) => pair.delta.gpuRenderMs.absoluteMs < 0,
+  ).length;
+  const tiedPairs = finitePairs.filter(
+    (pair) => pair.delta.gpuRenderMs.absoluteMs === 0,
+  ).length;
+  const frontPositionStrata = absolutePositionStrata(
+    finitePairs,
+    'leftModeOrderPosition',
+  );
+  const reversePositionStrata = absolutePositionStrata(
+    finitePairs,
+    'rightModeOrderPosition',
+  );
+  const relativeStrata = relativeOrderStrata(finitePairs);
+  const complete = finitePairs.length === DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS;
+  return {
+    status: complete ? 'evaluated' : 'incomplete',
+    pass: complete
+      && frontFasterPairs >= DEPTH_ORDERING_MINIMUM_DIRECTIONALLY_CONSISTENT_PAIRS
+      && frontPositionStrata.every((stratum) => stratum.pass)
+      && reversePositionStrata.every((stratum) => stratum.pass)
+      && relativeStrata.every((stratum) => stratum.pass),
+    metric: 'gpuRenderMs',
+    expectedPairs: DEPTH_ORDERING_EXPECTED_PAIRED_REPETITIONS,
+    observedPairs: finitePairs.length,
+    minimumFrontFasterPairs:
+      DEPTH_ORDERING_MINIMUM_DIRECTIONALLY_CONSISTENT_PAIRS,
+    frontFasterPairs,
+    reverseFasterPairs: finitePairs.length - frontFasterPairs - tiedPairs,
+    tiedPairs,
+    positionRule:
+      'each absolute mode position must contain two pairs with a negative median delta',
+    relativeOrderRule:
+      'each relative-order stratum must contain three pairs with a negative median delta',
+    frontPositionStrata,
+    reversePositionStrata,
+    relativeOrderStrata: relativeStrata,
+  };
+}
+
+function evaluateDepthOrderingGates(orderingContrasts, contextualComparisons) {
+  if (orderingContrasts.length === 0 && contextualComparisons.frontToBack.length === 0) {
+    return null;
+  }
+  const highOrdering = depthContrastForLayout(orderingContrasts, 'high-overlap');
+  const lowOrdering = depthContrastForLayout(orderingContrasts, 'low-overlap');
+  const highFrontVsAtomic = depthContrastForLayout(
+    contextualComparisons.frontToBack,
+    'high-overlap',
+  );
+  const lowFrontVsAtomic = depthContrastForLayout(
+    contextualComparisons.frontToBack,
+    'low-overlap',
+  );
+  const gates = {
+    highOverlapOrderingBenefit: materialImprovementGate(
+      highOrdering,
+      'gpuRenderMs',
+    ),
+    highOverlapDirectionStability: directionStabilityGate(highOrdering),
+    lowOverlapNegativeControl: noMaterialDifferenceGate(
+      lowOrdering,
+      'gpuRenderMs',
+    ),
+    highOverlapFrontVsAtomicWholeMechanism: materialImprovementGate(
+      highFrontVsAtomic,
+      'gpuPassTotalMs',
+    ),
+    lowOverlapFrontVsAtomicWholeMechanism: maximumRegressionGate(
+      lowFrontVsAtomic,
+      'gpuPassTotalMs',
+    ),
+  };
+  const failed = Object.entries(gates)
+    .filter(([, gate]) => gate.pass !== true)
+    .map(([name]) => name);
+  return {
+    status: Object.values(gates).every((gate) => gate.status === 'evaluated')
+      ? 'evaluated'
+      : 'incomplete',
+    pass: failed.length === 0,
+    deltaConvention: 'front-to-back minus comparator; negative values favor front-to-back',
+    failedGates: failed,
+    gates,
+  };
 }
 
 function comparisonsAgainst(groups, baselineModeId) {
   return pairedContrasts(groups, 'fixed-slice', baselineModeId).map((contrast) => ({
     targetVisibilityFraction: contrast.targetVisibilityFraction,
+    ...(contrast.layout === undefined ? {} : { layout: contrast.layout }),
     baselineModeId,
     nPairs: contrast.nPairs,
     pairs: contrast.pairs.map((pair) => ({
@@ -915,50 +1201,108 @@ function orderedValuesMatch(actual, expected) {
 
 export function validateProtocolMatrix(protocol) {
   requireRecord(protocol, 'metadata.json protocol');
-  if (protocol.matrixKind !== FIXED_SLICE_REPRESENTATION_MATRIX) return;
-  if (!orderedValuesMatch(protocol.modes, FIXED_SLICE_REPRESENTATION_MODES)) {
+  if (protocol.matrixKind === FIXED_SLICE_REPRESENTATION_MATRIX) {
+    if (!orderedValuesMatch(protocol.modes, FIXED_SLICE_REPRESENTATION_MODES)) {
+      failVerification(
+        'fixed-slice-representation protocol modes must be exactly fixed-slice-per-bucket, fixed-slice.',
+      );
+    }
+    if (protocol.repetitions !== FIXED_SLICE_REPRESENTATION_REPETITIONS) {
+      failVerification('fixed-slice-representation protocol must use exactly six repetitions.');
+    }
+    if (!orderedValuesMatch(
+      protocol.visibilityLevels,
+      FIXED_SLICE_REPRESENTATION_VISIBILITIES,
+    )) {
+      failVerification(
+        'fixed-slice-representation visibility levels must be exactly 0.2, 0.8, 0.99.',
+      );
+    }
+    if (protocol.heterogeneousComparator !== null) {
+      failVerification('fixed-slice-representation heterogeneousComparator must be null.');
+    }
+    if (protocol.ordering !== FIXED_SLICE_REPRESENTATION_ORDERING) {
+      failVerification(
+        `fixed-slice-representation ordering must be ${JSON.stringify(FIXED_SLICE_REPRESENTATION_ORDERING)}.`,
+      );
+    }
+    if (protocol.warmupFrames !== FIXED_SLICE_REPRESENTATION_WARMUP_FRAMES
+      || protocol.measuredFrames !== FIXED_SLICE_REPRESENTATION_MEASURED_FRAMES) {
+      failVerification(
+        'fixed-slice-representation protocol must use 300 warmup and 240 measured frames.',
+      );
+    }
+    if (!FIXED_SLICE_REPRESENTATION_OBJECT_COUNTS.includes(protocol.objectCount)
+      || !FIXED_SLICE_REPRESENTATION_BUCKET_COUNTS.includes(protocol.bucketCount)) {
+      failVerification('fixed-slice-representation protocol has an unsupported workload size.');
+    }
+    if (protocol.matrix
+      !== `${FIXED_SLICE_REPRESENTATION_MATRIX}-o${protocol.objectCount}-b${protocol.bucketCount}`) {
+      failVerification('fixed-slice-representation matrix identifier does not match its workload.');
+    }
+    const expectedScaleRole = protocol.bucketCount === 1
+      ? 'negative-control-equal-mesh-render-object-count'
+      : 'primary-one-versus-b-mesh-render-object-representation-ablation';
+    if (protocol.representationScaleRole !== expectedScaleRole) {
+      failVerification('fixed-slice-representation scale role does not match its bucket count.');
+    }
+    return;
+  }
+
+  if (protocol.matrixKind !== DEPTH_ORDERING_MATRIX) return;
+  if (!orderedValuesMatch(protocol.modes, DEPTH_ORDERING_MODES)) {
     failVerification(
-      'fixed-slice-representation protocol modes must be exactly fixed-slice-per-bucket, fixed-slice.',
+      'depth-ordering protocol modes must be exactly fixed-slice, fixed-slice-depth-front-to-back, fixed-slice-depth-reverse.',
     );
   }
-  if (protocol.repetitions !== FIXED_SLICE_REPRESENTATION_REPETITIONS) {
-    failVerification('fixed-slice-representation protocol must use exactly six repetitions.');
-  }
-  if (!orderedValuesMatch(
-    protocol.visibilityLevels,
-    FIXED_SLICE_REPRESENTATION_VISIBILITIES,
-  )) {
+  if (!orderedValuesMatch(protocol.layouts, DEPTH_ORDERING_LAYOUTS)) {
     failVerification(
-      'fixed-slice-representation visibility levels must be exactly 0.2, 0.8, 0.99.',
+      'depth-ordering layouts must be exactly high-overlap, low-overlap.',
     );
   }
-  if (protocol.heterogeneousComparator !== null) {
-    failVerification('fixed-slice-representation heterogeneousComparator must be null.');
+  if (!orderedValuesMatch(protocol.visibilityLevels, DEPTH_ORDERING_VISIBILITIES)) {
+    failVerification('depth-ordering visibility levels must be exactly 0.99.');
   }
-  if (protocol.ordering !== FIXED_SLICE_REPRESENTATION_ORDERING) {
-    failVerification(
-      `fixed-slice-representation ordering must be ${JSON.stringify(FIXED_SLICE_REPRESENTATION_ORDERING)}.`,
-    );
+  if (protocol.repetitions !== DEPTH_ORDERING_REPETITIONS) {
+    failVerification('depth-ordering protocol must use exactly six repetitions.');
   }
-  if (protocol.warmupFrames !== FIXED_SLICE_REPRESENTATION_WARMUP_FRAMES
-    || protocol.measuredFrames !== FIXED_SLICE_REPRESENTATION_MEASURED_FRAMES) {
-    failVerification(
-      'fixed-slice-representation protocol must use 300 warmup and 240 measured frames.',
-    );
+  if (protocol.warmupFrames !== DEPTH_ORDERING_WARMUP_FRAMES
+    || protocol.measuredFrames !== DEPTH_ORDERING_MEASURED_FRAMES) {
+    failVerification('depth-ordering protocol must use 300 warmup and 240 measured frames.');
   }
-  if (!FIXED_SLICE_REPRESENTATION_OBJECT_COUNTS.includes(protocol.objectCount)
-    || !FIXED_SLICE_REPRESENTATION_BUCKET_COUNTS.includes(protocol.bucketCount)) {
-    failVerification('fixed-slice-representation protocol has an unsupported workload size.');
+  if (protocol.objectCount !== DEPTH_ORDERING_OBJECT_COUNT
+    || protocol.bucketCount !== DEPTH_ORDERING_BUCKET_COUNT) {
+    failVerification('depth-ordering protocol must use exactly 65536 objects and 32 buckets.');
   }
   if (protocol.matrix
-    !== `${FIXED_SLICE_REPRESENTATION_MATRIX}-o${protocol.objectCount}-b${protocol.bucketCount}`) {
-    failVerification('fixed-slice-representation matrix identifier does not match its workload.');
+    !== `${DEPTH_ORDERING_MATRIX}-o${DEPTH_ORDERING_OBJECT_COUNT}-b${DEPTH_ORDERING_BUCKET_COUNT}`) {
+    failVerification('depth-ordering matrix identifier does not match its exact workload.');
   }
-  const expectedScaleRole = protocol.bucketCount === 1
-    ? 'negative-control-equal-mesh-render-object-count'
-    : 'primary-one-versus-b-mesh-render-object-representation-ablation';
-  if (protocol.representationScaleRole !== expectedScaleRole) {
-    failVerification('fixed-slice-representation scale role does not match its bucket count.');
+  if (protocol.depthBinCount !== DEPTH_ORDERING_BIN_COUNT) {
+    failVerification('depth-ordering protocol must use exactly eight depth bins.');
+  }
+  if (protocol.reversedDepthBuffer !== true) {
+    failVerification('depth-ordering protocol must require reversedDepthBuffer.');
+  }
+  if (protocol.minimumStorageBuffersPerShaderStage
+    !== DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS) {
+    failVerification('depth-ordering protocol must require exactly eight storage buffers per shader stage.');
+  }
+  if (protocol.heterogeneousComparator !== null) {
+    failVerification('depth-ordering heterogeneousComparator must be null.');
+  }
+  if (protocol.representationScaleRole !== null) {
+    failVerification('depth-ordering representationScaleRole must be null.');
+  }
+  if (protocol.ordering !== DEPTH_ORDERING_ORDERING) {
+    failVerification(
+      `depth-ordering ordering must be ${JSON.stringify(DEPTH_ORDERING_ORDERING)}.`,
+    );
+  }
+  if (protocol.renderParity !== DEPTH_ORDERING_RENDER_PARITY) {
+    failVerification(
+      `depth-ordering renderParity must be ${JSON.stringify(DEPTH_ORDERING_RENDER_PARITY)}.`,
+    );
   }
 }
 
@@ -1018,6 +1362,23 @@ function requireMetadataCompleteness(metadata, manifest) {
     failVerification('metadata.json protocol.visibilityLevels must contain finite values.');
   }
   validateProtocolMatrix(protocol);
+  if (protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+    const benchmarkPage = requireRecord(
+      metadata.environment.benchmarkPage,
+      'metadata.json environment.benchmarkPage',
+    );
+    if (benchmarkPage.rendererReversedDepthBuffer !== true) {
+      failVerification('depth-ordering metadata does not prove renderer reversed-depth operation.');
+    }
+    requireInteger(
+      benchmarkPage.maxStorageBuffersPerShaderStage,
+      'metadata.json environment.benchmarkPage.maxStorageBuffersPerShaderStage',
+    );
+    if (benchmarkPage.maxStorageBuffersPerShaderStage
+      < DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS) {
+      failVerification('depth-ordering metadata reports fewer than eight storage buffers per shader stage.');
+    }
+  }
   const plan = requireArray(metadata.plan, 'metadata.json plan');
   if (plan.length === 0) failVerification('metadata.json plan is empty.');
   requireInteger(metadata.expectedTrialCount, 'metadata.json expectedTrialCount', { minimum: 1 });
@@ -1029,7 +1390,13 @@ function requireMetadataCompleteness(metadata, manifest) {
   if (metadata.expectedTrialCount !== plan.length) {
     failVerification('metadata.json expectedTrialCount does not equal plan length.');
   }
-  const protocolTrialCount = protocol.repetitions * modes.length * visibilityLevels.length;
+  const layoutCount = protocol.matrixKind === DEPTH_ORDERING_MATRIX
+    ? requireArray(protocol.layouts, 'metadata.json protocol.layouts').length
+    : 1;
+  const protocolTrialCount = protocol.repetitions
+    * modes.length
+    * visibilityLevels.length
+    * layoutCount;
   if (metadata.expectedTrialCount !== protocolTrialCount) {
     failVerification('metadata.json expectedTrialCount is inconsistent with the protocol matrix.');
   }
@@ -1042,13 +1409,15 @@ function requireMetadataCompleteness(metadata, manifest) {
 }
 
 function requireMatchingIdentity(actual, expected, label) {
-  for (const field of [
+  const fields = [
     'trialId',
     'planIndex',
     'repetitionIndex',
     'modeId',
     'visibilityFraction',
-  ]) {
+  ];
+  if (Object.hasOwn(expected, 'layout')) fields.push('layout');
+  for (const field of fields) {
     if (actual[field] !== expected[field]) {
       failVerification(`${label} ${field} does not match metadata.json plan.`);
     }
@@ -1067,12 +1436,14 @@ function requireExactPermutation(value, expectedValues, label) {
 
 export function validateBenchmarkPlan(plan, metadata) {
   validateProtocolMatrix(metadata.protocol);
+  const isDepthOrdering = metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX;
   const byTrialId = new Map();
   const byPlanIndex = new Map();
   const matrixCells = new Set();
   const repetitionOrders = new Map();
   const modes = metadata.protocol.modes;
   const visibilityLevels = metadata.protocol.visibilityLevels;
+  const layouts = isDepthOrdering ? metadata.protocol.layouts : null;
   for (const [arrayIndex, item] of plan.entries()) {
     requireRecord(item, `metadata.json plan[${arrayIndex}]`);
     const trialId = requireNonemptyString(item.trialId, `metadata.json plan[${arrayIndex}].trialId`);
@@ -1108,11 +1479,28 @@ export function validateBenchmarkPlan(plan, metadata) {
     if (visibilityOrder[item.visibilityOrderPosition] !== item.visibilityFraction) {
       failVerification(`metadata.json plan[${arrayIndex}] visibility position is inconsistent.`);
     }
+    let layoutOrder = null;
+    if (isDepthOrdering) {
+      requireNonemptyString(item.layout, `metadata.json plan[${arrayIndex}].layout`);
+      layoutOrder = requireExactPermutation(
+        item.layoutOrder,
+        layouts,
+        `metadata.json plan[${arrayIndex}].layoutOrder`,
+      );
+      requireInteger(
+        item.layoutOrderPosition,
+        `metadata.json plan[${arrayIndex}].layoutOrderPosition`,
+      );
+      if (layoutOrder[item.layoutOrderPosition] !== item.layout) {
+        failVerification(`metadata.json plan[${arrayIndex}] layout position is inconsistent.`);
+      }
+    }
     if (item.runId !== metadata.runId) failVerification(`metadata.json plan[${arrayIndex}] has the wrong runId.`);
     requireInteger(item.objectCount, `metadata.json plan[${arrayIndex}].objectCount`, { minimum: 1 });
     requireInteger(item.bucketCount, `metadata.json plan[${arrayIndex}].bucketCount`, { minimum: 1 });
     if (!metadata.protocol.modes.includes(item.modeId)
       || !metadata.protocol.visibilityLevels.includes(item.visibilityFraction)
+      || (isDepthOrdering && !layouts.includes(item.layout))
       || item.repetitionIndex >= metadata.protocol.repetitions
       || item.objectCount !== metadata.protocol.objectCount
       || item.bucketCount !== metadata.protocol.bucketCount) {
@@ -1124,28 +1512,32 @@ export function validateBenchmarkPlan(plan, metadata) {
     if (byTrialId.has(trialId) || byPlanIndex.has(item.planIndex)) {
       failVerification('metadata.json plan has duplicate trial identities.');
     }
-    const cellKey = JSON.stringify([
-      item.repetitionIndex,
-      item.modeId,
-      item.visibilityFraction,
-    ]);
+    const cellKey = JSON.stringify(isDepthOrdering
+      ? [item.repetitionIndex, item.layout, item.modeId, item.visibilityFraction]
+      : [item.repetitionIndex, item.modeId, item.visibilityFraction]);
     if (matrixCells.has(cellKey)) {
-      failVerification('metadata.json plan duplicates a repetition/mode/visibility cell.');
+      failVerification(isDepthOrdering
+        ? 'metadata.json plan duplicates a repetition/layout/mode/visibility cell.'
+        : 'metadata.json plan duplicates a repetition/mode/visibility cell.');
     }
     matrixCells.add(cellKey);
 
     const orderRecord = repetitionOrders.get(item.repetitionIndex);
     const modeOrderSignature = JSON.stringify(modeOrder);
     const visibilityOrderSignature = JSON.stringify(visibilityOrder);
+    const layoutOrderSignature = isDepthOrdering ? JSON.stringify(layoutOrder) : null;
     if (orderRecord === undefined) {
       repetitionOrders.set(item.repetitionIndex, {
         modeOrder: [...modeOrder],
         visibilityOrder: [...visibilityOrder],
+        layoutOrder: layoutOrder === null ? null : [...layoutOrder],
         modeOrderSignature,
         visibilityOrderSignature,
+        layoutOrderSignature,
       });
     } else if (orderRecord.modeOrderSignature !== modeOrderSignature
-      || orderRecord.visibilityOrderSignature !== visibilityOrderSignature) {
+      || orderRecord.visibilityOrderSignature !== visibilityOrderSignature
+      || orderRecord.layoutOrderSignature !== layoutOrderSignature) {
       failVerification('metadata.json plan changes an order within one repetition.');
     }
     byTrialId.set(trialId, item);
@@ -1156,11 +1548,18 @@ export function validateBenchmarkPlan(plan, metadata) {
     if (!repetitionOrders.has(repetition)) {
       failVerification(`metadata.json plan omits repetition ${repetition}.`);
     }
-    for (const mode of modes) {
-      for (const visibility of visibilityLevels) {
-        const cellKey = JSON.stringify([repetition, mode, visibility]);
-        if (!matrixCells.has(cellKey)) {
-          failVerification('metadata.json plan omits a repetition/mode/visibility cell.');
+    const expectedLayouts = isDepthOrdering ? layouts : [null];
+    for (const layout of expectedLayouts) {
+      for (const mode of modes) {
+        for (const visibility of visibilityLevels) {
+          const cellKey = JSON.stringify(isDepthOrdering
+            ? [repetition, layout, mode, visibility]
+            : [repetition, mode, visibility]);
+          if (!matrixCells.has(cellKey)) {
+            failVerification(isDepthOrdering
+              ? 'metadata.json plan omits a repetition/layout/mode/visibility cell.'
+              : 'metadata.json plan omits a repetition/mode/visibility cell.');
+          }
         }
       }
     }
@@ -1188,6 +1587,47 @@ export function validateBenchmarkPlan(plan, metadata) {
           'fixed-slice-representation visibility orders must rotate by repetition.',
         );
       }
+    }
+    if (isDepthOrdering) {
+      const expectedModeOrder = DEPTH_ORDERING_MODE_ORDERS[repetition];
+      const expectedLayoutOrder = repetition % 2 === 0
+        ? DEPTH_ORDERING_LAYOUTS
+        : [...DEPTH_ORDERING_LAYOUTS].reverse();
+      if (!orderedValuesMatch(orderRecord.modeOrder, expectedModeOrder)) {
+        failVerification(
+          'depth-ordering mode orders must use the exact six balanced permutations.',
+        );
+      }
+      if (!orderedValuesMatch(orderRecord.layoutOrder, expectedLayoutOrder)) {
+        failVerification(
+          'depth-ordering layout orders must alternate high/low and low/high by repetition.',
+        );
+      }
+      if (!orderedValuesMatch(orderRecord.visibilityOrder, DEPTH_ORDERING_VISIBILITIES)) {
+        failVerification('depth-ordering visibility order must be exactly 0.99.');
+      }
+      for (let layoutPosition = 0;
+        layoutPosition < orderRecord.layoutOrder.length;
+        layoutPosition += 1) {
+        for (let modePosition = 0;
+          modePosition < orderRecord.modeOrder.length;
+          modePosition += 1) {
+          const item = plan[executionIndex];
+          if (item.repetitionIndex !== repetition
+            || item.layoutOrderPosition !== layoutPosition
+            || item.layout !== orderRecord.layoutOrder[layoutPosition]
+            || item.visibilityOrderPosition !== 0
+            || item.visibilityFraction !== DEPTH_ORDERING_VISIBILITIES[0]
+            || item.modeOrderPosition !== modePosition
+            || item.modeId !== orderRecord.modeOrder[modePosition]) {
+            failVerification(
+              'metadata.json depth-ordering plan execution order must be repetition-contiguous with layout outer and mode inner.',
+            );
+          }
+          executionIndex += 1;
+        }
+      }
+      continue;
     }
     for (let visibilityPosition = 0;
       visibilityPosition < orderRecord.visibilityOrder.length;
@@ -1230,6 +1670,18 @@ export function validateBenchmarkPlan(plan, metadata) {
           .filter((record) => record.visibilityOrder[position] === visibility).length;
         if (count !== expectedPerPosition) {
           failVerification('metadata.json visibility ordering is not position-balanced.');
+        }
+      }
+    }
+  }
+  if (isDepthOrdering && metadata.protocol.repetitions % layouts.length === 0) {
+    const expectedPerPosition = metadata.protocol.repetitions / layouts.length;
+    for (const layout of layouts) {
+      for (let position = 0; position < layouts.length; position += 1) {
+        const count = [...repetitionOrders.values()]
+          .filter((record) => record.layoutOrder[position] === layout).length;
+        if (count !== expectedPerPosition) {
+          failVerification('metadata.json depth-ordering layout ordering is not position-balanced.');
         }
       }
     }
@@ -1300,6 +1752,12 @@ function validateTrialSummaries(trialSummaries, metadata, planIndex) {
       || timestamps.missingComputeFrames !== 0) {
       failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} lacks complete accepted timestamps.`);
     }
+    if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+      requireRecord(
+        summary.completionInvariant,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} completionInvariant`,
+      );
+    }
     byTrialId.set(trialId, summary);
   }
   return byTrialId;
@@ -1307,6 +1765,100 @@ function validateTrialSummaries(trialSummaries, metadata, planIndex) {
 
 function bodyWithoutSha256(record) {
   return Object.fromEntries(Object.entries(record).filter(([key]) => key !== 'sha256'));
+}
+
+function validateRenderParityCapture(parity, label, {
+  planned,
+  geometryManifest,
+  scenarioManifest,
+}) {
+  requireRecord(parity, label);
+  if (parity.schemaVersion !== 1
+    || parity.kind !== 'fixed-camera-offscreen-exact-render-parity') {
+    failVerification(`${label} has an unsupported schema or kind.`);
+  }
+  if (parity.pass !== true || parity.captures !== 2) {
+    failVerification(`${label} is not passing evidence from exactly two captures.`);
+  }
+  if (parity.width !== DEPTH_ORDERING_PARITY_WIDTH
+    || parity.height !== DEPTH_ORDERING_PARITY_HEIGHT) {
+    failVerification(`${label} does not use the fixed 1280x720 viewport.`);
+  }
+  if (parity.reversedDepthBuffer !== true) {
+    failVerification(`${label} did not use the required reversed depth buffer.`);
+  }
+  requireRecord(parity.material, `${label}.material`);
+  const stability = requireRecord(parity.stability, `${label}.stability`);
+  if (stability.pass !== true) failVerification(`${label}.stability did not pass.`);
+  const first = requireRecord(stability.first, `${label}.stability.first`);
+  const firstCapture = requireRecord(
+    stability.firstCapture,
+    `${label}.stability.firstCapture`,
+  );
+  const channelRequirements = {
+    color: { format: 'rgba8unorm', arrayType: 'Uint8Array' },
+    depth: { format: 'depth32float', arrayType: 'Float32Array' },
+    objectId: { format: 'rgba8unorm-object-id-plus-one', arrayType: 'Uint8Array' },
+  };
+  for (const [name, expected] of Object.entries(channelRequirements)) {
+    const channel = requireRecord(parity[name], `${label}.${name}`);
+    if (channel.format !== expected.format || channel.arrayType !== expected.arrayType) {
+      failVerification(`${label}.${name} has an unsupported format or array type.`);
+    }
+    if (channel.byteLength !== DEPTH_ORDERING_PARITY_BYTE_LENGTH) {
+      failVerification(`${label}.${name} has an invalid byte length.`);
+    }
+    requireSha256(channel.sha256, `${label}.${name}.sha256`);
+    if (first[`${name}Sha256`] !== channel.sha256) {
+      failVerification(`${label}.${name} changed between its two captures.`);
+    }
+    if (JSON.stringify(firstCapture[name]) !== JSON.stringify(channel)) {
+      failVerification(`${label}.${name} first-capture record is inconsistent.`);
+    }
+  }
+  const objectIdValidation = requireRecord(
+    parity.objectIdValidation,
+    `${label}.objectIdValidation`,
+  );
+  if (objectIdValidation.pass !== true
+    || objectIdValidation.encoding !== 'rgb24-object-id-plus-one-zero-background'
+    || !Number.isInteger(objectIdValidation.coveredPixels)
+    || objectIdValidation.coveredPixels <= 0
+    || !Number.isInteger(objectIdValidation.backgroundPixels)
+    || objectIdValidation.backgroundPixels < 0
+    || objectIdValidation.coveredPixels + objectIdValidation.backgroundPixels
+      !== DEPTH_ORDERING_PARITY_WIDTH * DEPTH_ORDERING_PARITY_HEIGHT
+    || objectIdValidation.outOfRangePixels !== 0
+    || objectIdValidation.nonVisiblePixels !== 0) {
+    failVerification(`${label}.objectIdValidation did not prove a valid encoded ID domain.`);
+  }
+  const snapshotCheck = validateExactValidation(parity.snapshotValidation, {
+    modeId: planned.modeId,
+    objectCount: planned.objectCount,
+    bucketCount: planned.bucketCount,
+    expectedVisibleCount: scenarioManifest?.expectedVisibleCount,
+    expectedVisibleIdsCanonicalSha256:
+      scenarioManifest?.expectedVisibleIdsCanonicalSha256,
+    geometryManifest,
+    scenarioManifest,
+  });
+  if (snapshotCheck.rejectionReasons.length !== 0) {
+    failVerification(
+      `${label} same-snapshot validation failed: ${snapshotCheck.rejectionReasons.join('; ')}.`,
+    );
+  }
+  return sha256Json({
+    width: parity.width,
+    height: parity.height,
+    reversedDepthBuffer: parity.reversedDepthBuffer,
+    material: parity.material,
+    color: parity.color,
+    depth: parity.depth,
+    objectId: parity.objectId,
+    objectIdValidation: parity.objectIdValidation,
+    membershipSha256:
+      parity.snapshotValidation?.membershipDigests?.actual?.sha256 ?? null,
+  });
 }
 
 function validateEvidenceCapture(capture, label) {
@@ -1332,6 +1884,7 @@ function validateEvidenceCapture(capture, label) {
     scenarioSha256: workload.scenarioSha256,
     payloadSha256: validation.payloadSha256,
     semanticSha256: validation.semanticSha256,
+    renderParity: capture.renderParity ?? null,
   };
 }
 
@@ -1379,17 +1932,126 @@ function validateWorkloadManifests(catalog, metadata) {
   if (geometries[metadataGeometrySha256] === undefined) {
     failVerification('metadata geometry digest is absent from workload-manifests.json.');
   }
-  const scenarioLinks = requireRecord(
-    metadata.workload.scenarioSha256ByVisibility,
-    'metadata.json workload.scenarioSha256ByVisibility',
-  );
-  for (const [visibility, digest] of Object.entries(scenarioLinks)) {
-    requireSha256(digest, `metadata scenario digest for visibility ${visibility}`);
-    if (scenarios[digest] === undefined) {
-      failVerification(`metadata scenario digest for visibility ${visibility} is absent from the catalog.`);
+  if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+    if (metadata.workload.scenarioSha256ByVisibility !== null) {
+      failVerification('depth-ordering workload scenarioSha256ByVisibility must be null.');
+    }
+    const scenarioLinks = requireRecord(
+      metadata.workload.scenarioSha256ByCell,
+      'metadata.json workload.scenarioSha256ByCell',
+    );
+    const expectedKeys = metadata.protocol.layouts.flatMap((layout) => (
+      metadata.protocol.visibilityLevels.map((visibility) => `${layout}|${visibility}`)
+    ));
+    const actualKeys = Object.keys(scenarioLinks);
+    if (actualKeys.length !== expectedKeys.length
+      || expectedKeys.some((key) => !Object.hasOwn(scenarioLinks, key))) {
+      failVerification('depth-ordering workload scenarioSha256ByCell must exactly cover every layout/visibility cell.');
+    }
+    for (const key of expectedKeys) {
+      const digest = scenarioLinks[key];
+      requireSha256(digest, `metadata scenario digest for cell ${key}`);
+      if (scenarios[digest] === undefined) {
+        failVerification(`metadata scenario digest for cell ${key} is absent from the catalog.`);
+      }
+      const separator = key.lastIndexOf('|');
+      const layout = key.slice(0, separator);
+      const visibility = Number(key.slice(separator + 1));
+      if (scenarios[digest].layout !== layout
+        || scenarios[digest].visibilityFraction !== visibility) {
+        failVerification(`metadata scenario digest for cell ${key} links the wrong scenario manifest.`);
+      }
+      requireInteger(
+        scenarios[digest].expectedVisibleCount,
+        `workload scenario ${digest} expectedVisibleCount`,
+        { minimum: 1 },
+      );
+      requireSha256(
+        scenarios[digest].expectedVisibleIdsCanonicalSha256,
+        `workload scenario ${digest} expectedVisibleIdsCanonicalSha256`,
+      );
+      const depthBinRange = requireRecord(
+        scenarios[digest].depthBinRange,
+        `workload scenario ${digest} depthBinRange`,
+      );
+      requireFiniteNumber(
+        depthBinRange.near,
+        `workload scenario ${digest} depthBinRange.near`,
+      );
+      requireFiniteNumber(
+        depthBinRange.far,
+        `workload scenario ${digest} depthBinRange.far`,
+      );
+      if (depthBinRange.far <= depthBinRange.near) {
+        failVerification(`workload scenario ${digest} depthBinRange must be increasing.`);
+      }
+    }
+    const renderParityLinks = requireRecord(
+      metadata.workload.renderParitySha256ByCell,
+      'metadata.json workload.renderParitySha256ByCell',
+    );
+    const renderParityKeys = Object.keys(renderParityLinks);
+    if (renderParityKeys.length !== expectedKeys.length
+      || expectedKeys.some((key) => !Object.hasOwn(renderParityLinks, key))) {
+      failVerification('depth-ordering workload renderParitySha256ByCell must exactly cover every layout/visibility cell.');
+    }
+    for (const key of expectedKeys) {
+      requireSha256(renderParityLinks[key], `metadata render-parity digest for cell ${key}`);
+    }
+    const physicalSequenceLinks = requireRecord(
+      metadata.workload.physicalBinSequenceSha256ByPair,
+      'metadata.json workload.physicalBinSequenceSha256ByPair',
+    );
+    const expectedSequenceKeys = [];
+    for (let repetition = 0; repetition < metadata.protocol.repetitions; repetition += 1) {
+      for (const layout of metadata.protocol.layouts) {
+        for (const visibility of metadata.protocol.visibilityLevels) {
+          const scenarioSha256 = scenarioLinks[`${layout}|${visibility}`];
+          expectedSequenceKeys.push(
+            [repetition, layout, visibility, scenarioSha256].join('|'),
+          );
+        }
+      }
+    }
+    const physicalSequenceKeys = Object.keys(physicalSequenceLinks);
+    if (physicalSequenceKeys.length !== expectedSequenceKeys.length
+      || expectedSequenceKeys.some((key) => !Object.hasOwn(physicalSequenceLinks, key))) {
+      failVerification('depth-ordering workload physicalBinSequenceSha256ByPair must exactly cover every repetition/layout pair.');
+    }
+    for (const key of expectedSequenceKeys) {
+      requireSha256(
+        physicalSequenceLinks[key],
+        `metadata physical-bin sequence digest for pair ${key}`,
+      );
+    }
+  } else {
+    const scenarioLinks = requireRecord(
+      metadata.workload.scenarioSha256ByVisibility,
+      'metadata.json workload.scenarioSha256ByVisibility',
+    );
+    for (const [visibility, digest] of Object.entries(scenarioLinks)) {
+      requireSha256(digest, `metadata scenario digest for visibility ${visibility}`);
+      if (scenarios[digest] === undefined) {
+        failVerification(`metadata scenario digest for visibility ${visibility} is absent from the catalog.`);
+      }
     }
   }
   return { geometries, scenarios };
+}
+
+function scenarioDigestForTrial(metadata, trial) {
+  if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+    return metadata.workload.scenarioSha256ByCell?.[
+      `${trial.layout}|${trial.visibilityFraction}`
+    ];
+  }
+  return metadata.workload.scenarioSha256ByVisibility?.[String(trial.visibilityFraction)];
+}
+
+function renderParityDigestForTrial(metadata, trial) {
+  return metadata.workload.renderParitySha256ByCell?.[
+    `${trial.layout}|${trial.visibilityFraction}`
+  ];
 }
 
 function validateValidationArtifacts(
@@ -1409,6 +2071,7 @@ function validateValidationArtifacts(
   }
 
   const seenTrialIds = new Set();
+  const physicalBinSequencePairs = new Map();
   for (const [index, artifact] of validationArtifacts.entries()) {
     requireRecord(artifact, `validation-artifacts.json[${index}]`);
     if (artifact.schemaVersion !== 2) {
@@ -1438,10 +2101,18 @@ function validateValidationArtifacts(
     if (rejectionReasons.length !== 0) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} has rejection reasons.`);
     }
-    requireRecord(
+    const selectedConfig = requireRecord(
       artifact.selectedConfig,
       `validation artifact ${JSON.stringify(trialId)} selectedConfig`,
     );
+    if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX
+      && (selectedConfig.strategyId !== planned.modeId
+        || selectedConfig.objectCount !== planned.objectCount
+        || selectedConfig.bucketCount !== planned.bucketCount
+        || selectedConfig.visibilityFraction !== planned.visibilityFraction
+        || selectedConfig.layout !== planned.layout)) {
+      failVerification(`validation artifact ${JSON.stringify(trialId)} selectedConfig differs from the planned depth-ordering cell.`);
+    }
     requireSha256(artifact.sha256, `validation artifact ${JSON.stringify(trialId)} sha256`);
     if (sha256Json(bodyWithoutSha256(artifact)) !== artifact.sha256) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} record SHA-256 is inconsistent.`);
@@ -1476,19 +2147,124 @@ function validateValidationArtifacts(
     if (captures[0].geometrySha256 !== metadata.workload.geometryFixtureSha256) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} geometry digest differs from metadata.`);
     }
-    const expectedScenarioSha256 = metadata.workload.scenarioSha256ByVisibility?.[
-      String(artifact.visibilityFraction)
-    ];
+    const expectedScenarioSha256 = scenarioDigestForTrial(metadata, artifact);
     if (captures[0].scenarioSha256 !== expectedScenarioSha256) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} scenario digest differs from metadata.`);
     }
-    if (workloadCatalog.geometries[captures[0].geometrySha256] === undefined
-      || workloadCatalog.scenarios[captures[0].scenarioSha256] === undefined) {
+    const geometryManifest = workloadCatalog.geometries[captures[0].geometrySha256];
+    const scenarioManifest = workloadCatalog.scenarios[captures[0].scenarioSha256];
+    if (geometryManifest === undefined || scenarioManifest === undefined) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} links an unknown workload manifest.`);
+    }
+    if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+      for (const captureName of ['pre', 'timingStart', 'post']) {
+        const capture = artifact[captureName];
+        const exactCheck = validateExactValidation(capture.validation.payload, {
+          modeId: planned.modeId,
+          objectCount: planned.objectCount,
+          bucketCount: planned.bucketCount,
+          expectedVisibleCount: scenarioManifest.expectedVisibleCount,
+          expectedVisibleIdsCanonicalSha256:
+            scenarioManifest.expectedVisibleIdsCanonicalSha256,
+          geometryManifest,
+          scenarioManifest,
+        });
+        if (exactCheck.rejectionReasons.length !== 0) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} exact payload failed: ${exactCheck.rejectionReasons.join('; ')}.`,
+          );
+        }
+        if (exactCheck.semanticSha256 !== capture.validation.semanticSha256) {
+          failVerification(`validation artifact ${JSON.stringify(trialId)} ${captureName} semantic SHA-256 is inconsistent.`);
+        }
+      }
+      const completionReasons = validateDepthOrderingCompletionInvariant(
+        summary.completionInvariant,
+        {
+          modeId: planned.modeId,
+          objectCount: planned.objectCount,
+          bucketCount: planned.bucketCount,
+          validation: artifact.timingStart.validation.payload,
+          scenarioManifest,
+        },
+      );
+      if (completionReasons.length !== 0) {
+        failVerification(
+          `trial summary ${JSON.stringify(trialId)} completion invariant failed: ${completionReasons.join('; ')}.`,
+        );
+      }
+      if (captures[0].renderParity === null) {
+        failVerification(`validation artifact ${JSON.stringify(trialId)} lacks preflight render-parity evidence.`);
+      }
+      const expectedRenderParitySha256 = renderParityDigestForTrial(metadata, artifact);
+      for (const [captureIndex, capture] of captures.entries()) {
+        if (capture.renderParity === null) continue;
+        const paritySha256 = validateRenderParityCapture(
+          capture.renderParity,
+          `validation artifact ${JSON.stringify(trialId)} render parity capture ${captureIndex}`,
+          { planned, geometryManifest, scenarioManifest },
+        );
+        if (paritySha256 !== expectedRenderParitySha256) {
+          failVerification(`validation artifact ${JSON.stringify(trialId)} render-parity digest differs from its layout cell.`);
+        }
+      }
+      if (artifact.modeId === 'fixed-slice-depth-front-to-back'
+        || artifact.modeId === 'fixed-slice-depth-reverse') {
+        const preflightSequenceSha256 = physicalBinSequenceIdentity(
+          artifact.pre?.validation?.payload,
+        );
+        const paritySequenceSha256 = physicalBinSequenceIdentity(
+          artifact.pre?.renderParity?.snapshotValidation,
+        );
+        if (preflightSequenceSha256 === null || paritySequenceSha256 === null) {
+          failVerification(`validation artifact ${JSON.stringify(trialId)} lacks a physical-bin sequence commitment.`);
+        }
+        if (preflightSequenceSha256 !== paritySequenceSha256) {
+          failVerification(`validation artifact ${JSON.stringify(trialId)} changed its physical-bin sequence between parity and preflight snapshots.`);
+        }
+        const pairKey = [
+          artifact.repetitionIndex,
+          artifact.layout,
+          artifact.visibilityFraction,
+          captures[0].scenarioSha256,
+        ].join('|');
+        let pair = physicalBinSequencePairs.get(pairKey);
+        if (pair === undefined) {
+          pair = { sha256: preflightSequenceSha256, modeIds: new Set() };
+          physicalBinSequencePairs.set(pairKey, pair);
+        } else if (pair.sha256 !== preflightSequenceSha256) {
+          failVerification(`ordered pair ${JSON.stringify(pairKey)} has unequal traversal-normalized physical-bin sequences.`);
+        }
+        if (pair.modeIds.has(artifact.modeId)) {
+          failVerification(`ordered pair ${JSON.stringify(pairKey)} duplicates mode ${JSON.stringify(artifact.modeId)}.`);
+        }
+        pair.modeIds.add(artifact.modeId);
+      }
     }
     if (artifact.modeId !== 'three-blocks-historical'
       && captures.some((capture) => capture.payloadSha256 !== captures[0].payloadSha256)) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} changed its exact payload.`);
+    }
+  }
+  if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+    const orderedModes = [
+      'fixed-slice-depth-front-to-back',
+      'fixed-slice-depth-reverse',
+    ];
+    const expectedPairCount = metadata.protocol.repetitions
+      * metadata.protocol.layouts.length
+      * metadata.protocol.visibilityLevels.length;
+    if (physicalBinSequencePairs.size !== expectedPairCount
+      || [...physicalBinSequencePairs.values()].some(
+        (pair) => orderedModes.some((modeId) => !pair.modeIds.has(modeId))
+          || pair.modeIds.size !== orderedModes.length,
+      )) {
+      failVerification('physical-bin sequence commitments do not cover every ordered-mode pair.');
+    }
+    for (const [key, pair] of physicalBinSequencePairs) {
+      if (metadata.workload.physicalBinSequenceSha256ByPair?.[key] !== pair.sha256) {
+        failVerification(`physical-bin sequence pair ${JSON.stringify(key)} differs from metadata.`);
+      }
     }
   }
 }
@@ -1507,7 +2283,35 @@ function exactCsvNumber(value, label) {
   return number;
 }
 
-function validateVerifiedFrames(parsed, metadata, planIndex, summariesByTrialId) {
+function exactCsvNullableInteger(value, label) {
+  if (typeof value !== 'string') failVerification(`${label} is missing.`);
+  if (value.trim() === '') return null;
+  return exactCsvInteger(value, label);
+}
+
+function depthFrameShape(modeId, bucketCount) {
+  const depthBinned = modeId === 'fixed-slice-depth-front-to-back'
+    || modeId === 'fixed-slice-depth-reverse';
+  return {
+    validationKind: depthBinned
+      ? `${modeId}-exact-membership-and-depth-order`
+      : 'fixed-slice-exact-membership',
+    configuredDrawCommands: bucketCount,
+    configuredRenderObjects: 1,
+    configuredComputeDispatches: depthBinned ? 4 : 2,
+    configuredComputeSubmissions: 1,
+    configuredSubmittedInstances: null,
+    bundleRecordCallbackCountAtTimingStart: 1,
+  };
+}
+
+function validateVerifiedFrames(
+  parsed,
+  metadata,
+  planIndex,
+  summariesByTrialId,
+  workloadCatalog,
+) {
   const requiredAuditColumns = [
     'runId',
     'trialId',
@@ -1519,12 +2323,33 @@ function validateVerifiedFrames(parsed, metadata, planIndex, summariesByTrialId)
     'validationPass',
     'timestampAvailable',
   ];
-  if (metadata.protocol.matrixKind === FIXED_SLICE_REPRESENTATION_MATRIX) {
+  if (metadata.protocol.matrixKind === FIXED_SLICE_REPRESENTATION_MATRIX
+    || metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
     requiredAuditColumns.push(
       'modeOrderPosition',
       'visibilityOrderPosition',
       'plannedModeOrder',
       'plannedVisibilityOrder',
+    );
+  }
+  if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+    requiredAuditColumns.push(
+      'scenarioLayout',
+      'layoutOrderPosition',
+      'plannedLayoutOrder',
+      'protocolWarmupFrames',
+      'protocolMeasuredFrames',
+      'depthBinRangeNear',
+      'depthBinRangeFar',
+      'expectedVisibleCount',
+      'validationKind',
+      'usesCompute',
+      'configuredDrawCommands',
+      'configuredRenderObjects',
+      'configuredComputeDispatches',
+      'configuredComputeSubmissions',
+      'configuredSubmittedInstances',
+      'bundleRecordCallbackCountAtTimingStart',
     );
   }
   const headers = new Set(parsed.headers);
@@ -1557,7 +2382,8 @@ function validateVerifiedFrames(parsed, metadata, planIndex, summariesByTrialId)
       || exactCsvInteger(record.bucketCount, `${label} bucketCount`) !== metadata.protocol.bucketCount) {
       failVerification(`${label} does not match its planned trial.`);
     }
-    if (metadata.protocol.matrixKind === FIXED_SLICE_REPRESENTATION_MATRIX
+    if ((metadata.protocol.matrixKind === FIXED_SLICE_REPRESENTATION_MATRIX
+      || metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX)
       && (exactCsvInteger(record.modeOrderPosition, `${label} modeOrderPosition`)
           !== planned.modeOrderPosition
         || exactCsvInteger(record.visibilityOrderPosition, `${label} visibilityOrderPosition`)
@@ -1565,6 +2391,55 @@ function validateVerifiedFrames(parsed, metadata, planIndex, summariesByTrialId)
         || record.plannedModeOrder !== planned.modeOrder.join('|')
         || record.plannedVisibilityOrder !== planned.visibilityOrder.join('|'))) {
       failVerification(`${label} order audit fields do not match its planned trial.`);
+    }
+    if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX
+      && (record.scenarioLayout !== planned.layout
+        || exactCsvInteger(record.layoutOrderPosition, `${label} layoutOrderPosition`)
+          !== planned.layoutOrderPosition
+        || record.plannedLayoutOrder !== planned.layoutOrder.join('|'))) {
+      failVerification(`${label} layout audit fields do not match its planned trial.`);
+    }
+    if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
+      const scenarioSha256 = scenarioDigestForTrial(metadata, planned);
+      const scenarioManifest = workloadCatalog.scenarios[scenarioSha256];
+      const shape = depthFrameShape(planned.modeId, planned.bucketCount);
+      if (!scenarioManifest) {
+        failVerification(`${label} cannot resolve its scenario manifest.`);
+      }
+      if (exactCsvInteger(record.protocolWarmupFrames, `${label} protocolWarmupFrames`)
+          !== metadata.protocol.warmupFrames
+        || exactCsvInteger(record.protocolMeasuredFrames, `${label} protocolMeasuredFrames`)
+          !== metadata.protocol.measuredFrames
+        || exactCsvNumber(record.depthBinRangeNear, `${label} depthBinRangeNear`)
+          !== scenarioManifest.depthBinRange.near
+        || exactCsvNumber(record.depthBinRangeFar, `${label} depthBinRangeFar`)
+          !== scenarioManifest.depthBinRange.far
+        || exactCsvInteger(record.expectedVisibleCount, `${label} expectedVisibleCount`)
+          !== scenarioManifest.expectedVisibleCount
+        || record.validationKind !== shape.validationKind
+        || record.usesCompute !== 'true'
+        || exactCsvInteger(record.configuredDrawCommands, `${label} configuredDrawCommands`)
+          !== shape.configuredDrawCommands
+        || exactCsvInteger(record.configuredRenderObjects, `${label} configuredRenderObjects`)
+          !== shape.configuredRenderObjects
+        || exactCsvInteger(
+          record.configuredComputeDispatches,
+          `${label} configuredComputeDispatches`,
+        ) !== shape.configuredComputeDispatches
+        || exactCsvInteger(
+          record.configuredComputeSubmissions,
+          `${label} configuredComputeSubmissions`,
+        ) !== shape.configuredComputeSubmissions
+        || exactCsvNullableInteger(
+          record.configuredSubmittedInstances,
+          `${label} configuredSubmittedInstances`,
+        ) !== shape.configuredSubmittedInstances
+        || exactCsvNullableInteger(
+          record.bundleRecordCallbackCountAtTimingStart,
+          `${label} bundleRecordCallbackCountAtTimingStart`,
+        ) !== shape.bundleRecordCallbackCountAtTimingStart) {
+        failVerification(`${label} depth protocol audit fields do not match its planned trial.`);
+      }
     }
     if (record.validationPass !== 'true' || record.timestampAvailable !== 'true') {
       failVerification(`${label} lacks accepted validation or GPU timestamps.`);
@@ -1637,7 +2512,13 @@ export async function verifyRunDirectory(runDirectory) {
   const csvText = contentsByName.get('frames.csv').toString('utf8');
   const parsed = parseCsv(csvText);
   parseFrameRecords(parsed);
-  validateVerifiedFrames(parsed, metadata, planIndex, summariesByTrialId);
+  validateVerifiedFrames(
+    parsed,
+    metadata,
+    planIndex,
+    summariesByTrialId,
+    workloadCatalog,
+  );
 
   return {
     csvText,
@@ -1662,6 +2543,21 @@ export function summarizeCsv(text) {
   const parsed = parseCsv(text);
   const { frames, repetitionColumn } = parseFrameRecords(parsed);
   const groups = groupFrames(frames);
+  const depthFrontToBackVsReverse = pairedContrasts(
+    groups,
+    'fixed-slice-depth-front-to-back',
+    'fixed-slice-depth-reverse',
+  );
+  const depthFrontToBackVsAtomicFixedSlice = pairedContrasts(
+    groups,
+    'fixed-slice-depth-front-to-back',
+    'fixed-slice',
+  );
+  const depthReverseVsAtomicFixedSlice = pairedContrasts(
+    groups,
+    'fixed-slice-depth-reverse',
+    'fixed-slice',
+  );
   return {
     schemaVersion: 2,
     artifactVerification: {
@@ -1691,6 +2587,20 @@ export function summarizeCsv(text) {
         groups,
         'fixed-slice',
         'fixed-slice-per-bucket',
+      ),
+      depthFrontToBackVsReverse,
+    },
+    contextualWholeMechanismComparisons: {
+      depthFrontToBackVsAtomicFixedSlice,
+      depthReverseVsAtomicFixedSlice,
+    },
+    preregisteredGates: {
+      depthOrdering: evaluateDepthOrderingGates(
+        depthFrontToBackVsReverse,
+        {
+          frontToBack: depthFrontToBackVsAtomicFixedSlice,
+          reverse: depthReverseVsAtomicFixedSlice,
+        },
       ),
     },
   };

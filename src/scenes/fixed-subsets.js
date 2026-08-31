@@ -6,6 +6,18 @@ import {
 } from 'three';
 import { mulberry32 } from '../lib/random.js';
 
+export const SCENARIO_LAYOUTS = Object.freeze([
+  'baseline',
+  'low-overlap',
+  'high-overlap',
+]);
+
+const LAYOUT_EXTENTS = Object.freeze({
+  baseline: Object.freeze({ x: 30, y: 18 }),
+  'low-overlap': Object.freeze({ x: 75, y: 40 }),
+  'high-overlap': Object.freeze({ x: 1.5, y: 0.9 }),
+});
+
 function assertPositiveInteger(value, label) {
   if (!Number.isInteger(value) || value <= 0) {
     throw new RangeError(`${label} must be a positive integer.`);
@@ -78,12 +90,18 @@ export function createFixedSubsetScenario({
   visibilityFraction,
   geometrySpheres,
   seed,
+  layout = 'baseline',
 }) {
   assertPositiveInteger(objectCount, 'objectCount');
   assertPositiveInteger(bucketCount, 'bucketCount');
   if (geometrySpheres.length !== bucketCount) {
     throw new RangeError('geometrySpheres length must equal bucketCount.');
   }
+  if (!SCENARIO_LAYOUTS.includes(layout)) {
+    throw new RangeError(`layout must be one of: ${SCENARIO_LAYOUTS.join(', ')}.`);
+  }
+
+  const layoutExtents = LAYOUT_EXTENTS[layout];
 
   const bucketCounts = allocateBalancedCounts(objectCount, bucketCount);
   const bucketBases = prefixBases(bucketCounts);
@@ -115,12 +133,15 @@ export function createFixedSubsetScenario({
       const isVisible = localIndex < visibleCount;
       objectBuckets[objectId] = bucket;
 
-      const inViewX = (random() * 2 - 1) * 30;
-      const inViewY = (random() * 2 - 1) * 18;
+      const randomX = random() * 2 - 1;
+      const randomY = random() * 2 - 1;
+      const inViewX = randomX * layoutExtents.x;
+      const inViewY = randomY * layoutExtents.y;
+      const hiddenY = randomY * LAYOUT_EXTENTS.baseline.y;
       const inViewZ = (random() * 2 - 1) * 28;
       position.set(
         isVisible ? inViewX : 10_000 + objectId * 0.01,
-        isVisible ? inViewY : inViewY,
+        isVisible ? inViewY : hiddenY,
         inViewZ,
       );
 
@@ -154,6 +175,7 @@ export function createFixedSubsetScenario({
     objectCount,
     bucketCount,
     visibilityFraction,
+    layout,
     bucketCounts,
     bucketBases,
     visibleCounts,
