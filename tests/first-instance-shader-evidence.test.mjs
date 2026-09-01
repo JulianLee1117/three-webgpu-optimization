@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   FIRST_INSTANCE_SHADER_EVIDENCE_SCHEMA_VERSION,
+  createFirstInstanceLaneShaderEvidence,
   createFirstInstanceShaderEvidence,
 } from '../src/validation/first-instance-shader-evidence.js';
 import {
@@ -63,6 +64,53 @@ fn main() -> @location( 0 ) vec4<f32> {
 ${extra}\treturn vec4<f32>( 0.4, 0.65, 0.95, 1.0 );
 }
 `;
+}
+
+function computeBindings(binding = 4) {
+  return [{
+    semantic: 'indirectCommands',
+    kind: 'storage-buffer',
+    group: 0,
+    binding,
+    access: 'readWrite',
+    attributeType: 'IndirectStorageBufferAttribute',
+    arrayType: 'Uint32Array',
+    itemSize: 5,
+    count: 32,
+    byteLength: 640,
+  }];
+}
+
+function computeShader(identifier, binding = 4) {
+  return `struct FixedSliceIndexedDraw {
+  indexCount : u32,
+  instanceCount : atomic<u32>,
+  firstIndex : u32,
+  baseVertex : i32,
+  firstInstance : u32
+};
+struct ${identifier}Struct {
+  value : array<FixedSliceIndexedDraw>
+};
+@binding( ${binding} ) @group( 0 )
+var<storage, read_write> ${identifier} : ${identifier}Struct;
+@compute @workgroup_size( 64, 1, 1 )
+fn main() {
+  atomicAdd( &${identifier}.value[ instanceIndex ].instanceCount, 1u );
+}`;
+}
+
+function computePhases(identifierBase) {
+  return {
+    reset: {
+      shader: computeShader(`NodeBuffer_${identifierBase}`),
+      bindings: computeBindings(),
+    },
+    cull: {
+      computeShader: computeShader(`NodeBuffer_${identifierBase + 1}`),
+      bindings: computeBindings(),
+    },
+  };
 }
 
 function vertexInputs(feature) {
@@ -206,6 +254,128 @@ test('shader evidence accepts only the pinned first-instance addressing contrast
     evidence.feature.semanticMappings[1].variableName,
     'NodeBuffer_2717',
   );
+  assert.deepEqual(Object.keys(evidence.feature).sort(), [
+    'normalizedVertex',
+    'occurrenceCounts',
+    'raw',
+    'semanticMappings',
+    'storageBindings',
+    'vertexInputs',
+  ]);
+});
+
+test('lane-local shader evidence audits feature semantics without a portable lane', async () => {
+  const portable = await createFirstInstanceLaneShaderEvidence({
+    laneId: 'portable',
+    lane: contrast().portable,
+    compute: computePhases(3100),
+  });
+  const first = await createFirstInstanceLaneShaderEvidence({
+    laneId: 'feature',
+    lane: contrast().feature,
+    compute: computePhases(4100),
+  });
+  const second = await createFirstInstanceLaneShaderEvidence({
+    laneId: 'feature',
+    lane: contrast({
+      featureVertexOptions: {
+        matrixName: 'NodeBuffer_9100',
+        visibleIdsName: 'NodeBuffer_9101',
+      },
+    }).feature,
+    compute: computePhases(9200),
+  });
+  assert.equal(portable.pass, true, portable.reasons.join('\n'));
+  assert.equal(first.pass, true, first.reasons.join('\n'));
+  assert.equal(second.pass, true, second.reasons.join('\n'));
+  assert.equal(first.kind, 'indirect-first-instance-lane-shader-evidence');
+  assert.equal(first.laneId, 'feature');
+  assert.equal(first.addressMode, 'indirect-first-instance');
+  assert.equal(first.render.occurrenceCounts.bucketBase, 0);
+  assert.equal(first.render.vertexInputs.some((input) => input.name === 'bucketBase'), false);
+  assert.equal(first.render.raw.vertex.source.includes('bucketBase'), false);
+  assert.equal(first.render.normalizedFragment.source, first.render.raw.fragment.source);
+  assert.equal(first.compute.reset.executableFirstInstanceReferences, 0);
+  assert.equal(portable.addressMode, 'bucket-base');
+  assert.equal(portable.render.occurrenceCounts.bucketBase, 2);
+  assert.equal(
+    portable.normalizedSemantics.vertexSha256,
+    first.normalizedSemantics.vertexSha256,
+  );
+  assert.equal(
+    portable.normalizedSemantics.fragmentSha256,
+    first.normalizedSemantics.fragmentSha256,
+  );
+  assert.notEqual(first.render.raw.vertex.sha256, second.render.raw.vertex.sha256);
+  assert.equal(
+    first.normalizedSemantics.vertexSha256,
+    second.normalizedSemantics.vertexSha256,
+  );
+  assert.equal(
+    first.normalizedSemantics.fragmentSha256,
+    second.normalizedSemantics.fragmentSha256,
+  );
+  for (const phase of ['reset', 'cull']) {
+    assert.equal(
+      portable.normalizedSemantics.computeSha256ByPhase[phase],
+      first.normalizedSemantics.computeSha256ByPhase[phase],
+    );
+    assert.notEqual(first.compute[phase].raw.sha256, second.compute[phase].raw.sha256);
+    assert.equal(
+      first.normalizedSemantics.computeSha256ByPhase[phase],
+      second.normalizedSemantics.computeSha256ByPhase[phase],
+    );
+  }
+});
+
+test('lane-local shader evidence fails closed on lane mislabeling', async () => {
+  const input = contrast();
+  const featureAsPortable = await createFirstInstanceLaneShaderEvidence({
+    laneId: 'portable',
+    lane: input.feature,
+  });
+  assertFailed(featureAsPortable, /portable WGSL contains an unexpected bucketBase identifier count/);
+  const portableAsFeature = await createFirstInstanceLaneShaderEvidence({
+    laneId: 'feature',
+    lane: input.portable,
+  });
+  assertFailed(portableAsFeature, /feature WGSL contains an unexpected bucketBase identifier count/);
+  const unknown = await createFirstInstanceLaneShaderEvidence({
+    laneId: 'experimental',
+    lane: input.feature,
+  });
+  assertFailed(unknown, /laneId must be exactly portable or feature/);
+  assert.equal(unknown.laneId, null);
+});
+
+test('feature lane-local evidence rejects forbidden inputs, references, and compute access', async () => {
+  const forbiddenReference = contrast({
+    featureVertexOptions: {
+      extraBeforeAddress: '\tlet forbiddenBucketBase : u32 = bucketBase;\n',
+    },
+  });
+  assertFailed(await createFirstInstanceLaneShaderEvidence({
+    laneId: 'feature',
+    lane: forbiddenReference.feature,
+  }), /unexpected bucketBase identifier count/);
+
+  const forbiddenInput = contrast();
+  forbiddenInput.feature.vertexInputs.push({ ...forbiddenInput.portable.vertexInputs[1] });
+  assertFailed(await createFirstInstanceLaneShaderEvidence({
+    laneId: 'feature',
+    lane: forbiddenInput.feature,
+  }), /unexpected input count/);
+
+  const forbiddenCompute = computePhases(5100);
+  forbiddenCompute.reset.shader = forbiddenCompute.reset.shader.replace(
+    '.instanceCount',
+    '.firstInstance',
+  );
+  assertFailed(await createFirstInstanceLaneShaderEvidence({
+    laneId: 'feature',
+    lane: contrast().feature,
+    compute: forbiddenCompute,
+  }), /must not read or write the indirect firstInstance field/);
 });
 
 test('shader evidence rejects an extra vertex operation after targeted normalization', async () => {

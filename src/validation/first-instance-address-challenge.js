@@ -250,12 +250,17 @@ export function createFragmentAddressChallengeGeometry({
   bucketBases,
   bucketCounts,
   firstIndexes,
+  addressMode = STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE,
   name = 'first-instance-fragment-address-challenge-portable',
 }) {
   const bucketCount = sourceGeometries?.length ?? 0;
+  const portableAddressing = addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE;
+  const featureAddressing = addressMode
+    === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE;
   if (bucketCount === 0
-    || !(bucketBases instanceof Uint32Array)
-    || bucketBases.length !== bucketCount
+    || (!portableAddressing && !featureAddressing)
+    || (portableAddressing && (!(bucketBases instanceof Uint32Array)
+      || bucketBases.length !== bucketCount))
     || !(bucketCounts instanceof Uint32Array)
     || bucketCounts.length !== bucketCount
     || !(firstIndexes instanceof Uint32Array)
@@ -289,14 +294,16 @@ export function createFragmentAddressChallengeGeometry({
     const start = firstIndexes[bucket];
     const end = start + sourceGeometries[bucket].index.count;
     positions.set(ADDRESS_CHALLENGE_PIXEL_TRIANGLE, start * 3);
-    bases.fill(bucketBases[bucket], start, end);
+    if (portableAddressing) bases.fill(bucketBases[bucket], start, end);
     for (let index = start; index < end; index += 1) indexes[index] = index;
   }
 
   const geometry = new InstancedBufferGeometry();
   geometry.name = name;
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
-  geometry.setAttribute('bucketBase', new Uint32BufferAttribute(bases, 1));
+  if (portableAddressing) {
+    geometry.setAttribute('bucketBase', new Uint32BufferAttribute(bases, 1));
+  }
   geometry.setIndex(new Uint32BufferAttribute(indexes, 1));
   geometry.instanceCount = maxInstanceCount;
   geometry.userData.addressChallenge = Object.freeze({
@@ -307,6 +314,8 @@ export function createFragmentAddressChallengeGeometry({
     addressedTriangleCount: bucketCount,
     degenerateTriangleCount: totalIndexCount / 3 - bucketCount,
     addressedTrianglesPerSubmittedInstance: 1,
+    addressMode,
+    bucketBaseAttributePresent: portableAddressing,
   });
   return geometry;
 }
@@ -319,6 +328,7 @@ function inspectChallengeGeometry({
   laneDefinitions,
   challengeGeometries,
   targetShape,
+  visibleIdsAttribute,
 }) {
   const portableLane = laneIds.find(
     (laneId) => laneDefinitions[laneId].addressMode
@@ -328,18 +338,18 @@ function inspectChallengeGeometry({
     (laneId) => laneDefinitions[laneId].addressMode
       === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
   );
-  if (!portableLane
-    || (laneIds.length === 2 && (!featureLane || portableLane === featureLane))
-    || (laneIds.length === 1 && featureLane !== undefined)) {
+  if ((laneIds.length === 2 && (!portableLane || !featureLane || portableLane === featureLane))
+    || (laneIds.length === 1 && (portableLane === undefined) === (featureLane === undefined))) {
     throw new Error(
-      'Address challenge requires a portable lane and, when paired, one first-instance lane.',
+      'Address challenge requires one portable or feature lane, or one lane of each when paired.',
     );
   }
-  const portable = challengeGeometries[portableLane];
+  const portable = portableLane === undefined ? null : challengeGeometries[portableLane];
   const feature = featureLane === undefined ? null : challengeGeometries[featureLane];
-  const position = portable.getAttribute('position');
-  const bucketBase = portable.getAttribute('bucketBase');
-  const index = portable.index;
+  const primary = portable ?? feature;
+  const position = primary.getAttribute('position');
+  const bucketBase = portable?.getAttribute('bucketBase');
+  const index = primary.index;
   let positionMismatchCount = 0;
   let bucketBaseMismatchCount = 0;
   let indexMismatchCount = 0;
@@ -352,7 +362,7 @@ function inspectChallengeGeometry({
     for (let local = 0; local < count; local += 1) {
       const vertex = vertexCursor + local;
       if (index.array[vertex] !== vertex) indexMismatchCount += 1;
-      if (bucketBase.array[vertex] !== scenario.bucketBases[bucket]) {
+      if (bucketBase && bucketBase.array[vertex] !== scenario.bucketBases[bucket]) {
         bucketBaseMismatchCount += 1;
       }
       for (let component = 0; component < 3; component += 1) {
@@ -386,26 +396,45 @@ function inspectChallengeGeometry({
       === laneDefinitions[laneId].indirectAttribute
   ));
   const expectedInstanceCount = Math.max(...scenario.bucketCounts);
-  const portableAttributesExact = exactSequence(
-    Object.keys(portable.attributes).sort(),
-    ['bucketBase', 'position'],
-  );
+  const portableAttributesExact = portable === null
+    || exactSequence(Object.keys(portable.attributes).sort(), ['bucketBase', 'position']);
   const featureAttributesExact = feature === null
     || exactSequence(Object.keys(feature.attributes).sort(), ['position']);
   const attributesExact = portableAttributesExact && featureAttributesExact;
-  const sharedPayloadExact = feature === null || (
+  const sharedPayloadExact = portable === null || feature === null || (
     feature.index === portable.index
       && feature.getAttribute('position') === position
       && feature.getAttribute('bucketBase') === undefined
   );
+  const featureProductionBucketBaseAbsent = featureLane === undefined
+    || laneDefinitions[featureLane].productionGeometry.getAttribute('bucketBase') === undefined;
+  const featureOnly = laneIds.length === 1 && featureLane !== undefined;
+  const featureSurvivorIdentityExact = !featureOnly
+    || laneDefinitions[featureLane].visibleIdsAttribute === visibleIdsAttribute;
+  const featureCommand = featureOnly ? laneDefinitions[featureLane].commandBuffer : null;
+  const featureOffsets = featureOnly
+    ? Array.from(laneDefinitions[featureLane].indirectOffsets)
+    : [];
+  const featureCommandResourceExact = !featureOnly || (
+    featureCommand !== null
+      && typeof featureCommand === 'object'
+      && featureCommand.attributeId === laneDefinitions[featureLane].indirectAttribute.id
+      && featureCommand.recordCount === scenario.bucketCount
+      && featureCommand.drawCommandCount === scenario.bucketCount
+      && featureCommand.firstOffset === featureOffsets[0]
+      && exactSequence(featureCommand.allOffsets, featureOffsets)
+  );
   const pass = vertexCursor === index.count
     && position.count === index.count
-    && bucketBase.count === index.count
+    && (bucketBase === undefined || bucketBase.count === index.count)
     && positionMismatchCount === 0
     && bucketBaseMismatchCount === 0
     && indexMismatchCount === 0
     && attributesExact
     && sharedPayloadExact
+    && featureProductionBucketBaseAbsent
+    && featureSurvivorIdentityExact
+    && featureCommandResourceExact
     && indirectIdentityExact
     && Object.values(laneOffsetsExact).every(Boolean)
     && Object.values(productionLaneOffsetsExact).every(Boolean)
@@ -428,7 +457,15 @@ function inspectChallengeGeometry({
     indexMismatchCount,
     attributesExact,
     sharedPayloadExact,
-    ...(laneIds.length === 1 ? { portableOnly: true } : {}),
+    ...(laneIds.length === 1 && portableLane !== undefined ? { portableOnly: true } : {}),
+    ...(featureOnly ? {
+      featureOnly: true,
+      addressMode: STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
+      bucketBaseAttributeAbsent: feature.getAttribute('bucketBase') === undefined,
+      productionBucketBaseAttributeAbsent: featureProductionBucketBaseAbsent,
+      productionVisibleIdsIdentityExact: featureSurvivorIdentityExact,
+      productionCommandResourceExact: featureCommandResourceExact,
+    } : {}),
     indirectIdentityExact,
     laneOffsetsExact,
     productionLaneOffsetsExact,
@@ -458,14 +495,33 @@ function validateFactoryInputs({
     || new Set(laneIds).size !== laneIds.length) {
     throw new RangeError('Address challenge requires one or two distinct lane IDs.');
   }
+  if (!laneDefinitions || typeof laneDefinitions !== 'object'
+    || !exactSequence(Object.keys(laneDefinitions).sort(), [...laneIds].sort())) {
+    throw new Error('Address challenge lane definitions must name exactly the selected lanes.');
+  }
   for (const laneId of laneIds) {
     const lane = laneDefinitions?.[laneId];
     if (!lane?.productionGeometry || !lane.indirectAttribute
+      || typeof lane.productionGeometry.getAttribute !== 'function'
       || !Array.isArray(Array.from(lane.indirectOffsets ?? []))
       || Array.from(lane.indirectOffsets ?? []).length !== scenario.bucketCount
       || !Object.values(STORAGE_TRANSFORM_ADDRESS_MODES).includes(lane.addressMode)) {
       throw new TypeError(`Address challenge lane ${laneId} is incomplete.`);
     }
+    const expectedMode = laneId === 'portable'
+      ? STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE
+      : laneId === 'feature'
+        ? STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE
+        : null;
+    if (expectedMode === null || lane.addressMode !== expectedMode) {
+      throw new Error(`Address challenge lane ${laneId} is mislabeled for its address mode.`);
+    }
+  }
+  if (laneIds.length === 1 && laneIds[0] === 'feature'
+    && laneDefinitions.feature.visibleIdsAttribute !== visibleIdsAttribute) {
+    throw new Error(
+      'Feature-only address challenge must bind the lane production visibleIds attribute.',
+    );
   }
 }
 
@@ -509,29 +565,41 @@ export function createFirstInstanceAddressChallengeOracle({
     (laneId) => laneDefinitions[laneId].addressMode
       === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
   );
-  if (!portableLane
-    || (laneIds.length === 2 && !featureLane)
-    || (laneIds.length === 1 && featureLane !== undefined)) {
+  if ((laneIds.length === 2 && (!portableLane || !featureLane))
+    || (laneIds.length === 1 && (portableLane === undefined) === (featureLane === undefined))) {
     throw new Error(
-      'Address challenge requires portable addressing and permits feature addressing only when paired.',
+      'Address challenge requires one portable or feature lane, or one lane of each when paired.',
     );
   }
 
-  const portableGeometry = createFragmentAddressChallengeGeometry({
-    sourceGeometries,
-    bucketBases: scenario.bucketBases,
-    bucketCounts: scenario.bucketCounts,
-    firstIndexes,
-    name: `${namePrefix}-${portableLane}`,
-  });
-  const geometries = { [portableLane]: portableGeometry };
-  if (featureLane !== undefined) {
+  const geometries = {};
+  let portableGeometry = null;
+  if (portableLane !== undefined) {
+    portableGeometry = createFragmentAddressChallengeGeometry({
+      sourceGeometries,
+      bucketBases: scenario.bucketBases,
+      bucketCounts: scenario.bucketCounts,
+      firstIndexes,
+      addressMode: STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE,
+      name: `${namePrefix}-${portableLane}`,
+    });
+    geometries[portableLane] = portableGeometry;
+  }
+  if (featureLane !== undefined && portableGeometry !== null) {
     const featureGeometry = createSharedGeometryShell(portableGeometry, {
       omitAttributes: ['bucketBase'],
     });
     featureGeometry.name = `${namePrefix}-${featureLane}`;
     featureGeometry.userData.addressChallenge = portableGeometry.userData.addressChallenge;
     geometries[featureLane] = featureGeometry;
+  } else if (featureLane !== undefined) {
+    geometries[featureLane] = createFragmentAddressChallengeGeometry({
+      sourceGeometries,
+      bucketCounts: scenario.bucketCounts,
+      firstIndexes,
+      addressMode: STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
+      name: `${namePrefix}-${featureLane}`,
+    });
   }
   for (const laneId of laneIds) {
     geometries[laneId].setIndirect(
@@ -547,6 +615,7 @@ export function createFirstInstanceAddressChallengeOracle({
     laneDefinitions,
     challengeGeometries: geometries,
     targetShape,
+    visibleIdsAttribute,
   });
   if (!geometryEvidence.pass) {
     throw new Error('Fragment address challenge geometry failed its exact construction audit.');
@@ -793,6 +862,7 @@ export function createFirstInstanceAddressChallengeOracle({
       outputStage: 'fragment',
       addressTransport: 'vertex-address-to-rgba8-pixel',
       encoding: 'rgb24-object-id-plus-one-transparent-zero-background',
+      geometryEvidence,
       target: { ...observedTargetEvidence },
       shader,
       commandSegment,

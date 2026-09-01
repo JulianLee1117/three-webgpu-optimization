@@ -1,3 +1,5 @@
+import { normalizeLiveIndirectCommandComputeShader } from './live-compute-shader-normalization.js';
+
 const SCHEMA_VERSION = 1;
 
 const LANE_IDS = Object.freeze({
@@ -637,6 +639,178 @@ async function laneDigestRecord(audit) {
   };
 }
 
+function laneAddressMode(laneId) {
+  if (laneId === LANE_IDS.PORTABLE) return 'bucket-base';
+  if (laneId === LANE_IDS.FEATURE) return 'indirect-first-instance';
+  throw new ShaderEvidenceError(
+    `laneId must be exactly ${LANE_IDS.PORTABLE} or ${LANE_IDS.FEATURE}.`,
+  );
+}
+
+function sourceDigestRecord(source, digest) {
+  return { source, ...digest };
+}
+
+async function laneLocalRenderRecord(audit) {
+  const legacy = await laneDigestRecord(audit);
+  const normalizedFragment = await shaderDigest(audit.fragmentShader);
+  return {
+    laneId: audit.laneId,
+    addressMode: laneAddressMode(audit.laneId),
+    raw: {
+      vertex: sourceDigestRecord(audit.vertexShader, legacy.raw.vertex),
+      fragment: sourceDigestRecord(audit.fragmentShader, legacy.raw.fragment),
+    },
+    normalizedVertex: sourceDigestRecord(
+      audit.normalizedVertexShader,
+      legacy.normalizedVertex,
+    ),
+    normalizedFragment: sourceDigestRecord(audit.fragmentShader, normalizedFragment),
+    fragmentNormalization: 'identity-no-approved-lane-contrast',
+    vertexInputs: legacy.vertexInputs,
+    storageBindings: legacy.storageBindings,
+    semanticMappings: legacy.semanticMappings,
+    occurrenceCounts: legacy.occurrenceCounts,
+  };
+}
+
+function computePhaseSource(phase, label) {
+  assertAudit(phase && typeof phase === 'object', `${label} must be an object.`);
+  const shader = phase.shader;
+  const computeShader = phase.computeShader;
+  assertAudit(
+    shader === undefined || computeShader === undefined || shader === computeShader,
+    `${label}.shader and ${label}.computeShader disagree.`,
+  );
+  const source = shader ?? computeShader;
+  assertAudit(
+    typeof source === 'string' && source.length > 0,
+    `${label} requires a nonempty shader or computeShader string.`,
+  );
+  return source;
+}
+
+async function auditComputePhase(phaseName, phase) {
+  const label = `compute.${phaseName}`;
+  const source = computePhaseSource(phase, label);
+  assertAudit(Array.isArray(phase.bindings), `${label}.bindings must be an array.`);
+  assertAudit(
+    countMatches(source, /@compute\s+@workgroup_size\s*\([^)]*\)\s+fn\s+main\s*\(/m) === 1,
+    `${label} must expose exactly one @compute @workgroup_size fn main entry point.`,
+  );
+  const executableFirstInstanceReferences = countMatches(
+    source,
+    /\.\s*firstInstance\b/g,
+  );
+  assertAudit(
+    executableFirstInstanceReferences === 0,
+    `${label} must not read or write the indirect firstInstance field.`,
+  );
+  const normalized = normalizeLiveIndirectCommandComputeShader(source, phase.bindings);
+  const [rawDigest, normalizedDigest] = await Promise.all([
+    shaderDigest(source),
+    shaderDigest(normalized.normalizedShader),
+  ]);
+  return {
+    raw: sourceDigestRecord(source, rawDigest),
+    normalized: sourceDigestRecord(normalized.normalizedShader, normalizedDigest),
+    normalization: normalized.audit,
+    executableFirstInstanceReferences,
+    bindings: structuredClone(phase.bindings),
+  };
+}
+
+async function laneLocalComputeRecords(compute) {
+  if (compute === null || compute === undefined) return {};
+  assertAudit(compute && typeof compute === 'object' && !Array.isArray(compute),
+    'compute must be a reset/cull phase record.');
+  assertAudit(
+    JSON.stringify(Object.keys(compute).sort()) === JSON.stringify(['cull', 'reset']),
+    'compute must contain exactly reset and cull phases.',
+  );
+  const records = {};
+  for (const phaseName of ['reset', 'cull']) {
+    records[phaseName] = await auditComputePhase(phaseName, compute[phaseName]);
+  }
+  return records;
+}
+
+function legacyLaneRecord(render) {
+  if (render === null) return null;
+  return {
+    raw: {
+      vertex: {
+        byteLength: render.raw.vertex.byteLength,
+        sha256: render.raw.vertex.sha256,
+      },
+      fragment: {
+        byteLength: render.raw.fragment.byteLength,
+        sha256: render.raw.fragment.sha256,
+      },
+    },
+    normalizedVertex: {
+      byteLength: render.normalizedVertex.byteLength,
+      sha256: render.normalizedVertex.sha256,
+    },
+    vertexInputs: render.vertexInputs,
+    storageBindings: render.storageBindings,
+    semanticMappings: render.semanticMappings,
+    occurrenceCounts: render.occurrenceCounts,
+  };
+}
+
+/**
+ * Audits one independently constructed portable or feature lane. The returned
+ * raw and narrowly normalized sources plus their digests are self-contained so
+ * an offline verifier can compare vertex, fragment, and compute semantics from
+ * different fresh browser/device sessions without constructing the other lane.
+ * `compute`, when supplied, must contain exactly `reset` and `cull`; each phase
+ * accepts either `shader` or `computeShader` plus its runtime `bindings`.
+ */
+export async function createFirstInstanceLaneShaderEvidence({
+  laneId,
+  lane,
+  compute = null,
+} = {}) {
+  const reasons = [];
+  let render = null;
+  let computeRecords = {};
+  let addressMode = null;
+  try {
+    addressMode = laneAddressMode(laneId);
+    render = await laneLocalRenderRecord(auditLane(laneId, lane));
+  } catch (error) {
+    reasons.push(error.message);
+  }
+  if (render !== null) {
+    try {
+      computeRecords = await laneLocalComputeRecords(compute);
+    } catch (error) {
+      reasons.push(error.message);
+    }
+  }
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    kind: 'indirect-first-instance-lane-shader-evidence',
+    pass: reasons.length === 0,
+    reasons,
+    laneId: addressMode === null ? null : laneId,
+    addressMode,
+    render,
+    compute: computeRecords,
+    normalizedSemantics: render === null ? null : {
+      vertexSha256: render.normalizedVertex.sha256,
+      fragmentSha256: render.normalizedFragment.sha256,
+      computeSha256ByPhase: Object.fromEntries(
+        Object.entries(computeRecords).map(([phaseName, record]) => [
+          phaseName,
+          record.normalized.sha256,
+        ]),
+      ),
+    },
+  };
+}
+
 /**
  * Creates fail-closed evidence for the fixed-slice bucketBase versus indirect-first-instance
  * shader contrast. Runtime metadata must describe only shader-used vertex inputs and the two
@@ -645,18 +819,26 @@ async function laneDigestRecord(audit) {
  */
 export async function createFirstInstanceShaderEvidence({ portable, feature } = {}) {
   const reasons = [];
-  let portableAudit = null;
-  let featureAudit = null;
-  try {
-    portableAudit = auditLane(LANE_IDS.PORTABLE, portable);
-  } catch (error) {
-    reasons.push(`portable: ${error.message}`);
-  }
-  try {
-    featureAudit = auditLane(LANE_IDS.FEATURE, feature);
-  } catch (error) {
-    reasons.push(`feature: ${error.message}`);
-  }
+  const [portableEvidence, featureEvidence] = await Promise.all([
+    createFirstInstanceLaneShaderEvidence({ laneId: LANE_IDS.PORTABLE, lane: portable }),
+    createFirstInstanceLaneShaderEvidence({ laneId: LANE_IDS.FEATURE, lane: feature }),
+  ]);
+  reasons.push(...portableEvidence.reasons.map((reason) => `portable: ${reason}`));
+  reasons.push(...featureEvidence.reasons.map((reason) => `feature: ${reason}`));
+  const portableAudit = portableEvidence.render === null ? null : {
+    vertexShader: portableEvidence.render.raw.vertex.source,
+    fragmentShader: portableEvidence.render.raw.fragment.source,
+    normalizedVertexShader: portableEvidence.render.normalizedVertex.source,
+    runtimeVertexInputs: portableEvidence.render.vertexInputs,
+    storageBindings: portableEvidence.render.storageBindings,
+  };
+  const featureAudit = featureEvidence.render === null ? null : {
+    vertexShader: featureEvidence.render.raw.vertex.source,
+    fragmentShader: featureEvidence.render.raw.fragment.source,
+    normalizedVertexShader: featureEvidence.render.normalizedVertex.source,
+    runtimeVertexInputs: featureEvidence.render.vertexInputs,
+    storageBindings: featureEvidence.render.storageBindings,
+  };
 
   let normalizedVertexEqual = false;
   let rawFragmentEqual = false;
@@ -678,10 +860,8 @@ export async function createFirstInstanceShaderEvidence({ portable, feature } = 
     if (!rawVertexDifferent) reasons.push('raw vertex WGSL unexpectedly has no lane contrast.');
   }
 
-  const [portableRecord, featureRecord] = await Promise.all([
-    laneDigestRecord(portableAudit),
-    laneDigestRecord(featureAudit),
-  ]);
+  const portableRecord = legacyLaneRecord(portableEvidence.render);
+  const featureRecord = legacyLaneRecord(featureEvidence.render);
   return {
     schemaVersion: SCHEMA_VERSION,
     kind: 'indirect-first-instance-shader-evidence',

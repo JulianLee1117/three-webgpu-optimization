@@ -92,6 +92,8 @@ The bounded follow-up that separates construction, first-compute-use,
 render-prime, and timestamp-preprime order is specified in the
 [setup-order diagnostic](docs/INDIRECT_FIRST_INSTANCE_SETUP_ORDER_DIAGNOSTIC.md).
 It is descriptive and does not alter the completed candidate decision.
+The follow-up decision design is frozen in the
+[standalone deployment protocol](docs/INDIRECT_FIRST_INSTANCE_STANDALONE_DEPLOYMENT_PROTOCOL.md).
 
 ## Current status
 
@@ -124,8 +126,8 @@ favored the feature lane in both sessions, with an equal-session pooled
 timestamped GPU-pass response of -0.284 ms (-14.25%), almost entirely in render.
 Render priming was also a repeatable setup exposure: the `R` contrast was
 +0.081 ms. The result is therefore useful diagnostic evidence but not a
-candidate pass; the next comparison must construct
-and prime only one lane per fresh browser/device session. Exact results and
+candidate pass; the next comparison must construct and prime only one lane per
+fresh browser/device session. Exact results and
 limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
 
 The core techniques, including GPU frustum culling, survivor compaction, indirect drawing, and retained command submission, are established prior art. The research question is whether a narrower Three.js integration or fixed-ownership specialization produces a material, reproducible difference.
@@ -262,6 +264,25 @@ npm run verify:candidate:first-instance-live -- results/candidate-series/first-d
 
 The ledger and pair-verification contract is specified in
 [`docs/FIRST_INSTANCE_LIVE_CANDIDATE_LEDGER.md`](docs/FIRST_INSTANCE_LIVE_CANDIDATE_LEDGER.md).
+
+The standalone deployment confirmation constructs and primes only one assigned
+lane in each fresh browser/device session. Its excluded smoke runs both
+visibility trials in one portable and one feature session; the full candidate
+runs the frozen 96-session, 192-trial two-matrix plan. Candidate execution
+requires a clean worktree and the same NVIDIA telemetry availability described
+above. The runner prints the immutable run directory for independent
+verification:
+
+```sh
+npm run smoke:first-instance-standalone
+npm run candidate:first-instance-standalone
+npm run verify:first-instance-standalone -- results/candidate-standalone-deployment/<run-id>
+```
+
+At a 60 Hz browser cadence, allow approximately 50 to 75 minutes for capture
+and another 5 to 15 minutes for verification. The full resource, lifecycle,
+analysis, evidence, and stopping rules are frozen in the
+[standalone deployment protocol](docs/INDIRECT_FIRST_INSTANCE_STANDALONE_DEPLOYMENT_PROTOCOL.md).
 
 A completed run can be summarized with:
 

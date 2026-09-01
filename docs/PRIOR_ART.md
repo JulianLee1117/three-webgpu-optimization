@@ -56,7 +56,32 @@ At 32 buckets, fixed-slice uses two dispatches in one explicit Three.js compute 
 
 Using nonzero indirect `firstInstance` values is established WebGPU practice and is already present in prior libraries, including the historical Three Blocks path above. This project does not claim the command-field technique as new. The narrower specialization removes a redundant per-vertex bucket-base input from the fixed-slice representation: the portable shader reads `visibleIds[bucketBase + instanceIndex]`, while the feature-gated shader reads `visibleIds[instanceIndex]` and receives the same base through the indirect command.
 
-The controlled contribution is the causal measurement and Three.js integration boundary. The render-only crossover binds the two address paths to the same survivor list, common geometry payload, storage resources, material output, native draws, and balanced within-block schedule. Both aggregate estimates show a material-sized reduction on one device, but one of the two matrices fails preregistered nuisance-interaction bounds, so the declared confirmatory criterion is not met. The result therefore motivates a live compute-plus-render evaluation; it does not establish novelty of the primitive, a confirmed first-device result, cross-device generality, or a total-GPU deployment claim.
+The [WebGPU indirect-draw contract](https://github.com/gpuweb/gpuweb/blob/main/spec/index.bs#L12142-L12231)
+and [WGSL `instance_index` definition](https://www.w3.org/TR/WGSL/#instance-index-builtin-value)
+already specify this base-instance behavior. GPUWeb's
+[`firstInstance` investigation](https://github.com/gpuweb/gpuweb/issues/4349)
+explicitly discusses using the value as per-draw shader-readable indexing state,
+and current [Three Blocks `IndirectBatchedMesh` documentation](https://www.threejs-blocks.com/docs/IndirectBatchedMesh)
+describes the same broad survivor-ID integration pattern. Native evidence also
+warns against assuming one universal direction: NVIDIA's
+[`vk_idbuffer_rasterization` comparison](https://github.com/nvpro-samples/vk_idbuffer_rasterization#multi-draw-indirect-and-instanced-vertex-attribute)
+reports that attribute-carried draw identifiers can be preferable on some
+hardware.
+
+The controlled contribution is therefore the measurement and Three.js
+deployment boundary, not the primitive or broad integration pattern. The
+treatment changes a vertex stream and layout, an integer addition, and builtin
+addressing together; results are attributed to that complete representation,
+not to one arithmetic instruction. The render-only and live dual-resident
+crossovers both observed material-sized same-device reductions, but each
+two-matrix pair missed its preregistered confirmation rule because one matrix
+failed a nuisance-interaction bound. A subsequent setup-order factorial kept
+the response negative in every tested cell while localizing a repeatable
+render-priming exposure. The frozen next experiment consequently compares
+standalone steady-state deployments with only one lane constructed and primed
+per fresh browser/device session. None of the completed evidence establishes a
+confirmed first-device result, cross-device generality, or a total-GPU
+deployment claim.
 
 ## Three.js, WebGPU, and browser constraints
 

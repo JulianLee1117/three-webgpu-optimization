@@ -432,6 +432,87 @@ function firstInstanceFieldAudit(source) {
   };
 }
 
+/**
+ * Captures one standalone lane's live reset/cull programs without constructing
+ * or inspecting the opposite addressing lane. Cross-lane equivalence is an
+ * offline verifier responsibility for the standalone deployment experiment.
+ */
+export async function collectLiveComputeLaneEvidence(renderer, shared, lane) {
+  validateFixedSliceLane(lane?.lane);
+  if (!shared || shared.kind !== 'fixed-slice-shared-resources') {
+    throw new TypeError('Standalone compute evidence requires fixed-slice shared resources.');
+  }
+  if (!Array.isArray(lane.computeNodes) || lane.computeNodes.length !== 2) {
+    throw new TypeError('Standalone compute evidence requires exactly two compute nodes.');
+  }
+  const semantics = storageSemanticMap(shared, lane);
+  const fixedExpectations = {
+    reset: {
+      count: 32,
+      workgroupSize: [64, 1, 1],
+      derivedDispatchSize: [1, 1, 1],
+    },
+    cull: {
+      count: 65_536,
+      workgroupSize: [64, 1, 1],
+      derivedDispatchSize: [1_024, 1, 1],
+    },
+  };
+  const phases = {};
+  for (const [phase, nodeIndex] of [['reset', 0], ['cull', 1]]) {
+    const capture = captureComputeBindings(renderer, lane.computeNodes[nodeIndex], semantics);
+    const normalized = normalizeLiveIndirectCommandComputeShader(
+      capture.computeShader,
+      capture.bindings,
+    );
+    const wordFour = firstInstanceFieldAudit(capture.computeShader);
+    const fixedExpectation = fixedExpectations[phase];
+    const fixedWorkloadExact = capture.execution.count === fixedExpectation.count
+      && exactSequence(capture.execution.workgroupSize, fixedExpectation.workgroupSize)
+      && exactSequence(
+        capture.execution.derivedDispatchSize,
+        fixedExpectation.derivedDispatchSize,
+      )
+      && capture.execution.runtimeMatchesDerived === true;
+    const storageBindingsKnown = capture.bindings
+      .filter((binding) => binding.kind === 'storage-buffer')
+      .every((binding) => binding.semantic !== 'unknown-storage');
+    const normalizedSha256 = await sha256Text(normalized.normalizedShader);
+    phases[phase] = {
+      pass: wordFour.pass && fixedWorkloadExact && storageBindingsKnown,
+      laneId: lane.lane,
+      rawSha256: await sha256Text(capture.computeShader),
+      normalizedSha256,
+      normalizedShader: normalized.normalizedShader,
+      normalization: normalized.audit,
+      workgroupDeclaration: workgroupDeclaration(capture.computeShader),
+      wordFour,
+      fixedExpectation,
+      fixedWorkloadExact,
+      storageBindingsKnown,
+      capture,
+    };
+  }
+  const maxStorageBindingCount = Math.max(...Object.values(phases).map(
+    (phase) => phase.capture.bindings.filter(
+      (binding) => binding.kind === 'storage-buffer',
+    ).length,
+  ));
+  return {
+    schemaVersion: 1,
+    kind: 'live-first-instance-standalone-compute-shader-evidence',
+    pass: phases.reset.pass && phases.cull.pass,
+    laneId: lane.lane,
+    dispatchDimensions: {
+      reset: [...phases.reset.capture.execution.derivedDispatchSize],
+      cull: [...phases.cull.capture.execution.derivedDispatchSize],
+    },
+    fixedWorkloadExact: phases.reset.fixedWorkloadExact && phases.cull.fixedWorkloadExact,
+    maxStorageBindingCount,
+    phases,
+  };
+}
+
 async function collectComputeShaderEvidence(renderer, lanes) {
   const captures = {};
   for (const laneId of FIRST_INSTANCE_LIVE_CROSSOVER_LANES) {
