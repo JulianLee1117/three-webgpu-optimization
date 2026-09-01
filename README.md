@@ -118,6 +118,16 @@ the tested device, not a confirmed deployable or cross-device optimization.
 The retained private pair, deterministic sanitized bundles, public receipt, and
 lossless public package all pass their respective integrity verifiers.
 
+A subsequent two-session `2^4` development factorial separated construction,
+first compute use, render priming, and timestamp prepriming. Every setup cell
+favored the feature lane in both sessions, with an equal-session pooled
+timestamped GPU-pass response of -0.284 ms (-14.25%), almost entirely in render.
+Render priming was also a repeatable setup exposure: the `R` contrast was
++0.081 ms. The result is therefore useful diagnostic evidence but not a
+candidate pass; the next comparison must construct
+and prime only one lane per fresh browser/device session. Exact results and
+limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
+
 The core techniques, including GPU frustum culling, survivor compaction, indirect drawing, and retained command submission, are established prior art. The research question is whether a narrower Three.js integration or fixed-ownership specialization produces a material, reproducible difference.
 
 ## Run locally

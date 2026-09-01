@@ -127,6 +127,64 @@ The timestamped GPU-pass effect was almost entirely render time; the high-visibi
 
 The deterministic public package `first-device-live-7b343849f9dc3e8a.tar.br` contains the sanitized pair and receipt, is 4,486,242 bytes, and has SHA-256 `5cb66f15b53c5360785a063fd2a46d82cd1041a97827cfd354e47bb589467b99`. Its archive, embedded receipt, and public-run commitments pass the strict package verifier while preserving the `confirmation-not-met` decision.
 
+## Setup-order development diagnostic
+
+The bounded follow-up used source commit
+`2d9acf5cc12ad018c92e217c5bd92c2ee01662c4` and the same 65,536-object,
+32-bucket live workload. It separated four exposures that had been bundled by
+the candidate's lane-physical-order factor: resource construction (`C`), first
+compute use (`K`), render-pipeline and bundle priming (`R`), and timestamp-pool
+prepriming (`T`). Two fresh browser/device sessions each executed one frozen
+16-cell permutation followed by its exact reverse. The complete diagnostic
+contains 64 trials, 30,720 retained measured rows, and no retry, replacement,
+or outlier deletion.
+
+Every trial passed the exact output, survivor, command, addressing, shader,
+timestamp, and resource-lifecycle gates. The independent verifier reconstructed
+all 64 trial summaries and all 15 factorial contrasts from 72 declared
+artifacts, checked 384 fresh shader-observation challenges, and confirmed exact
+source, installed-dependency, and served-module identity. Its decision remains
+`diagnostic-only-no-candidate-pass`. Negative values below favor the feature
+lane.
+
+| Scope | Timestamped GPU-pass delta | Render delta | Compute delta | Negative session-cell responses |
+| --- | ---: | ---: | ---: | ---: |
+| Session 1 | -0.295791 ms (-14.6050%) | -0.296116 ms (-14.6597%) | +0.000007 ms (+0.1684%) | 16 / 16 |
+| Session 2 | -0.271902 ms (-13.8958%) | -0.271938 ms (-13.9307%) | -0.000003 ms (-0.0637%) | 16 / 16 |
+| Equal-session pooled cells | -0.283847 ms (-14.2504%) | -0.284027 ms (-14.2952%) | +0.000002 ms (+0.0524%) | 16 / 16 in both sessions |
+
+Render priming was the only large, session-concordant main effect. With
+portable primed first (`R=0`), the pooled feature-minus-portable response was
+-0.324272 ms; with feature primed first (`R=1`), it was -0.243422 ms. The
+level-one-minus-level-zero `R` contrast was therefore +0.080850 ms and +3.371
+percentage points. It was +0.079379 ms in session 1 and +0.082321 ms in session
+2, and remained positive in every session by forward/reverse block,
+previous-lane stratum, and timing-half slice. Construction and first-compute-use
+main effects were approximately -0.0021 and -0.0012 ms and changed sign between
+sessions. The timestamp-preprime contrast was -0.0096 ms but was close to zero
+in session 2.
+
+The recorded renderer-program-byte transitions did not simply align with the
+render-prime pattern. Each session had the same three timing-start states:
+renderer program bytes stepped from 38,311 for positions 0-1, to 38,415 for
+positions 2-15, and to 38,519 for positions 16-31. Pipeline counts,
+compute-program counts, and all other recorded resource fields remained fixed,
+and every individual trial held its start state through completion. The `R`
+contrast retained the same direction
+and similar magnitude in both reverse blocks, where the cache state was fixed.
+Occurrence-level history and drift nevertheless remain aliased with the frozen
+schedule and cannot be assigned a causal interpretation.
+
+A contemporaneous Windows GPU-engine sample attributed approximately 13-15%
+3D utilization to the development environment. That observation is outside the
+manifest-bound evidence and further limits the timing values to mechanism
+diagnosis. The run does not amend either completed candidate matrix, establish
+that `R` caused the earlier interaction, or support a deployment or cross-device
+claim. It does justify continuing with a standalone topology in which exactly
+one lane is constructed, resident, and primed per fresh browser/device session;
+that design removes render-prime order from the comparison rather than treating
+it as a nuisance to average away.
+
 ## Evidence identifiers
 
 | Comparison | Replication | Run identifier |
@@ -143,8 +201,9 @@ The deterministic public package `first-device-live-7b343849f9dc3e8a.tar.br` con
 | Indirect `firstInstance` crossover | B | `first-instance-render-only-o65536-b32-2026-09-01T05-44-58.948Z` |
 | Live indirect `firstInstance` | A | `first-instance-live-o65536-b32-2026-09-01T16-47-53.050Z` |
 | Live indirect `firstInstance` | B | `first-instance-live-o65536-b32-2026-09-01T16-50-07.577Z` |
+| Setup-order factorial | Development diagnostic | `first-instance-live-order-factorial-2026-09-01T18-25-27-021Z-ace6b5c5` |
 
-Generated run directories remain ignored source artifacts and are not part of the tracked repository. Each identifier above names a manifest-bound local directory containing frame-level CSV data, metadata, trial summaries, validation payloads, workload manifests, GPU telemetry, and SHA-256 commitments. The analyzer rejects incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts; this establishes internal artifact consistency, not independent authenticity.
+Generated run directories remain ignored source artifacts and are not part of the tracked repository. Each identifier above names a manifest-bound local directory containing frame-level data, metadata, trial summaries, validation payloads, workload manifests, and SHA-256 commitments. Candidate directories also retain their required GPU telemetry; the setup-order development diagnostic does not. The analyzers reject incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts; this establishes internal artifact consistency, not independent authenticity.
 
 ## What the evidence establishes
 
@@ -155,6 +214,7 @@ Generated run directories remain ignored source artifacts and are not part of th
 - The tested bucket-serial depth-ordering mechanism is not a total-GPU optimization, and the frozen crossover finds no material render-order benefit after controlling within-trial time and physical-buffer placement.
 - Two same-device matrices observed approximately 17% lower timestamped render-pass time with indirect `firstInstance` addressing in the tested high-visibility fixed-slice path, but this remains an unconfirmed signal because one matrix failed nuisance-interaction bounds and the required two-matrix decision was not met.
 - Normal live culling preserved that addressing-path direction: two further matrices observed approximately 11.5-12.5% lower high-visibility timestamped GPU-pass time, almost entirely in render, but one matrix again failed a strict order-interaction bound and the pair did not confirm.
+- The setup-order development diagnostic preserved a negative feature-minus-portable response in every factorial cell and localized a repeatable render-priming-order sensitivity. This is diagnostic evidence, not a candidate or deployment result.
 
 ## What remains open
 
@@ -163,6 +223,6 @@ Generated run directories remain ignored source artifacts and are not part of th
 - Production assets, textures, dynamic cameras, moving objects, shadows, transparency, skinning, and morph targets are outside this result.
 - The benchmark does not measure presentation latency or queue overlap.
 - A different scene, material cost, resolution, depth distribution, or GPU may have a different render-order crossover; that would require a new preregistered experiment rather than extending this null result.
-- The repeated indirect-`firstInstance` effect remains a same-device signal with unresolved lane-state/order heterogeneity. A deployment-topology experiment must isolate each lane in balanced fresh browser/device sessions before enabling the feature path.
+- The repeated indirect-`firstInstance` effect remains a same-device signal. Render-priming-order sensitivity is now localized, but a deployment-topology experiment must eliminate shared dual-lane state by isolating each lane in balanced fresh browser/device sessions before enabling the feature path.
 
-The frozen render-order crossover closes the ordering branch for the current fixture. In the live crossover, the indirect-`firstInstance` specialization's compute contrast was effectively zero while its render-stage signal was approximately 0.25 ms; the result does not rank unrelated compute optimizations. The next bounded diagnostic should isolate construction and pipeline-priming order, then quantify exact occlusion headroom before committing to a larger GPU-resident occlusion experiment.
+The frozen render-order crossover closes the ordering branch for the current fixture. In the live crossover and setup-order diagnostic, the indirect-`firstInstance` specialization's compute contrast was effectively zero while the render-stage response remained material-sized; the result does not rank unrelated compute optimizations. The next experiment is the standalone fresh-session deployment topology. Exact occlusion headroom remains the following branch if the addressing specialization does not confirm there.
