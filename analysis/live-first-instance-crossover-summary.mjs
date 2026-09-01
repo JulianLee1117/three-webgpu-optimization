@@ -1050,6 +1050,36 @@ function evaluateNumericalGates(contrasts, trialsByVisibility) {
 }
 
 /**
+ * Normalize and reconstruct one exact 480-row live first-instance trial.
+ * This is a narrow diagnostic entry point; the candidate analyzer below keeps
+ * its existing whole-matrix chronology and numerical-gate behavior.
+ */
+export function summarizeLiveFirstInstanceTrialRows(
+  rows,
+  expectedTrial,
+  expectedRunId,
+) {
+  if (!Array.isArray(rows)) reject('trial input rows must be an array.');
+  if (rows.length !== FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES) {
+    reject(
+      `trial input has ${rows.length} rows; expected exactly `
+        + `${FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES}.`,
+    );
+  }
+  requireRecord(expectedTrial, 'expectedTrial');
+  nonemptyString(expectedRunId, 'expectedRunId');
+
+  const seenGpuFrameIds = new Set();
+  const normalized = rows.map(
+    (row, index) => normalizeRow(row, index, seenGpuFrameIds),
+  );
+  if (normalized.some((row) => row.runId !== expectedRunId)) {
+    reject(`trial input rows must all use runId ${JSON.stringify(expectedRunId)}.`);
+  }
+  return summarizeTrial(normalized, expectedTrial, expectedRunId);
+}
+
+/**
  * Analyze measured rows from one preregistered live indirect-firstInstance
  * candidate matrix. The function fails closed on any non-exact plan, schedule,
  * timestamp shape, command-buffer selection, or serial stream. The caller is

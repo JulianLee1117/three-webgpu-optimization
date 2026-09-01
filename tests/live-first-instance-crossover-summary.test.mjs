@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   summarizeLiveFirstInstanceCrossoverRows,
+  summarizeLiveFirstInstanceTrialRows,
 } from '../analysis/live-first-instance-crossover-summary.mjs';
 import {
   firstInstanceLiveCrossoverFrame,
@@ -182,6 +183,36 @@ test('live analyzer reconstructs exact component estimators and passes the froze
   assert.equal(decision.gates.lowVisibilityTotalRegression.pass, true);
   assert.equal(decision.gates.pairedHighMinusLowTotal.pass, true);
   assert.equal(decision.gates.drift.pass, true);
+});
+
+test('single-trial helper returns the existing internal 480-row trial summary', () => {
+  const rows = createRows();
+  const runId = rows[0].runId;
+  const expectedTrial = buildFirstInstanceLiveCrossoverPlan({
+    runId,
+    objectCount: OBJECT_COUNT,
+    bucketCount: BUCKET_COUNT,
+  })[0];
+  const single = summarizeLiveFirstInstanceTrialRows(
+    rows.slice(0, 480),
+    expectedTrial,
+    runId,
+  );
+  const matrix = summarizeLiveFirstInstanceCrossoverRows(rows);
+
+  assert.deepEqual(single, matrix.trials[0]);
+  assert.throws(
+    () => summarizeLiveFirstInstanceTrialRows(rows.slice(0, 479), expectedTrial, runId),
+    /expected exactly 480/,
+  );
+  assert.throws(
+    () => summarizeLiveFirstInstanceTrialRows(
+      rows.slice(0, 480),
+      expectedTrial,
+      'different-run',
+    ),
+    /must all use runId/,
+  );
 });
 
 test('live estimator standardizes predecessor lanes and retains directed carryover diagnostics', () => {

@@ -88,6 +88,10 @@ the direct diagnostic oracle while bundle/resource commitments remain fixed
 and renderer call counters prove exactly two render submissions with no compute
 or lane-preparation work.
 The frozen design is in the [live indirect `firstInstance` protocol](docs/INDIRECT_FIRST_INSTANCE_LIVE_PROTOCOL.md).
+The bounded follow-up that separates construction, first-compute-use,
+render-prime, and timestamp-preprime order is specified in the
+[setup-order diagnostic](docs/INDIRECT_FIRST_INSTANCE_SETUP_ORDER_DIAGNOSTIC.md).
+It is descriptive and does not alter the completed candidate decision.
 
 ## Current status
 

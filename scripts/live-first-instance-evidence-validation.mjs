@@ -1018,12 +1018,19 @@ function validateLifecycle(lifecycle, spec, validation, reasons) {
   requireEqual(lifecycle.kind, 'live-first-instance-crossover-static-resource-lifecycle',
     'live lifecycle kind', reasons);
   requireEqual(lifecycle.lanesPrimed, true, 'live lifecycle lanesPrimed', reasons);
+  const laneConstructionOrder = spec.laneConstructionOrder ?? spec.lanePhysicalOrder;
+  const firstComputeUseOrder = spec.firstComputeUseOrder ?? spec.lanePhysicalOrder;
+  const renderPipelinePrimeOrder = spec.renderPipelinePrimeOrder ?? spec.lanePhysicalOrder;
   for (const [field, expected] of [
-    ['lanePhysicalOrder', spec.lanePhysicalOrder],
-    ['laneConstructionOrder', spec.lanePhysicalOrder],
-    ['firstComputeUseOrder', spec.lanePhysicalOrder],
-    ['renderPipelinePrimeOrder', spec.lanePhysicalOrder],
+    ['lanePhysicalOrder', laneConstructionOrder],
+    ['laneConstructionOrder', laneConstructionOrder],
+    ['firstComputeUseOrder', firstComputeUseOrder],
+    ['renderPipelinePrimeOrder', renderPipelinePrimeOrder],
   ]) requireExactArray(lifecycle[field], expected, `live lifecycle ${field}`, reasons);
+  if (spec.setupPrimeTopology != null) {
+    requireEqual(lifecycle.setupPrimeTopology, spec.setupPrimeTopology,
+      'live lifecycle setupPrimeTopology', reasons);
+  }
   requireCondition(FIRST_INSTANCE_LIVE_CROSSOVER_LANES.includes(lifecycle.activeLane),
     'live lifecycle activeLane is unsupported', reasons);
   requireCondition(lifecycle.residentPreparedLane === null
@@ -1714,10 +1721,50 @@ export function validateLiveFirstInstanceCompletionInvariant(invariant, {
     rendererMemoryExact: true,
     viewportStateExact: true,
   })) requireEqual(invariant[field], expected, `live completion ${field}`, reasons);
-  requireExactArray(invariant.observedLanePhysicalOrder, spec?.lanePhysicalOrder ?? [],
+  const laneConstructionOrder = spec?.laneConstructionOrder ?? spec?.lanePhysicalOrder ?? [];
+  requireExactArray(invariant.observedLanePhysicalOrder, laneConstructionOrder,
     'live completion observed lane physical order', reasons);
-  requireEqual(invariant.plannedLanePhysicalOrder, spec?.lanePhysicalOrder?.join('|'),
+  requireEqual(invariant.plannedLanePhysicalOrder, laneConstructionOrder.join('|'),
     'live completion planned lane physical order', reasons);
+  for (const [specField, plannedField, observedField, label] of [
+    [
+      'laneConstructionOrder',
+      'plannedLaneConstructionOrder',
+      'observedLaneConstructionOrder',
+      'lane construction order',
+    ],
+    [
+      'firstComputeUseOrder',
+      'plannedFirstComputeUseOrder',
+      'observedFirstComputeUseOrder',
+      'first compute-use order',
+    ],
+    [
+      'renderPipelinePrimeOrder',
+      'plannedRenderPipelinePrimeOrder',
+      'observedRenderPipelinePrimeOrder',
+      'render-pipeline prime order',
+    ],
+  ]) {
+    const expected = spec?.[specField];
+    if (expected == null) continue;
+    requireExactArray(parseOrder(invariant[plannedField]), expected,
+      `live completion planned ${label}`, reasons);
+    requireExactArray(parseOrder(invariant[observedField]), expected,
+      `live completion observed ${label}`, reasons);
+  }
+  if (spec?.setupPrimeTopology != null) {
+    requireEqual(invariant.setupPrimeTopology, spec.setupPrimeTopology,
+      'live completion setupPrimeTopology', reasons);
+  }
+  if (spec?.timestampPreprimeLaneId != null) {
+    requireEqual(invariant.plannedTimestampPreprimeLaneId, spec.timestampPreprimeLaneId,
+      'live completion planned timestamp preprime lane', reasons);
+    requireEqual(invariant.timestampPreprimeLaneId, spec.timestampPreprimeLaneId,
+      'live completion timestamp preprime lane', reasons);
+    requireEqual(invariant.timestampPreprimeLaneExact, true,
+      'live completion timestamp preprime lane exactness', reasons);
+  }
   for (const lane of FIRST_INSTANCE_LIVE_CROSSOVER_LANES) {
     requireEqual(invariant.bundleStaticFlags?.[lane], true,
       `live completion ${lane} bundle static`, reasons);
@@ -2248,6 +2295,24 @@ export function validateLiveFirstInstanceCrossoverRows({
   protocol,
 } = {}) {
   const reasons = [];
+  const laneConstructionOrder = spec?.laneConstructionOrder ?? spec?.lanePhysicalOrder ?? [];
+  const optionalSetupOrders = [
+    [
+      'laneConstructionOrder',
+      'plannedLaneConstructionOrder',
+      'lane construction order',
+    ],
+    [
+      'firstComputeUseOrder',
+      'plannedFirstComputeUseOrder',
+      'first compute-use order',
+    ],
+    [
+      'renderPipelinePrimeOrder',
+      'plannedRenderPipelinePrimeOrder',
+      'render-pipeline prime order',
+    ],
+  ];
   const scheduleSha256 = liveFirstInstanceCrossoverScheduleSha256(
     spec?.superblockOrientationOffset,
   );
@@ -2480,10 +2545,26 @@ export function validateLiveFirstInstanceCrossoverRows({
     requireEqual(row?.timestampAvailable, true,
       `row ${index} timestampAvailable`, reasons);
     requireExactArray(parseOrder(row?.plannedLanePhysicalOrder),
-      spec?.lanePhysicalOrder ?? [], `row ${index} planned lane physical order`, reasons);
+      laneConstructionOrder, `row ${index} planned lane physical order`, reasons);
     if (row?.lanePhysicalOrder !== undefined && row.lanePhysicalOrder !== null) {
-      requireExactArray(parseOrder(row.lanePhysicalOrder), spec?.lanePhysicalOrder ?? [],
+      requireExactArray(parseOrder(row.lanePhysicalOrder), laneConstructionOrder,
         `row ${index} lane physical order`, reasons);
+    }
+    for (const [specField, plannedField, label] of optionalSetupOrders) {
+      const expected = spec?.[specField];
+      if (expected == null) continue;
+      requireExactArray(parseOrder(row?.[plannedField]), expected,
+        `row ${index} planned ${label}`, reasons);
+    }
+    if (spec?.setupPrimeTopology != null) {
+      requireEqual(row?.setupPrimeTopology, spec.setupPrimeTopology,
+        `row ${index} setupPrimeTopology`, reasons);
+    }
+    if (spec?.timestampPreprimeLaneId != null) {
+      requireEqual(row?.plannedTimestampPreprimeLaneId, spec.timestampPreprimeLaneId,
+        `row ${index} planned timestamp preprime lane`, reasons);
+      requireEqual(row?.timestampPreprimeLaneId, spec.timestampPreprimeLaneId,
+        `row ${index} timestamp preprime lane`, reasons);
     }
     requireExactArray(parseNumberOrder(row?.plannedVisibilityOrder),
       spec?.visibilityOrder ?? [], `row ${index} planned visibility order`, reasons);
@@ -2526,7 +2607,7 @@ export function validateLiveFirstInstanceCrossoverRows({
     bucketCount: spec?.bucketCount,
     targetVisibilityFraction: spec?.visibilityFraction,
     scenarioLayout: spec?.layout,
-    plannedLanePhysicalOrder: spec?.lanePhysicalOrder?.join('|'),
+    plannedLanePhysicalOrder: laneConstructionOrder.join('|'),
     superblockOrientationOffset: spec?.superblockOrientationOffset,
     plannedScheduleSha256: scheduleSha256,
     protocolWarmupFrames: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
@@ -2538,6 +2619,17 @@ export function validateLiveFirstInstanceCrossoverRows({
     expectedComputeTimestampUidCount: 1,
     expectedRenderTimestampUidCount: 1,
   };
+  for (const [specField, plannedField] of optionalSetupOrders) {
+    const expected = spec?.[specField];
+    if (expected != null) common[plannedField] = expected.join('|');
+  }
+  if (spec?.setupPrimeTopology != null) {
+    common.setupPrimeTopology = spec.setupPrimeTopology;
+  }
+  if (spec?.timestampPreprimeLaneId != null) {
+    common.plannedTimestampPreprimeLaneId = spec.timestampPreprimeLaneId;
+    common.timestampPreprimeLaneId = spec.timestampPreprimeLaneId;
+  }
   for (const [field, expected] of Object.entries(common)) {
     allRowsEqual(rows, field, expected, reasons);
   }

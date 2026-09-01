@@ -160,6 +160,7 @@ let firstInstanceLiveSelectorWriteSerial = 0;
 let firstInstanceLifecycleAtTimingStart = null;
 let firstInstanceLiveLifecycleAtTimingStart = null;
 let firstInstanceLiveTimestampPreprime = null;
+let firstInstanceLiveTimestampPreprimeLaneId = null;
 let firstInstanceLiveTimestampPoolsAtTimingStart = null;
 let firstInstanceLivePreviousLaneId = null;
 let firstInstanceLivePreviousPreviousLaneId = null;
@@ -174,6 +175,10 @@ let firstInstanceCrossoverConfiguration = Object.freeze({
 });
 let firstInstanceLiveCrossoverConfiguration = Object.freeze({
   lanePhysicalOrder: Object.freeze([...FIRST_INSTANCE_LIVE_CROSSOVER_LANES]),
+  plannedFirstComputeUseOrder: Object.freeze([...FIRST_INSTANCE_LIVE_CROSSOVER_LANES]),
+  plannedRenderPipelinePrimeOrder: Object.freeze([...FIRST_INSTANCE_LIVE_CROSSOVER_LANES]),
+  setupPrimeTopology: 'interleaved-v1',
+  timestampPreprimeLaneId: FIRST_INSTANCE_LIVE_CROSSOVER_LANES[0],
   superblockOrientationOffset: 0,
 });
 
@@ -600,19 +605,35 @@ function validateTrialCompletion(context) {
       && JSON.stringify(lifecycleAtTimingEnd)
         === JSON.stringify(firstInstanceLiveLifecycleAtTimingStart);
     const plannedLanePhysicalOrder = context.plannedLanePhysicalOrder?.split('|') ?? [];
+    const plannedLaneConstructionOrder =
+      context.plannedLaneConstructionOrder?.split('|') ?? plannedLanePhysicalOrder;
+    const plannedFirstComputeUseOrder =
+      context.plannedFirstComputeUseOrder?.split('|') ?? plannedLanePhysicalOrder;
+    const plannedRenderPipelinePrimeOrder =
+      context.plannedRenderPipelinePrimeOrder?.split('|') ?? plannedLanePhysicalOrder;
     const configuredLanePhysicalOrderExact = plannedLanePhysicalOrder.length
       === FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+      && plannedLaneConstructionOrder.length === FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+      && plannedFirstComputeUseOrder.length === FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+      && plannedRenderPipelinePrimeOrder.length === FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
       && plannedLanePhysicalOrder.every(
         (laneId, index) => lifecycleDiagnostics?.lanePhysicalOrder?.[index] === laneId,
       )
-      && plannedLanePhysicalOrder.every(
+      && plannedLaneConstructionOrder.every(
         (laneId, index) => lifecycleDiagnostics?.laneConstructionOrder?.[index] === laneId,
       )
-      && plannedLanePhysicalOrder.every(
+      && plannedFirstComputeUseOrder.every(
         (laneId, index) => lifecycleDiagnostics?.firstComputeUseOrder?.[index] === laneId,
       )
-      && plannedLanePhysicalOrder.every(
+      && plannedRenderPipelinePrimeOrder.every(
         (laneId, index) => lifecycleDiagnostics?.renderPipelinePrimeOrder?.[index] === laneId,
+      )
+      && lifecycleDiagnostics?.setupPrimeTopology === context.setupPrimeTopology;
+    const timestampPreprimeLaneExact = context.plannedTimestampPreprimeLaneId
+      === firstInstanceLiveTimestampPreprimeLaneId
+      && context.timestampPreprimeLaneId === firstInstanceLiveTimestampPreprimeLaneId
+      && FIRST_INSTANCE_LIVE_CROSSOVER_LANES.includes(
+        firstInstanceLiveTimestampPreprimeLaneId,
       );
     const commandBuffersExact = JSON.stringify(
       lifecycleDiagnostics?.commandBufferCommitments ?? null,
@@ -634,6 +655,7 @@ function validateTrialCompletion(context) {
       && firstInstanceLiveTimestampPreprime?.kind === 'three-r185-timestamp-pool-preprime'
       && firstInstanceLiveTimestampPreprime?.addedTimestampUidCount?.render === 1
       && firstInstanceLiveTimestampPreprime?.addedTimestampUidCount?.compute === 1
+      && timestampPreprimeLaneExact
       && JSON.stringify(timestampPoolStaticCommitment(firstInstanceLiveTimestampPreprime.after))
         === JSON.stringify(timestampPoolStaticAtTimingStart);
     const timestampPoolsResolvedCleanly = ['render', 'compute'].every((type) => {
@@ -719,6 +741,11 @@ function validateTrialCompletion(context) {
       shaderEvidencePass: lifecycleDiagnostics?.shaderEvidencePass ?? null,
       geometryEvidencePass: lifecycleDiagnostics?.geometry?.pass ?? null,
       plannedLanePhysicalOrder: context.plannedLanePhysicalOrder,
+      plannedLaneConstructionOrder: context.plannedLaneConstructionOrder,
+      plannedFirstComputeUseOrder: context.plannedFirstComputeUseOrder,
+      plannedRenderPipelinePrimeOrder: context.plannedRenderPipelinePrimeOrder,
+      plannedTimestampPreprimeLaneId: context.plannedTimestampPreprimeLaneId,
+      setupPrimeTopology: context.setupPrimeTopology,
       observedLanePhysicalOrder: lifecycleDiagnostics?.lanePhysicalOrder ?? null,
       observedLaneConstructionOrder:
         lifecycleDiagnostics?.laneConstructionOrder?.join('|') ?? null,
@@ -728,6 +755,8 @@ function validateTrialCompletion(context) {
         lifecycleDiagnostics?.renderPipelinePrimeOrder?.join('|') ?? null,
       configuredLanePhysicalOrderExact,
       lanePhysicalOrderExact: configuredLanePhysicalOrderExact,
+      timestampPreprimeLaneId: firstInstanceLiveTimestampPreprimeLaneId,
+      timestampPreprimeLaneExact,
       commandBuffersDistinct: lifecycleDiagnostics?.commandBuffersDistinct ?? null,
       commandBuffersZeroOffset: lifecycleDiagnostics?.commandBuffersZeroOffset ?? null,
       commandBuffersExact,
@@ -1276,6 +1305,15 @@ function selectedConfig() {
     config.lanePhysicalOrder = [
       ...firstInstanceLiveCrossoverConfiguration.lanePhysicalOrder,
     ];
+    config.plannedFirstComputeUseOrder = [
+      ...firstInstanceLiveCrossoverConfiguration.plannedFirstComputeUseOrder,
+    ];
+    config.plannedRenderPipelinePrimeOrder = [
+      ...firstInstanceLiveCrossoverConfiguration.plannedRenderPipelinePrimeOrder,
+    ];
+    config.setupPrimeTopology = firstInstanceLiveCrossoverConfiguration.setupPrimeTopology;
+    config.timestampPreprimeLaneId =
+      firstInstanceLiveCrossoverConfiguration.timestampPreprimeLaneId;
     config.superblockOrientationOffset =
       firstInstanceLiveCrossoverConfiguration.superblockOrientationOffset;
   }
@@ -1332,6 +1370,10 @@ function configureFirstInstanceCrossover({
 
 function configureFirstInstanceLiveCrossover({
   lanePhysicalOrder,
+  plannedFirstComputeUseOrder = lanePhysicalOrder,
+  plannedRenderPipelinePrimeOrder = lanePhysicalOrder,
+  setupPrimeTopology = 'interleaved-v1',
+  timestampPreprimeLaneId = lanePhysicalOrder?.[0],
   superblockOrientationOffset,
 } = {}) {
   if (rebuilding || validating || trial.active || trial.resolving) {
@@ -1345,11 +1387,44 @@ function configureFirstInstanceLiveCrossover({
     )) {
     throw new RangeError('lanePhysicalOrder must be the exact portable/feature pair.');
   }
+  for (const [name, order] of [
+    ['plannedFirstComputeUseOrder', plannedFirstComputeUseOrder],
+    ['plannedRenderPipelinePrimeOrder', plannedRenderPipelinePrimeOrder],
+  ]) {
+    if (!Array.isArray(order)
+      || order.length !== FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+      || new Set(order).size !== FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+      || FIRST_INSTANCE_LIVE_CROSSOVER_LANES.some((laneId) => !order.includes(laneId))) {
+      throw new RangeError(`${name} must be the exact portable/feature pair.`);
+    }
+  }
+  if (setupPrimeTopology !== 'interleaved-v1'
+    && setupPrimeTopology !== 'staged-order-factorial-v1') {
+    throw new RangeError('Unsupported live first-instance setupPrimeTopology.');
+  }
+  if (setupPrimeTopology === 'interleaved-v1'
+    && (plannedFirstComputeUseOrder.some(
+      (laneId, index) => laneId !== lanePhysicalOrder[index],
+    )
+      || plannedRenderPipelinePrimeOrder.some(
+        (laneId, index) => laneId !== lanePhysicalOrder[index],
+      ))) {
+    throw new Error('Interleaved live priming requires one shared lane order.');
+  }
+  if (!FIRST_INSTANCE_LIVE_CROSSOVER_LANES.includes(timestampPreprimeLaneId)) {
+    throw new RangeError('timestampPreprimeLaneId must be portable or feature.');
+  }
   if (superblockOrientationOffset !== 0 && superblockOrientationOffset !== 1) {
     throw new RangeError('superblockOrientationOffset must be zero or one.');
   }
   firstInstanceLiveCrossoverConfiguration = Object.freeze({
     lanePhysicalOrder: Object.freeze([...lanePhysicalOrder]),
+    plannedFirstComputeUseOrder: Object.freeze([...plannedFirstComputeUseOrder]),
+    plannedRenderPipelinePrimeOrder: Object.freeze([
+      ...plannedRenderPipelinePrimeOrder,
+    ]),
+    setupPrimeTopology,
+    timestampPreprimeLaneId,
     superblockOrientationOffset,
   });
   return selectedConfig();
@@ -1394,6 +1469,7 @@ async function rebuild() {
     firstInstanceLifecycleAtTimingStart = null;
     firstInstanceLiveLifecycleAtTimingStart = null;
     firstInstanceLiveTimestampPreprime = null;
+    firstInstanceLiveTimestampPreprimeLaneId = null;
     firstInstanceLiveTimestampPoolsAtTimingStart = null;
     firstInstanceLiveWarmupTailSnapshot = null;
     const config = selectedConfig();
@@ -1452,6 +1528,16 @@ async function rebuild() {
       lanePhysicalOrder: config.strategyId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE
         ? config.lanePhysicalOrder
         : undefined,
+      plannedFirstComputeUseOrder: config.strategyId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE
+        ? config.plannedFirstComputeUseOrder
+        : undefined,
+      plannedRenderPipelinePrimeOrder:
+        config.strategyId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE
+          ? config.plannedRenderPipelinePrimeOrder
+          : undefined,
+      setupPrimeTopology: config.strategyId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE
+        ? config.setupPrimeTopology
+        : undefined,
     });
     scene.add(strategy.root);
     if (!isFirstInstanceLiveCrossoverStrategy()) {
@@ -1491,8 +1577,10 @@ async function rebuild() {
           render: () => renderer.render(scene, camera),
         });
         await strategy.collectShaderSources(scene);
-        strategy.setActiveLane(config.lanePhysicalOrder[0]);
+        strategy.setActiveLane(config.timestampPreprimeLaneId);
         strategy.update(camera, renderer);
+        firstInstanceLiveTimestampPreprimeLaneId =
+          strategy.lifecycleDiagnostics().activeLane;
         firstInstanceLiveTimestampPreprime = await preprimeTimestampPools(renderer, {
           submitCompute: () => strategy.submitCompute(renderer),
           submitRender: () => renderer.render(scene, camera),
@@ -2086,6 +2174,24 @@ async function startTrial(extraContext = {}, shaderObservationRequest = null) {
       : null,
     plannedLanePhysicalOrder: liveFirstInstanceCrossover
       ? config.lanePhysicalOrder.join('|')
+      : null,
+    plannedLaneConstructionOrder: liveFirstInstanceCrossover
+      ? config.lanePhysicalOrder.join('|')
+      : null,
+    plannedFirstComputeUseOrder: liveFirstInstanceCrossover
+      ? config.plannedFirstComputeUseOrder.join('|')
+      : null,
+    plannedRenderPipelinePrimeOrder: liveFirstInstanceCrossover
+      ? config.plannedRenderPipelinePrimeOrder.join('|')
+      : null,
+    setupPrimeTopology: liveFirstInstanceCrossover
+      ? config.setupPrimeTopology
+      : null,
+    plannedTimestampPreprimeLaneId: liveFirstInstanceCrossover
+      ? config.timestampPreprimeLaneId
+      : null,
+    timestampPreprimeLaneId: liveFirstInstanceCrossover
+      ? firstInstanceLiveTimestampPreprimeLaneId
       : null,
     lanePhysicalOrder: liveFirstInstanceCrossover
       ? config.lanePhysicalOrder.join('|')

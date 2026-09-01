@@ -619,6 +619,9 @@ export function buildFirstInstanceLiveCrossoverStrategy({
   renderer,
   camera,
   lanePhysicalOrder = FIRST_INSTANCE_LIVE_CROSSOVER_LANES,
+  plannedFirstComputeUseOrder = lanePhysicalOrder,
+  plannedRenderPipelinePrimeOrder = lanePhysicalOrder,
+  setupPrimeTopology = 'interleaved-v1',
 }) {
   if (renderer?.hasFeature?.('indirect-first-instance') !== true) {
     throw new Error(
@@ -626,6 +629,23 @@ export function buildFirstInstanceLiveCrossoverStrategy({
     );
   }
   validateFixedSliceLanePhysicalOrder(lanePhysicalOrder);
+  validateFixedSliceLanePhysicalOrder(
+    plannedFirstComputeUseOrder,
+    'plannedFirstComputeUseOrder',
+  );
+  validateFixedSliceLanePhysicalOrder(
+    plannedRenderPipelinePrimeOrder,
+    'plannedRenderPipelinePrimeOrder',
+  );
+  if (setupPrimeTopology !== 'interleaved-v1'
+    && setupPrimeTopology !== 'staged-order-factorial-v1') {
+    throw new RangeError('Unsupported live first-instance setupPrimeTopology.');
+  }
+  if (setupPrimeTopology === 'interleaved-v1'
+    && (!exactSequence(plannedFirstComputeUseOrder, lanePhysicalOrder)
+      || !exactSequence(plannedRenderPipelinePrimeOrder, lanePhysicalOrder))) {
+    throw new Error('Interleaved live priming requires one shared lane order.');
+  }
   const shared = createFixedSliceSharedResources(
     { scenario, sourceGeometries },
     { addressModes: Object.values(FIXED_SLICE_ADDRESS_MODE_BY_LANE) },
@@ -790,21 +810,36 @@ export function buildFirstInstanceLiveCrossoverStrategy({
       });
     }
     const previousLane = activeLane;
-    try {
-      for (const laneId of lanePhysicalOrder) {
-        setActiveLane(laneId);
-        update(camera, renderer);
-        submitCompute(renderer);
-        await renderer.compileAsync(scene, camera);
-        await render(laneId);
-        if (lanes[laneId].bundleRecordCallbackCount !== 1) {
-          throw new Error(`The ${laneId} live render bundle did not record exactly once.`);
-        }
-        renderPipelinePrimeOrder.push(laneId);
+    const firstUseCompute = (laneId) => {
+      setActiveLane(laneId);
+      update(camera, renderer);
+      submitCompute(renderer);
+    };
+    const primeRenderPipeline = async (laneId, { selectLane = true } = {}) => {
+      if (selectLane) setActiveLane(laneId);
+      update(camera, renderer);
+      await renderer.compileAsync(scene, camera);
+      await render(laneId);
+      if (lanes[laneId].bundleRecordCallbackCount !== 1) {
+        throw new Error(`The ${laneId} live render bundle did not record exactly once.`);
       }
-      if (!exactSequence(firstComputeUseOrder, lanePhysicalOrder)
-        || !exactSequence(renderPipelinePrimeOrder, lanePhysicalOrder)) {
-        throw new Error('Live lane first-use order differed from lanePhysicalOrder.');
+      renderPipelinePrimeOrder.push(laneId);
+    };
+    try {
+      if (setupPrimeTopology === 'interleaved-v1') {
+        for (const laneId of lanePhysicalOrder) {
+          firstUseCompute(laneId);
+          await primeRenderPipeline(laneId, { selectLane: false });
+        }
+      } else {
+        for (const laneId of plannedFirstComputeUseOrder) firstUseCompute(laneId);
+        for (const laneId of plannedRenderPipelinePrimeOrder) {
+          await primeRenderPipeline(laneId);
+        }
+      }
+      if (!exactSequence(firstComputeUseOrder, plannedFirstComputeUseOrder)
+        || !exactSequence(renderPipelinePrimeOrder, plannedRenderPipelinePrimeOrder)) {
+        throw new Error('Live lane first-use order differed from the configured setup order.');
       }
       lanesPrimed = true;
     } finally {
@@ -1342,6 +1377,7 @@ export function buildFirstInstanceLiveCrossoverStrategy({
     return {
       kind: 'live-first-instance-crossover-static-resource-lifecycle',
       lanesPrimed,
+      setupPrimeTopology,
       lanePhysicalOrder: [...lanePhysicalOrder],
       laneConstructionOrder: [...laneConstructionOrder],
       firstComputeUseOrder: [...firstComputeUseOrder],

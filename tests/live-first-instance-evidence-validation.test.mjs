@@ -5,6 +5,7 @@ import {
   liveFirstInstanceCrossoverScheduleSha256,
   liveFirstInstanceValidationSemanticSha256,
   validateLiveFirstInstanceCrossoverRows,
+  validateLiveFirstInstanceCrossoverValidation,
   validateLiveFirstInstanceForcedFeatureOffGate,
   validateLiveFirstInstanceShaderObservationSequence,
 } from '../scripts/live-first-instance-evidence-validation.mjs';
@@ -597,6 +598,82 @@ function createRowEvidence() {
   return { spec, rows, summary, validation, protocol };
 }
 
+function configureIndependentSetupEvidence(artifact) {
+  const setup = {
+    laneConstructionOrder: [FEATURE, PORTABLE],
+    firstComputeUseOrder: [PORTABLE, FEATURE],
+    renderPipelinePrimeOrder: [FEATURE, PORTABLE],
+    setupPrimeTopology: 'staged-order-factorial-v1',
+    timestampPreprimeLaneId: FEATURE,
+  };
+  Object.assign(artifact.spec, structuredClone(setup));
+  Object.assign(artifact.validation.lifecycle, {
+    lanePhysicalOrder: [...setup.laneConstructionOrder],
+    laneConstructionOrder: [...setup.laneConstructionOrder],
+    firstComputeUseOrder: [...setup.firstComputeUseOrder],
+    renderPipelinePrimeOrder: [...setup.renderPipelinePrimeOrder],
+    setupPrimeTopology: setup.setupPrimeTopology,
+  });
+
+  const invariant = artifact.summary.completionInvariant;
+  Object.assign(invariant, {
+    plannedLanePhysicalOrder: setup.laneConstructionOrder.join('|'),
+    observedLanePhysicalOrder: [...setup.laneConstructionOrder],
+    plannedLaneConstructionOrder: setup.laneConstructionOrder.join('|'),
+    observedLaneConstructionOrder: setup.laneConstructionOrder.join('|'),
+    plannedFirstComputeUseOrder: setup.firstComputeUseOrder.join('|'),
+    observedFirstComputeUseOrder: setup.firstComputeUseOrder.join('|'),
+    plannedRenderPipelinePrimeOrder: setup.renderPipelinePrimeOrder.join('|'),
+    observedRenderPipelinePrimeOrder: setup.renderPipelinePrimeOrder.join('|'),
+    setupPrimeTopology: setup.setupPrimeTopology,
+    plannedTimestampPreprimeLaneId: setup.timestampPreprimeLaneId,
+    timestampPreprimeLaneId: setup.timestampPreprimeLaneId,
+    timestampPreprimeLaneExact: true,
+  });
+  const staticLifecycle = structuredClone(artifact.validation.lifecycle);
+  for (const field of [
+    'activeLane', 'activeCommandBufferId', 'residentPreparedLane',
+    'laneSelectionSerial', 'computeCallSerial', 'prepareSerial',
+  ]) delete staticLifecycle[field];
+  invariant.staticLifecycleAtTimingStart = structuredClone(staticLifecycle);
+  invariant.staticLifecycleAtTimingEnd = structuredClone(staticLifecycle);
+  invariant.lifecycleCommitmentAtTimingStart = fnv1a64Text(JSON.stringify(staticLifecycle));
+  invariant.lifecycleCommitmentAtTimingEnd = invariant.lifecycleCommitmentAtTimingStart;
+
+  for (const row of artifact.rows) {
+    Object.assign(row, {
+      plannedLanePhysicalOrder: setup.laneConstructionOrder.join('|'),
+      plannedLaneConstructionOrder: setup.laneConstructionOrder.join('|'),
+      plannedFirstComputeUseOrder: setup.firstComputeUseOrder.join('|'),
+      plannedRenderPipelinePrimeOrder: setup.renderPipelinePrimeOrder.join('|'),
+      setupPrimeTopology: setup.setupPrimeTopology,
+      plannedTimestampPreprimeLaneId: setup.timestampPreprimeLaneId,
+      timestampPreprimeLaneId: setup.timestampPreprimeLaneId,
+    });
+  }
+  return artifact;
+}
+
+async function lifecycleSetupOrderReasons(spec, lifecycle) {
+  const reasons = await validateLiveFirstInstanceCrossoverValidation({
+    shaderEvidence: {},
+    lifecycle,
+  }, {
+    spec,
+    environment: {},
+    scenarioManifest: {},
+    geometryManifest: {},
+  });
+  const setupLabels = [
+    'live lifecycle lanePhysicalOrder',
+    'live lifecycle laneConstructionOrder',
+    'live lifecycle firstComputeUseOrder',
+    'live lifecycle renderPipelinePrimeOrder',
+    'live lifecycle setupPrimeTopology',
+  ];
+  return reasons.filter((reason) => setupLabels.some((label) => reason.startsWith(label)));
+}
+
 test('live schedule commitments bind both orientations', () => {
   assert.match(liveFirstInstanceCrossoverScheduleSha256(0), /^[0-9a-f]{64}$/);
   assert.match(liveFirstInstanceCrossoverScheduleSha256(1), /^[0-9a-f]{64}$/);
@@ -604,6 +681,114 @@ test('live schedule commitments bind both orientations', () => {
     liveFirstInstanceCrossoverScheduleSha256(0),
     liveFirstInstanceCrossoverScheduleSha256(1),
   );
+});
+
+test('strict lifecycle setup orders use independent spec commitments with legacy fallbacks',
+  async () => {
+    const legacy = createRowEvidence();
+    const legacyLifecycle = {
+      ...legacy.validation.lifecycle,
+      kind: 'live-first-instance-crossover-static-resource-lifecycle',
+      lanesPrimed: true,
+      lanePhysicalOrder: [PORTABLE, FEATURE],
+      laneConstructionOrder: [PORTABLE, FEATURE],
+      firstComputeUseOrder: [PORTABLE, FEATURE],
+      renderPipelinePrimeOrder: [PORTABLE, FEATURE],
+    };
+    assert.deepEqual(
+      await lifecycleSetupOrderReasons(legacy.spec, legacyLifecycle),
+      [],
+    );
+
+    const independent = configureIndependentSetupEvidence(createRowEvidence());
+    const independentLifecycle = {
+      ...independent.validation.lifecycle,
+      kind: 'live-first-instance-crossover-static-resource-lifecycle',
+      lanesPrimed: true,
+    };
+    assert.deepEqual(
+      await lifecycleSetupOrderReasons(independent.spec, independentLifecycle),
+      [],
+    );
+
+    const changed = structuredClone(independentLifecycle);
+    changed.firstComputeUseOrder = [FEATURE, PORTABLE];
+    changed.renderPipelinePrimeOrder = [PORTABLE, FEATURE];
+    changed.setupPrimeTopology = 'interleaved-v1';
+    const changedReasons = await lifecycleSetupOrderReasons(independent.spec, changed);
+    assert.ok(changedReasons.some((reason) => (
+      reason.includes('firstComputeUseOrder')
+    )));
+    assert.ok(changedReasons.some((reason) => (
+      reason.includes('renderPipelinePrimeOrder')
+    )));
+    assert.ok(changedReasons.some((reason) => (
+      reason.includes('setupPrimeTopology')
+    )));
+
+    const invalidPlanSpec = { ...independent.spec, planIndex: 1 };
+    const invalidPlanReasons = await validateLiveFirstInstanceCrossoverValidation({
+      shaderEvidence: {},
+      lifecycle: independentLifecycle,
+    }, {
+      spec: invalidPlanSpec,
+      environment: {},
+      scenarioManifest: {},
+      geometryManifest: {},
+    });
+    assert.ok(invalidPlanReasons.some((reason) => (
+      reason.includes('spec preregistered planIndex')
+    )));
+
+    const invalidRepetitionSpec = { ...independent.spec, repetitionIndex: 999 };
+    const invalidRepetitionReasons = await validateLiveFirstInstanceCrossoverValidation({
+      shaderEvidence: {},
+      lifecycle: independentLifecycle,
+    }, {
+      spec: invalidRepetitionSpec,
+      environment: {},
+      scenarioManifest: {},
+      geometryManifest: {},
+    });
+    assert.ok(invalidRepetitionReasons.some((reason) => (
+      reason.includes('spec repetitionIndex is invalid')
+    )));
+  });
+
+test('completion and rows bind supplied setup orders and timestamp-preprime lane', () => {
+  const artifact = configureIndependentSetupEvidence(createRowEvidence());
+  assert.deepEqual(validateLiveFirstInstanceCrossoverRows(artifact), []);
+
+  const changedCompletion = structuredClone(artifact);
+  changedCompletion.summary.completionInvariant.observedFirstComputeUseOrder =
+    'feature|portable';
+  changedCompletion.summary.completionInvariant.plannedTimestampPreprimeLaneId = PORTABLE;
+  changedCompletion.summary.completionInvariant.timestampPreprimeLaneExact = false;
+  const completionReasons = validateLiveFirstInstanceCrossoverRows(changedCompletion);
+  assert.ok(completionReasons.some((reason) => (
+    reason.includes('observed first compute-use order')
+  )));
+  assert.ok(completionReasons.some((reason) => (
+    reason.includes('planned timestamp preprime lane')
+  )));
+  assert.ok(completionReasons.some((reason) => (
+    reason.includes('timestamp preprime lane exactness')
+  )));
+
+  const changedRow = structuredClone(artifact);
+  changedRow.rows[7].plannedRenderPipelinePrimeOrder = 'portable|feature';
+  changedRow.rows[8].setupPrimeTopology = 'interleaved-v1';
+  changedRow.rows[9].plannedTimestampPreprimeLaneId = PORTABLE;
+  changedRow.rows[10].timestampPreprimeLaneId = PORTABLE;
+  const rowReasons = validateLiveFirstInstanceCrossoverRows(changedRow);
+  assert.ok(rowReasons.some((reason) => (
+    reason.includes('row 7 planned render-pipeline prime order')
+  )));
+  assert.ok(rowReasons.some((reason) => reason.includes('row 8 setupPrimeTopology')));
+  assert.ok(rowReasons.some((reason) => (
+    reason.includes('row 9 planned timestamp preprime lane')
+  )));
+  assert.ok(rowReasons.some((reason) => reason.includes('row 10 timestamp preprime lane')));
 });
 
 test('semantic validation ignores legal survivor order and serial movement only', () => {

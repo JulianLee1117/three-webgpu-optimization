@@ -52,7 +52,10 @@ test('live compute commitments pin count, workgroup, and derived dispatch dimens
   );
 });
 
-function createFixture(lanePhysicalOrder = [FEATURE, PORTABLE]) {
+function createFixture(
+  lanePhysicalOrder = [FEATURE, PORTABLE],
+  strategyOptions = {},
+) {
   const sourceGeometries = createIndexedGeometryFixtures(4, 'low');
   const scenario = createFixedSubsetScenario({
     objectCount: 512,
@@ -92,13 +95,20 @@ function createFixture(lanePhysicalOrder = [FEATURE, PORTABLE]) {
       return backendRecords.get(context);
     },
   };
-  const strategy = buildFirstInstanceLiveCrossoverStrategy({
-    scenario,
-    sourceGeometries,
-    renderer,
-    camera,
-    lanePhysicalOrder,
-  });
+  let strategy;
+  try {
+    strategy = buildFirstInstanceLiveCrossoverStrategy({
+      scenario,
+      sourceGeometries,
+      renderer,
+      camera,
+      lanePhysicalOrder,
+      ...strategyOptions,
+    });
+  } catch (error) {
+    sourceGeometries.forEach((geometry) => geometry.dispose());
+    throw error;
+  }
   return {
     camera,
     lanePhysicalOrder,
@@ -282,6 +292,7 @@ test('physical order controls construction and first compute/render use', async 
       feature: 1,
     });
     const lifecycle = fixture.strategy.lifecycleDiagnostics();
+    assert.equal(lifecycle.laneSelectionSerial, 3);
     const portableRegistration = lifecycle.computeTimestampRegistrations[PORTABLE];
     const featureRegistration = lifecycle.computeTimestampRegistrations[FEATURE];
     assert.ok(Number.isSafeInteger(lifecycle.computeTimestampContextIds[PORTABLE]));
@@ -337,6 +348,88 @@ test('physical order controls construction and first compute/render use', async 
     assert.equal(events.at(-1), `compute:${PORTABLE}`);
   } finally {
     disposeFixture(fixture);
+  }
+});
+
+test('staged factorial priming independently observes compute and render orders', async () => {
+  const fixture = createFixture(
+    [FEATURE, PORTABLE],
+    {
+      plannedFirstComputeUseOrder: [PORTABLE, FEATURE],
+      plannedRenderPipelinePrimeOrder: [FEATURE, PORTABLE],
+      setupPrimeTopology: 'staged-order-factorial-v1',
+    },
+  );
+  const events = [];
+  installCpuReadbackSimulation(fixture, events);
+  try {
+    await primeFixture(fixture, events);
+    assert.deepEqual(events, [
+      `compute:${PORTABLE}`,
+      `compute:${FEATURE}`,
+      `render:${FEATURE}`,
+      `render:${PORTABLE}`,
+    ]);
+    const lifecycle = fixture.strategy.lifecycleDiagnostics();
+    assert.equal(lifecycle.lanesPrimed, true);
+    assert.equal(lifecycle.setupPrimeTopology, 'staged-order-factorial-v1');
+    assert.deepEqual(lifecycle.lanePhysicalOrder, [FEATURE, PORTABLE]);
+    assert.deepEqual(lifecycle.laneConstructionOrder, [FEATURE, PORTABLE]);
+    assert.deepEqual(lifecycle.firstComputeUseOrder, [PORTABLE, FEATURE]);
+    assert.deepEqual(lifecycle.renderPipelinePrimeOrder, [FEATURE, PORTABLE]);
+    assert.deepEqual(lifecycle.bundleRecordCounts, {
+      portable: 1,
+      feature: 1,
+    });
+    assert.equal(lifecycle.laneSelectionSerial, 5);
+  } finally {
+    disposeFixture(fixture);
+  }
+});
+
+test('live setup rejects invalid planned orders, topology, and interleaved mismatches', () => {
+  const invalidCases = [
+    {
+      label: 'compute order',
+      options: { plannedFirstComputeUseOrder: [PORTABLE, PORTABLE] },
+      expected: /plannedFirstComputeUseOrder must be the exact portable\/feature lane permutation/,
+    },
+    {
+      label: 'render order',
+      options: { plannedRenderPipelinePrimeOrder: [FEATURE] },
+      expected: /plannedRenderPipelinePrimeOrder must be the exact portable\/feature lane permutation/,
+    },
+    {
+      label: 'topology',
+      options: { setupPrimeTopology: 'staged-v0' },
+      expected: /Unsupported live first-instance setupPrimeTopology/,
+    },
+    {
+      label: 'interleaved compute mismatch',
+      options: {
+        plannedFirstComputeUseOrder: [PORTABLE, FEATURE],
+        plannedRenderPipelinePrimeOrder: [FEATURE, PORTABLE],
+        setupPrimeTopology: 'interleaved-v1',
+      },
+      expected: /Interleaved live priming requires one shared lane order/,
+    },
+    {
+      label: 'interleaved render mismatch',
+      options: {
+        plannedFirstComputeUseOrder: [FEATURE, PORTABLE],
+        plannedRenderPipelinePrimeOrder: [PORTABLE, FEATURE],
+        setupPrimeTopology: 'interleaved-v1',
+      },
+      expected: /Interleaved live priming requires one shared lane order/,
+    },
+  ];
+
+  for (const { label, options, expected } of invalidCases) {
+    assert.throws(
+      () => createFixture([FEATURE, PORTABLE], options),
+      expected,
+      label,
+    );
   }
 });
 
