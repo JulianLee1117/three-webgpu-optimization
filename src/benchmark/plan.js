@@ -46,6 +46,36 @@ export const FROZEN_DEPTH_CROSSOVER_ORIENTATION_OFFSETS = Object.freeze([
   0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1,
 ]);
 
+export const FIRST_INSTANCE_CROSSOVER_MODE = 'indirect-first-instance-frozen-crossover';
+
+export const FIRST_INSTANCE_CROSSOVER_LANES = Object.freeze([
+  'portable',
+  'feature',
+]);
+
+export const FIRST_INSTANCE_CROSSOVER_REPETITIONS = 12;
+
+export const FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS = Object.freeze([0.99, 0.2]);
+
+export const FIRST_INSTANCE_CROSSOVER_COMMAND_SEGMENT_ORDERS = Object.freeze([
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES]),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES]),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES]),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES]),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES].reverse()),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES]),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES]),
+  Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES].reverse()),
+]);
+
+export const FIRST_INSTANCE_CROSSOVER_ORIENTATION_OFFSETS = Object.freeze([
+  0, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1,
+]);
+
 export function createRepresentationModeOrders(modes = FIXED_SLICE_REPRESENTATION_MODES) {
   if (modes.length !== 2 || new Set(modes).size !== 2) {
     throw new Error('The fixed-slice representation design requires exactly two distinct modes.');
@@ -253,6 +283,131 @@ export function buildFrozenDepthCrossoverPlan({
         layoutOrder: [...layoutOrder],
         layoutOrderPosition,
         laneStorageOrder,
+        superblockOrientationOffset: orientationOffsets[repetitionIndex],
+        objectCount,
+        bucketCount,
+      });
+    }
+  }
+  return plan;
+}
+
+function assertFirstInstanceCrossoverFactors({
+  visibilityLevels,
+  commandSegmentOrders,
+  orientationOffsets,
+}) {
+  if (visibilityLevels.length !== FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS.length
+    || visibilityLevels.some(
+      (value, index) => value !== FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS[index],
+    )) {
+    throw new Error(
+      'The first-instance crossover visibility levels must be exactly [0.99, 0.2].',
+    );
+  }
+  if (commandSegmentOrders.length !== FIRST_INSTANCE_CROSSOVER_REPETITIONS) {
+    throw new Error(
+      `The first-instance crossover requires ${FIRST_INSTANCE_CROSSOVER_REPETITIONS} command-segment orders.`,
+    );
+  }
+  for (const [repetitionIndex, order] of commandSegmentOrders.entries()) {
+    if (order.length !== FIRST_INSTANCE_CROSSOVER_LANES.length
+      || new Set(order).size !== FIRST_INSTANCE_CROSSOVER_LANES.length
+      || FIRST_INSTANCE_CROSSOVER_LANES.some((laneId) => !order.includes(laneId))) {
+      throw new Error(
+        `First-instance crossover command-segment order ${repetitionIndex} is not an exact lane permutation.`,
+      );
+    }
+  }
+  if (orientationOffsets.length !== FIRST_INSTANCE_CROSSOVER_REPETITIONS
+    || orientationOffsets.some((value) => value !== 0 && value !== 1)) {
+    throw new Error(
+      `The first-instance crossover requires ${FIRST_INSTANCE_CROSSOVER_REPETITIONS} binary orientation offsets.`,
+    );
+  }
+
+  const factors = [
+    {
+      name: 'command-segment order',
+      values: commandSegmentOrders.map(
+        (order) => (order[0] === FIRST_INSTANCE_CROSSOVER_LANES[0] ? 0 : 1),
+      ),
+    },
+    { name: 'starting schedule orientation', values: [...orientationOffsets] },
+    {
+      name: 'visibility-order position',
+      values: Array.from(
+        { length: FIRST_INSTANCE_CROSSOVER_REPETITIONS },
+        (_, repetitionIndex) => repetitionIndex % 2,
+      ),
+    },
+  ];
+  const expectedPerPairCell = FIRST_INSTANCE_CROSSOVER_REPETITIONS / 4;
+  for (let leftIndex = 0; leftIndex < factors.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < factors.length; rightIndex += 1) {
+      const left = factors[leftIndex];
+      const right = factors[rightIndex];
+      const counts = new Map([
+        ['0|0', 0],
+        ['0|1', 0],
+        ['1|0', 0],
+        ['1|1', 0],
+      ]);
+      for (let repetitionIndex = 0;
+        repetitionIndex < FIRST_INSTANCE_CROSSOVER_REPETITIONS;
+        repetitionIndex += 1) {
+        const key = `${left.values[repetitionIndex]}|${right.values[repetitionIndex]}`;
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+      if ([...counts.values()].some((count) => count !== expectedPerPairCell)) {
+        throw new Error(
+          `First-instance crossover ${left.name} and ${right.name} are not pairwise balanced.`,
+        );
+      }
+    }
+  }
+}
+
+export function buildFirstInstanceCrossoverPlan({
+  runId,
+  objectCount,
+  bucketCount,
+  visibilityLevels = FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS,
+  commandSegmentOrders = FIRST_INSTANCE_CROSSOVER_COMMAND_SEGMENT_ORDERS,
+  orientationOffsets = FIRST_INSTANCE_CROSSOVER_ORIENTATION_OFFSETS,
+}) {
+  assertFirstInstanceCrossoverFactors({
+    visibilityLevels,
+    commandSegmentOrders,
+    orientationOffsets,
+  });
+
+  const plan = [];
+  for (let repetitionIndex = 0;
+    repetitionIndex < FIRST_INSTANCE_CROSSOVER_REPETITIONS;
+    repetitionIndex += 1) {
+    const visibilityOrder = repetitionIndex % 2 === 0
+      ? [...visibilityLevels]
+      : [...visibilityLevels].reverse();
+    const laneCommandSegmentOrder = [...commandSegmentOrders[repetitionIndex]];
+    for (let visibilityOrderPosition = 0;
+      visibilityOrderPosition < visibilityOrder.length;
+      visibilityOrderPosition += 1) {
+      const planIndex = plan.length;
+      plan.push({
+        trialId: `${runId}-t${String(planIndex + 1).padStart(2, '0')}`,
+        planIndex,
+        repetitionIndex,
+        modeId: FIRST_INSTANCE_CROSSOVER_MODE,
+        modeOrder: [FIRST_INSTANCE_CROSSOVER_MODE],
+        modeOrderPosition: 0,
+        visibilityFraction: visibilityOrder[visibilityOrderPosition],
+        visibilityOrder: [...visibilityOrder],
+        visibilityOrderPosition,
+        layout: 'baseline',
+        layoutOrder: ['baseline'],
+        layoutOrderPosition: 0,
+        laneCommandSegmentOrder: [...laneCommandSegmentOrder],
         superblockOrientationOffset: orientationOffsets[repetitionIndex],
         objectCount,
         bucketCount,

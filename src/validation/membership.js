@@ -84,7 +84,12 @@ export function validateIndexedCommands({
   geometries,
   expectedCounts,
   expectedFirstIndexes = null,
+  expectedFirstInstances = null,
 }) {
+  if (expectedFirstInstances !== null
+    && expectedFirstInstances.length !== geometries.length) {
+    throw new RangeError('expectedFirstInstances and geometries must have equal lengths.');
+  }
   const signed = new Int32Array(commands.buffer, commands.byteOffset, commands.length);
   const errors = [];
   const records = [];
@@ -106,7 +111,7 @@ export function validateIndexedCommands({
       instanceCount: expectedCounts[bucket],
       firstIndex: expectedFirstIndex,
       baseVertex: 0,
-      firstInstance: 0,
+      firstInstance: expectedFirstInstances === null ? 0 : expectedFirstInstances[bucket],
     };
     records.push({ bucket, actual, expected });
     if (Number.isInteger(actual.instanceCount)) totalInstanceCount += actual.instanceCount;

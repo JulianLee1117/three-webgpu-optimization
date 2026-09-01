@@ -15,18 +15,24 @@ import { performance } from 'node:perf_hooks';
 import { chromium } from 'playwright-core';
 import { createServer } from 'vite';
 import { NvidiaTelemetryRecorder } from './nvidia-telemetry.mjs';
+import { summarizeFirstInstanceCrossoverRows } from '../analysis/first-instance-crossover-summary.mjs';
 import {
   BENCHMARK_VISIBILITY_LEVELS,
   DEPTH_ORDERING_LAYOUTS,
   DEPTH_ORDERING_MODES,
   DEPTH_ORDERING_VISIBILITY,
   FIXED_SLICE_REPRESENTATION_MODES,
+  FIRST_INSTANCE_CROSSOVER_LANES,
+  FIRST_INSTANCE_CROSSOVER_MODE,
+  FIRST_INSTANCE_CROSSOVER_REPETITIONS,
+  FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS,
   FROZEN_DEPTH_CROSSOVER_LANES,
   FROZEN_DEPTH_CROSSOVER_MODE,
   FROZEN_DEPTH_CROSSOVER_REPETITIONS,
   assertBalancedModeOrders,
   buildBenchmarkPlan,
   buildDepthOrderingPlan,
+  buildFirstInstanceCrossoverPlan,
   buildFrozenDepthCrossoverPlan,
   createEcosystemModeOrders,
   createRepresentationModeOrders,
@@ -41,6 +47,14 @@ import {
   frozenCrossoverFrame,
 } from '../src/benchmark/frozen-crossover-schedule.js';
 import {
+  FIRST_INSTANCE_CROSSOVER_BLOCK_SIZE,
+  FIRST_INSTANCE_CROSSOVER_MEASURED_BLOCKS,
+  FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES,
+  FIRST_INSTANCE_CROSSOVER_PATTERNS,
+  FIRST_INSTANCE_CROSSOVER_WARMUP_BLOCKS,
+  FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES,
+} from '../src/benchmark/first-instance-crossover-schedule.js';
+import {
   physicalBinSequenceIdentity,
   renderParityIdentity,
   sha256Json,
@@ -51,6 +65,14 @@ import {
   validateScenarioManifest,
   validateTrialRows,
 } from './evidence-validation.mjs';
+import {
+  firstInstanceCrossoverScheduleSha256,
+  firstInstanceRenderParityIdentity,
+  firstInstanceValidationSemanticSha256,
+  validateFirstInstanceCrossoverRenderParity,
+  validateFirstInstanceCrossoverValidation,
+  validateFirstInstanceTrialEvidence,
+} from './first-instance-evidence-validation.mjs';
 import {
   collectSourceProvenance,
   sourceProvenanceMatches,
@@ -80,6 +102,7 @@ const ALLOWED_BENCHMARK_MATRICES = Object.freeze([
   'fixed-slice-representation',
   'depth-ordering',
   'depth-ordering-render-only',
+  'first-instance-render-only',
 ]);
 const LEGACY_WARMUP_FRAMES = 300;
 const LEGACY_MEASURED_FRAMES = 240;
@@ -122,18 +145,25 @@ const BENCHMARK_MATRIX = validatedStringEnvironmentChoice(
   ALLOWED_BENCHMARK_MATRICES,
 );
 const FROZEN_CROSSOVER_MATRIX = BENCHMARK_MATRIX === 'depth-ordering-render-only';
+const FIRST_INSTANCE_CROSSOVER_MATRIX = BENCHMARK_MATRIX === 'first-instance-render-only';
+const PAIRED_CROSSOVER_MATRIX = FROZEN_CROSSOVER_MATRIX
+  || FIRST_INSTANCE_CROSSOVER_MATRIX;
 const DEPTH_LAYOUT_MATRIX = BENCHMARK_MATRIX === 'depth-ordering'
   || FROZEN_CROSSOVER_MATRIX;
-const WARMUP_FRAMES = FROZEN_CROSSOVER_MATRIX
-  ? FROZEN_CROSSOVER_WARMUP_FRAMES
-  : LEGACY_WARMUP_FRAMES;
-const MEASURED_FRAMES = FROZEN_CROSSOVER_MATRIX
-  ? FROZEN_CROSSOVER_MEASURED_FRAMES
-  : LEGACY_MEASURED_FRAMES;
+const WARMUP_FRAMES = FIRST_INSTANCE_CROSSOVER_MATRIX
+  ? FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES
+  : FROZEN_CROSSOVER_MATRIX
+    ? FROZEN_CROSSOVER_WARMUP_FRAMES
+    : LEGACY_WARMUP_FRAMES;
+const MEASURED_FRAMES = FIRST_INSTANCE_CROSSOVER_MATRIX
+  ? FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES
+  : FROZEN_CROSSOVER_MATRIX
+    ? FROZEN_CROSSOVER_MEASURED_FRAMES
+    : LEGACY_MEASURED_FRAMES;
 
 const OBJECT_COUNT = validatedEnvironmentChoice(
   'BENCHMARK_OBJECT_COUNT',
-  DEPTH_LAYOUT_MATRIX ? 65_536 : 16_384,
+  DEPTH_LAYOUT_MATRIX || FIRST_INSTANCE_CROSSOVER_MATRIX ? 65_536 : 16_384,
   ALLOWED_OBJECT_COUNTS,
 );
 const BUCKET_COUNT = validatedEnvironmentChoice(
@@ -141,7 +171,7 @@ const BUCKET_COUNT = validatedEnvironmentChoice(
   32,
   ALLOWED_BUCKET_COUNTS,
 );
-if (DEPTH_LAYOUT_MATRIX
+if ((DEPTH_LAYOUT_MATRIX || FIRST_INSTANCE_CROSSOVER_MATRIX)
   && (OBJECT_COUNT !== 65_536 || BUCKET_COUNT !== 32)) {
   throw new Error(
     `The ${BENCHMARK_MATRIX} protocol is fixed at BENCHMARK_OBJECT_COUNT=65536 and `
@@ -177,22 +207,31 @@ const ECOSYSTEM_MODES = Object.freeze(['draw-all', THREE_BLOCKS_MODE, 'fixed-sli
 const REPRESENTATION_MODES = FIXED_SLICE_REPRESENTATION_MODES;
 const MODES = BENCHMARK_MATRIX === 'fixed-slice-representation'
   ? REPRESENTATION_MODES
-  : FROZEN_CROSSOVER_MATRIX
-    ? Object.freeze([FROZEN_DEPTH_CROSSOVER_MODE])
-    : BENCHMARK_MATRIX === 'depth-ordering'
-      ? DEPTH_ORDERING_MODES
-      : ECOSYSTEM_MODES;
+  : FIRST_INSTANCE_CROSSOVER_MATRIX
+    ? Object.freeze([FIRST_INSTANCE_CROSSOVER_MODE])
+    : FROZEN_CROSSOVER_MATRIX
+      ? Object.freeze([FROZEN_DEPTH_CROSSOVER_MODE])
+      : BENCHMARK_MATRIX === 'depth-ordering'
+        ? DEPTH_ORDERING_MODES
+        : ECOSYSTEM_MODES;
 const MODE_ORDERS = BENCHMARK_MATRIX === 'fixed-slice-representation'
   ? createRepresentationModeOrders(REPRESENTATION_MODES)
-  : FROZEN_CROSSOVER_MATRIX
+  : FIRST_INSTANCE_CROSSOVER_MATRIX
     ? Object.freeze(Array.from(
-      { length: FROZEN_DEPTH_CROSSOVER_REPETITIONS },
-      () => Object.freeze([FROZEN_DEPTH_CROSSOVER_MODE]),
+      { length: FIRST_INSTANCE_CROSSOVER_REPETITIONS },
+      () => Object.freeze([FIRST_INSTANCE_CROSSOVER_MODE]),
     ))
-    : createEcosystemModeOrders(MODES);
-const VISIBILITY_LEVELS = DEPTH_LAYOUT_MATRIX
-  ? Object.freeze([DEPTH_ORDERING_VISIBILITY])
-  : BENCHMARK_VISIBILITY_LEVELS;
+    : FROZEN_CROSSOVER_MATRIX
+      ? Object.freeze(Array.from(
+        { length: FROZEN_DEPTH_CROSSOVER_REPETITIONS },
+        () => Object.freeze([FROZEN_DEPTH_CROSSOVER_MODE]),
+      ))
+      : createEcosystemModeOrders(MODES);
+const VISIBILITY_LEVELS = FIRST_INSTANCE_CROSSOVER_MATRIX
+  ? FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS
+  : DEPTH_LAYOUT_MATRIX
+    ? Object.freeze([DEPTH_ORDERING_VISIBILITY])
+    : BENCHMARK_VISIBILITY_LEVELS;
 
 assertBalancedModeOrders(MODES, MODE_ORDERS);
 const DEPTH_BINNED_MODE_IDS = new Set([
@@ -231,6 +270,17 @@ const FROZEN_SCHEDULE_SHA256_BY_ORIENTATION = FROZEN_CROSSOVER_MATRIX
     sha256Json(frozenScheduleCommitmentRecord(orientationOffset)),
   ])))
   : null;
+
+const FIRST_INSTANCE_SCHEDULE_SHA256_BY_ORIENTATION = FIRST_INSTANCE_CROSSOVER_MATRIX
+  ? Object.freeze(Object.fromEntries([0, 1].map((orientationOffset) => [
+    String(orientationOffset),
+    firstInstanceCrossoverScheduleSha256(orientationOffset),
+  ])))
+  : null;
+const FIRST_INSTANCE_EXPECTED_TRIAL_COUNT = FIRST_INSTANCE_CROSSOVER_REPETITIONS
+  * FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS.length;
+const FIRST_INSTANCE_EXPECTED_ROW_COUNT = FIRST_INSTANCE_EXPECTED_TRIAL_COUNT
+  * FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES;
 const sourceProvenanceStart = await collectSourceProvenance(PROJECT_ROOT, {
   allowUnavailable: EVIDENCE_STATUS === 'development',
 });
@@ -360,9 +410,10 @@ function validateBenchmarkEnvironment(environment) {
   }
   if (!Number.isFinite(environment?.performanceNowQuantumMs)) {
     rejectionReasons.push('performanceNowQuantumMs is missing or nonfinite');
-  } else if (environment.performanceNowQuantumMs > MAXIMUM_CPU_TIMER_QUANTUM_MS) {
+  } else if (environment.performanceNowQuantumMs <= 0
+    || environment.performanceNowQuantumMs > MAXIMUM_CPU_TIMER_QUANTUM_MS) {
     rejectionReasons.push(
-      `performanceNowQuantumMs ${environment.performanceNowQuantumMs} exceeds ${MAXIMUM_CPU_TIMER_QUANTUM_MS}`,
+      `performanceNowQuantumMs ${environment.performanceNowQuantumMs} is outside (0, ${MAXIMUM_CPU_TIMER_QUANTUM_MS}]`,
     );
   }
   if (THREE_BLOCKS_MODE === 'three-blocks-historical'
@@ -390,6 +441,20 @@ function validateBenchmarkEnvironment(environment) {
       'the frozen depth crossover requires at least eight storage buffers per shader stage',
     );
   }
+  if (FIRST_INSTANCE_CROSSOVER_MATRIX
+    && environment?.indirectFirstInstanceAvailable !== true) {
+    rejectionReasons.push(
+      'the first-instance crossover requires the WebGPU indirect-first-instance feature',
+    );
+  }
+  if (FIRST_INSTANCE_CROSSOVER_MATRIX
+    && environment?.reversedDepth !== true) {
+    rejectionReasons.push('the first-instance crossover requires reversed camera depth');
+  }
+  if (FIRST_INSTANCE_CROSSOVER_MATRIX
+    && environment?.rendererReversedDepthBuffer !== true) {
+    rejectionReasons.push('the first-instance crossover requires the renderer reversed-depth buffer');
+  }
   if (rejectionReasons.length > 0) {
     throw new Error(`Benchmark environment rejected at startup: ${rejectionReasons.join('; ')}.`);
   }
@@ -400,9 +465,22 @@ async function configureAndValidateTrial(page, spec) {
     const bench = window.__WEBGPU_BENCH__;
     if (!bench) throw new Error('Benchmark page API is unavailable.');
     const frozenCrossover = trial.modeId === 'fixed-slice-depth-frozen-crossover';
+    const firstInstanceCrossover = trial.modeId
+      === 'indirect-first-instance-frozen-crossover';
     if (frozenCrossover) {
       bench.configureFrozenCrossover({
         laneStorageOrder: trial.laneStorageOrder,
+        superblockOrientationOffset: trial.superblockOrientationOffset,
+      });
+    }
+    if (firstInstanceCrossover) {
+      if (bench.environment?.indirectFirstInstanceAvailable !== true) {
+        throw new Error(
+          'First-instance crossover configuration refused without indirect-first-instance.',
+        );
+      }
+      bench.configureFirstInstanceCrossover({
+        laneCommandSegmentOrder: trial.laneCommandSegmentOrder,
         superblockOrientationOffset: trial.superblockOrientationOffset,
       });
     }
@@ -434,6 +512,14 @@ async function configureAndValidateTrial(page, spec) {
           || selected.laneStorageOrder.length !== trial.laneStorageOrder.length
           || selected.laneStorageOrder.some(
             (laneId, index) => laneId !== trial.laneStorageOrder[index],
+          )))
+      || (firstInstanceCrossover
+        && (selected.superblockOrientationOffset !== trial.superblockOrientationOffset
+          || !Array.isArray(selected.laneCommandSegmentOrder)
+          || selected.laneCommandSegmentOrder.length
+            !== trial.laneCommandSegmentOrder.length
+          || selected.laneCommandSegmentOrder.some(
+            (laneId, index) => laneId !== trial.laneCommandSegmentOrder[index],
           )))) {
       throw new Error(`Page configuration mismatch: ${JSON.stringify(selected)}`);
     }
@@ -442,7 +528,7 @@ async function configureAndValidateTrial(page, spec) {
     let renderParity = null;
     try {
       validation = await bench.validate();
-      if (trial.layout !== 'baseline') {
+      if (trial.layout !== 'baseline' || firstInstanceCrossover) {
         renderParity = await bench.captureRenderParity();
         validation = await bench.validate();
       }
@@ -515,26 +601,40 @@ async function collectPostTrialEvidence(page, capturePairedRenderParity = false)
 const startedAt = new Date().toISOString();
 const runId = `${MATRIX_ID}-${compactTimestamp(startedAt)}`;
 const runDirectory = path.join(RESULT_ROOT, runId);
-const plan = (FROZEN_CROSSOVER_MATRIX
-  ? buildFrozenDepthCrossoverPlan({
+const plan = (FIRST_INSTANCE_CROSSOVER_MATRIX
+  ? buildFirstInstanceCrossoverPlan({
     runId,
     objectCount: OBJECT_COUNT,
     bucketCount: BUCKET_COUNT,
+    visibilityLevels: VISIBILITY_LEVELS,
   })
-  : BENCHMARK_MATRIX === 'depth-ordering'
-    ? buildDepthOrderingPlan({
+  : FROZEN_CROSSOVER_MATRIX
+    ? buildFrozenDepthCrossoverPlan({
       runId,
-      modeOrders: MODE_ORDERS,
       objectCount: OBJECT_COUNT,
       bucketCount: BUCKET_COUNT,
     })
-    : buildBenchmarkPlan({
-      runId,
-      modeOrders: MODE_ORDERS,
-      visibilityLevels: VISIBILITY_LEVELS,
-      objectCount: OBJECT_COUNT,
-      bucketCount: BUCKET_COUNT,
-    })).map((trial) => ({ ...trial, runId }));
+    : BENCHMARK_MATRIX === 'depth-ordering'
+      ? buildDepthOrderingPlan({
+        runId,
+        modeOrders: MODE_ORDERS,
+        objectCount: OBJECT_COUNT,
+        bucketCount: BUCKET_COUNT,
+      })
+      : buildBenchmarkPlan({
+        runId,
+        modeOrders: MODE_ORDERS,
+        visibilityLevels: VISIBILITY_LEVELS,
+        objectCount: OBJECT_COUNT,
+        bucketCount: BUCKET_COUNT,
+      })).map((trial) => ({ ...trial, runId }));
+if (FIRST_INSTANCE_CROSSOVER_MATRIX
+  && plan.length !== FIRST_INSTANCE_EXPECTED_TRIAL_COUNT) {
+  throw new Error(
+    `The first-instance crossover plan has ${plan.length} trials; expected exactly `
+      + `${FIRST_INSTANCE_EXPECTED_TRIAL_COUNT}.`,
+  );
+}
 const runStartedMonotonic = performance.now();
 const frameRows = [];
 const trialSummaries = [];
@@ -572,6 +672,7 @@ let activeValidationArtifact = null;
 let preComputeProcesses = null;
 let postComputeProcesses = null;
 let telemetryReport = null;
+let firstInstanceAnalysisAudit = null;
 
 await mkdir(RESULT_ROOT, { recursive: true });
 await mkdir(runDirectory);
@@ -589,7 +690,7 @@ async function persistWorkloadManifests() {
   await atomicWriteJson(path.join(runDirectory, 'workload-manifests.json'), workloadManifestCatalog);
 }
 
-function inspectEvidenceCapture(spec, evidence) {
+async function inspectEvidenceCapture(spec, evidence) {
   const validation = evidence?.validation ?? null;
   const workload = evidence?.workload ?? null;
   const geometry = workload?.geometryFixtures ?? null;
@@ -613,17 +714,52 @@ function inspectEvidenceCapture(spec, evidence) {
     layout: spec.layout,
   });
   rejectionReasons.push(...geometryRejectionReasons, ...scenarioRejectionReasons);
-  const validationCheck = validateExactValidation(validation, {
-    modeId: spec.modeId,
-    objectCount: spec.objectCount,
-    bucketCount: spec.bucketCount,
-    expectedVisibleCount: scenario?.expectedVisibleCount,
-    expectedVisibleIdsCanonicalSha256: scenario?.expectedVisibleIdsCanonicalSha256,
-    geometryManifest: geometry,
-    scenarioManifest: scenario,
-    laneStorageOrder: spec.laneStorageOrder ?? null,
-  });
+  const firstInstanceValidationRejections = FIRST_INSTANCE_CROSSOVER_MATRIX
+    ? await validateFirstInstanceCrossoverValidation(validation, {
+      spec,
+      environment: pageEnvironment,
+    })
+    : null;
+  const validationCheck = FIRST_INSTANCE_CROSSOVER_MATRIX
+    ? {
+      rejectionReasons: firstInstanceValidationRejections,
+      semanticSha256: firstInstanceValidationSemanticSha256(validation),
+    }
+    : validateExactValidation(validation, {
+      modeId: spec.modeId,
+      objectCount: spec.objectCount,
+      bucketCount: spec.bucketCount,
+      expectedVisibleCount: scenario?.expectedVisibleCount,
+      expectedVisibleIdsCanonicalSha256: scenario?.expectedVisibleIdsCanonicalSha256,
+      geometryManifest: geometry,
+      scenarioManifest: scenario,
+      laneStorageOrder: spec.laneStorageOrder ?? null,
+    });
   rejectionReasons.push(...validationCheck.rejectionReasons);
+  if (FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    if (validation?.membership?.expectedCount !== scenario?.expectedVisibleCount) {
+      rejectionReasons.push(
+        'first-instance validation visible count differs from the signed scenario manifest',
+      );
+    }
+    for (const side of ['expected', 'actual']) {
+      if (validation?.membershipDigests?.[side]?.sha256
+        !== scenario?.expectedVisibleIdsCanonicalSha256) {
+        rejectionReasons.push(
+          `first-instance ${side} membership digest differs from the signed scenario manifest`,
+        );
+      }
+    }
+  }
+  const firstInstanceParityRejections = FIRST_INSTANCE_CROSSOVER_MATRIX
+    ? validateFirstInstanceCrossoverRenderParity(evidence?.renderParity, {
+      spec,
+      validation,
+    })
+    : null;
+  if (firstInstanceParityRejections) {
+    rejectionReasons.push(...firstInstanceParityRejections);
+  }
   return {
     capture: {
       capturedAt: new Date().toISOString(),
@@ -638,6 +774,14 @@ function inspectEvidenceCapture(spec, evidence) {
         payload: validation,
       },
       renderParity: evidence?.renderParity ?? null,
+      renderParitySemanticSha256:
+        FIRST_INSTANCE_CROSSOVER_MATRIX
+          ? firstInstanceRenderParityIdentity(evidence?.renderParity)
+          : null,
+      renderParityOutputSha256:
+        FIRST_INSTANCE_CROSSOVER_MATRIX
+          ? firstInstanceRenderParityIdentity(evidence?.renderParity)
+          : null,
       accepted: rejectionReasons.length === 0,
       rejectionReasons: [...new Set(rejectionReasons)],
     },
@@ -789,6 +933,14 @@ try {
         plannedScheduleSha256:
           FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[String(spec.superblockOrientationOffset)],
       } : {}),
+      ...(FIRST_INSTANCE_CROSSOVER_MATRIX ? {
+        plannedLaneCommandSegmentOrder: spec.laneCommandSegmentOrder.join('|'),
+        superblockOrientationOffset: spec.superblockOrientationOffset,
+        plannedScheduleSha256:
+          FIRST_INSTANCE_SCHEDULE_SHA256_BY_ORIENTATION[
+            String(spec.superblockOrientationOffset)
+          ],
+      } : {}),
     };
 
     telemetryContext = Object.freeze({
@@ -802,7 +954,7 @@ try {
     });
     const prepared = await guarded(configureAndValidateTrial(page, spec));
     const selectedConfig = prepared?.selectedConfig ?? null;
-    const preflightInspection = inspectEvidenceCapture(spec, prepared);
+    const preflightInspection = await inspectEvidenceCapture(spec, prepared);
     await registerWorkloadManifests(spec, 'preflight', preflightInspection);
     const preflight = preflightInspection.capture;
     const fixtureManifest = preflightInspection.geometryManifest;
@@ -924,6 +1076,17 @@ try {
         }
       }
     }
+    if (FIRST_INSTANCE_CROSSOVER_MATRIX && preflightRejectionReasons.length === 0) {
+      const paritySha256 = preflight.renderParityOutputSha256;
+      const priorParitySha256 = renderParitySha256ByCell.get(scenarioKey);
+      if (priorParitySha256 !== undefined && priorParitySha256 !== paritySha256) {
+        preflightRejectionReasons.push(
+          'first-instance exact color/depth/object-ID/material output changed within a visibility cell',
+        );
+      } else if (priorParitySha256 === undefined) {
+        renderParitySha256ByCell.set(scenarioKey, paritySha256);
+      }
+    }
     preflight.accepted = preflightRejectionReasons.length === 0;
     preflight.rejectionReasons = [...new Set(preflightRejectionReasons)];
     const validationArtifact = {
@@ -942,12 +1105,21 @@ try {
         plannedScheduleSha256:
           FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[String(spec.superblockOrientationOffset)],
       } : {}),
+      ...(FIRST_INSTANCE_CROSSOVER_MATRIX ? {
+        laneCommandSegmentOrder: [...spec.laneCommandSegmentOrder],
+        superblockOrientationOffset: spec.superblockOrientationOffset,
+        plannedScheduleSha256:
+          FIRST_INSTANCE_SCHEDULE_SHA256_BY_ORIENTATION[
+            String(spec.superblockOrientationOffset)
+          ],
+      } : {}),
       selectedConfig,
       status: preflight.accepted ? 'preflight-accepted' : 'rejected',
       rejectionReasons: [...preflight.rejectionReasons],
       pre: preflight,
       timingStart: null,
       post: null,
+      firstInstanceTrialEvidence: null,
     };
     refreshArtifactDigest(validationArtifact);
     validationArtifacts.push(validationArtifact);
@@ -960,9 +1132,9 @@ try {
     const started = await guarded(startConfiguredTrial(
       page,
       auditContext,
-      FROZEN_CROSSOVER_MATRIX,
+      PAIRED_CROSSOVER_MATRIX,
     ));
-    const timingStartInspection = inspectEvidenceCapture(spec, started?.evidence);
+    const timingStartInspection = await inspectEvidenceCapture(spec, started?.evidence);
     await registerWorkloadManifests(spec, 'timing-start', timingStartInspection);
     const timingStart = timingStartInspection.capture;
     const startRejectionReasons = [...timingStart.rejectionReasons];
@@ -986,6 +1158,7 @@ try {
       startRejectionReasons.push('validation semantics changed before timing');
     }
     if (spec.modeId !== 'three-blocks-historical'
+      && !FIRST_INSTANCE_CROSSOVER_MATRIX
       && timingStart.validation.payloadSha256 !== preflight.validation.payloadSha256) {
       startRejectionReasons.push('exact validation payload changed before timing');
     }
@@ -1012,6 +1185,13 @@ try {
           'frozen timing-start parity snapshot differs from its exact validation payload',
         );
       }
+    }
+    if (FIRST_INSTANCE_CROSSOVER_MATRIX
+      && timingStart.renderParitySemanticSha256
+        !== preflight.renderParitySemanticSha256) {
+      startRejectionReasons.push(
+        'first-instance exact paired render parity changed before timing',
+      );
     }
     timingStart.accepted = startRejectionReasons.length === 0;
     timingStart.rejectionReasons = [...new Set(startRejectionReasons)];
@@ -1068,31 +1248,68 @@ try {
     telemetryContext = Object.freeze({ ...telemetryContext, phase: 'post-validation' });
     const postEvidence = await guarded(collectPostTrialEvidence(
       page,
-      FROZEN_CROSSOVER_MATRIX,
+      PAIRED_CROSSOVER_MATRIX,
     ));
-    const postInspection = inspectEvidenceCapture(spec, postEvidence);
+    const postInspection = await inspectEvidenceCapture(spec, postEvidence);
     await registerWorkloadManifests(spec, 'post-trial', postInspection);
     const post = postInspection.capture;
+    const firstInstanceProtocol = FIRST_INSTANCE_CROSSOVER_MATRIX
+      ? {
+        schemaVersion: ARTIFACT_SCHEMA_VERSION,
+        warmupFrames: FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES,
+        measuredFrames: FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES,
+        plannedScheduleSha256:
+          FIRST_INSTANCE_SCHEDULE_SHA256_BY_ORIENTATION[
+            String(spec.superblockOrientationOffset)
+          ],
+      }
+      : null;
+    const firstInstanceTrialEvidence = FIRST_INSTANCE_CROSSOVER_MATRIX
+      ? await validateFirstInstanceTrialEvidence({
+        spec,
+        environment: pageEnvironment,
+        validation: timingStart.validation.payload,
+        renderParity: timingStart.renderParity,
+        rows: result.rows,
+        summary: result.summary,
+        protocol: firstInstanceProtocol,
+      })
+      : null;
     const rejectionReasons = [
       ...post.rejectionReasons,
-      ...validateTrialRows(
-        spec,
-        result.rows,
-        result.summary,
-        timingStart.validation.payload,
-        scenarioManifest,
-        {
-          schemaVersion: ARTIFACT_SCHEMA_VERSION,
-          warmupFrames: WARMUP_FRAMES,
-          measuredFrames: MEASURED_FRAMES,
-          plannedScheduleSha256: FROZEN_CROSSOVER_MATRIX
-            ? FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[
-              String(spec.superblockOrientationOffset)
-            ]
-            : null,
-        },
-      ),
+      ...(FIRST_INSTANCE_CROSSOVER_MATRIX
+        ? firstInstanceTrialEvidence?.rejectionReasons ?? [
+          'first-instance trial evidence validator returned no rejection record',
+        ]
+        : validateTrialRows(
+          spec,
+          result.rows,
+          result.summary,
+          timingStart.validation.payload,
+          scenarioManifest,
+          {
+            schemaVersion: ARTIFACT_SCHEMA_VERSION,
+            warmupFrames: WARMUP_FRAMES,
+            measuredFrames: MEASURED_FRAMES,
+            plannedScheduleSha256: FROZEN_CROSSOVER_MATRIX
+              ? FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[
+                String(spec.superblockOrientationOffset)
+              ]
+              : null,
+          },
+        )),
     ];
+    if (FIRST_INSTANCE_CROSSOVER_MATRIX
+      && firstInstanceTrialEvidence?.pass !== true) {
+      rejectionReasons.push('first-instance full trial evidence did not pass');
+    }
+    if (FIRST_INSTANCE_CROSSOVER_MATRIX
+      && firstInstanceTrialEvidence?.semanticSha256
+        !== timingStart.validation.semanticSha256) {
+      rejectionReasons.push(
+        'first-instance trial-evidence semantic commitment differs from timing start',
+      );
+    }
     if (post.workload.geometryFixtureSha256 !== timingStart.workload.geometryFixtureSha256) {
       rejectionReasons.push('fresh geometry fixture manifest changed during the trial');
     }
@@ -1106,6 +1323,7 @@ try {
       rejectionReasons.push('untimed post-trial validation semantics differ from pre-trial validation');
     }
     if (spec.modeId !== 'three-blocks-historical'
+      && !FIRST_INSTANCE_CROSSOVER_MATRIX
       && post.validation.payloadSha256 !== timingStart.validation.payloadSha256) {
       rejectionReasons.push('untimed post-trial exact-validation payload changed');
     }
@@ -1133,10 +1351,18 @@ try {
         );
       }
     }
+    if (FIRST_INSTANCE_CROSSOVER_MATRIX
+      && post.renderParitySemanticSha256
+        !== timingStart.renderParitySemanticSha256) {
+      rejectionReasons.push(
+        'first-instance exact paired render parity changed during timing',
+      );
+    }
     const uniqueRejectionReasons = [...new Set(rejectionReasons)];
     post.accepted = uniqueRejectionReasons.length === 0;
     post.rejectionReasons = uniqueRejectionReasons;
     validationArtifact.post = post;
+    validationArtifact.firstInstanceTrialEvidence = firstInstanceTrialEvidence;
     validationArtifact.status = post.accepted ? 'accepted' : 'rejected';
     validationArtifact.rejectionReasons = uniqueRejectionReasons;
     refreshArtifactDigest(validationArtifact);
@@ -1164,6 +1390,14 @@ try {
         plannedScheduleSha256:
           FROZEN_SCHEDULE_SHA256_BY_ORIENTATION[String(spec.superblockOrientationOffset)],
       } : {}),
+      ...(FIRST_INSTANCE_CROSSOVER_MATRIX ? {
+        laneCommandSegmentOrder: [...spec.laneCommandSegmentOrder],
+        superblockOrientationOffset: spec.superblockOrientationOffset,
+        plannedScheduleSha256:
+          FIRST_INSTANCE_SCHEDULE_SHA256_BY_ORIENTATION[
+            String(spec.superblockOrientationOffset)
+          ],
+      } : {}),
       selectedConfig,
       startedAt: trialStartedAt,
       completedAt: new Date().toISOString(),
@@ -1172,6 +1406,8 @@ try {
         pass: firstRow.validationPass === true,
         kind: firstRow.validationKind ?? null,
         artifactSha256: validationArtifact.sha256,
+        firstInstanceSemanticSha256:
+          firstInstanceTrialEvidence?.semanticSha256 ?? null,
       },
       timestamps: {
         accepted: result.summary?.accepted === true,
@@ -1179,7 +1415,7 @@ try {
         rowCount: result.summary?.rowCount ?? null,
         missingRenderFrames: result.summary?.missingRenderFrames ?? null,
         missingComputeFrames: result.summary?.missingComputeFrames ?? null,
-        ...(FROZEN_CROSSOVER_MATRIX ? {
+        ...(PAIRED_CROSSOVER_MATRIX ? {
           expectedRenderTimestampUidCount:
             result.summary?.expectedRenderTimestampUidCount ?? null,
           invalidRenderTimestampUidCountFrames:
@@ -1232,6 +1468,52 @@ try {
     throw new Error(
       'Frozen physical-bin sequence commitments do not cover every paired trial.',
     );
+  }
+  if (FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    if (plan.length !== FIRST_INSTANCE_EXPECTED_TRIAL_COUNT
+      || trialSummaries.length !== FIRST_INSTANCE_EXPECTED_TRIAL_COUNT
+      || validationArtifacts.length !== FIRST_INSTANCE_EXPECTED_TRIAL_COUNT) {
+      throw new Error(
+        'First-instance crossover did not complete exactly 24 source-bound trials.',
+      );
+    }
+    if (frameRows.length !== FIRST_INSTANCE_EXPECTED_ROW_COUNT) {
+      throw new Error(
+        `First-instance crossover retained ${frameRows.length} rows; expected exactly `
+          + `${FIRST_INSTANCE_EXPECTED_ROW_COUNT}.`,
+      );
+    }
+    const analysis = summarizeFirstInstanceCrossoverRows(frameRows);
+    if (analysis.nTrials !== FIRST_INSTANCE_EXPECTED_TRIAL_COUNT
+      || analysis.nRows !== FIRST_INSTANCE_EXPECTED_ROW_COUNT) {
+      throw new Error(
+        'First-instance analyzer did not reconstruct the exact committed matrix.',
+      );
+    }
+    firstInstanceAnalysisAudit = {
+      schemaVersion: analysis.schemaVersion,
+      kind: analysis.kind,
+      deltaConvention: analysis.deltaConvention,
+      nTrials: analysis.nTrials,
+      nRows: analysis.nRows,
+      sha256: sha256Json(analysis),
+    };
+    if (trialSummaries.some((trialSummary) => trialSummary.accepted !== true)
+      || validationArtifacts.some(
+        (artifact) => artifact.status !== 'accepted'
+          || artifact.firstInstanceTrialEvidence?.pass !== true,
+      )) {
+      throw new Error(
+        'First-instance crossover lacks an accepted exact-evidence record for every trial.',
+      );
+    }
+    if (scenarioSha256ByCell.size !== FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS.length
+      || renderParitySha256ByCell.size
+        !== FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS.length) {
+      throw new Error(
+        'First-instance workload and render-parity commitments do not cover both visibility cells.',
+      );
+    }
   }
   if (pageErrors.length) throw new Error(`${pageErrors[0].source}: ${pageErrors[0].detail}`);
 } catch (error) {
@@ -1337,7 +1619,7 @@ const metadata = {
         [cell.slice(cell.indexOf('|') + 1), digest]
       ))),
     scenarioSha256ByCell: Object.fromEntries(scenarioSha256ByCell),
-    renderParitySha256ByCell: DEPTH_LAYOUT_MATRIX
+    renderParitySha256ByCell: DEPTH_LAYOUT_MATRIX || FIRST_INSTANCE_CROSSOVER_MATRIX
       ? Object.fromEntries(renderParitySha256ByCell)
       : null,
     physicalBinSequenceSha256ByPair: DEPTH_LAYOUT_MATRIX
@@ -1358,13 +1640,16 @@ const metadata = {
       ? [...DEPTH_ORDERING_LAYOUTS]
       : ['baseline'],
     depthBinCount: DEPTH_LAYOUT_MATRIX ? 8 : null,
-    reversedDepthBuffer: DEPTH_LAYOUT_MATRIX ? true : null,
+    reversedDepthBuffer:
+      DEPTH_LAYOUT_MATRIX || FIRST_INSTANCE_CROSSOVER_MATRIX ? true : null,
     minimumStorageBuffersPerShaderStage: DEPTH_LAYOUT_MATRIX ? 8 : null,
     renderParity: FROZEN_CROSSOVER_MATRIX
       ? 'preflight, timing-start, and postflight paired-lane exact validation plus two stable offscreen captures per lane of rgba8 color, depth32float, and encoded object ID'
-      : BENCHMARK_MATRIX === 'depth-ordering'
-        ? 'same-snapshot exact validation plus two stable offscreen captures of rgba8 color, depth32float, and encoded object ID'
-        : null,
+      : FIRST_INSTANCE_CROSSOVER_MATRIX
+        ? 'preflight, timing-start, and postflight paired portable/feature exact validation plus two stable offscreen captures per lane of rgba8 color, depth32float, and encoded object ID'
+        : BENCHMARK_MATRIX === 'depth-ordering'
+          ? 'same-snapshot exact validation plus two stable offscreen captures of rgba8 color, depth32float, and encoded object ID'
+          : null,
     ...(FROZEN_CROSSOVER_MATRIX ? {
       frozenCrossover: {
         lanes: [...FROZEN_DEPTH_CROSSOVER_LANES],
@@ -1382,6 +1667,27 @@ const metadata = {
         survivorSegmentLength: OBJECT_COUNT,
         legalLaneBases: [0, OBJECT_COUNT],
         scheduleSha256ByOrientation: { ...FROZEN_SCHEDULE_SHA256_BY_ORIENTATION },
+      },
+    } : {}),
+    ...(FIRST_INSTANCE_CROSSOVER_MATRIX ? {
+      firstInstanceCrossover: {
+        requiredFeature: 'indirect-first-instance',
+        lanes: [...FIRST_INSTANCE_CROSSOVER_LANES],
+        blockSize: FIRST_INSTANCE_CROSSOVER_BLOCK_SIZE,
+        warmupBlocks: FIRST_INSTANCE_CROSSOVER_WARMUP_BLOCKS,
+        measuredBlocks: FIRST_INSTANCE_CROSSOVER_MEASURED_BLOCKS,
+        patterns: FIRST_INSTANCE_CROSSOVER_PATTERNS.map((pattern) => pattern.map(
+          (laneId) => (laneId === FIRST_INSTANCE_CROSSOVER_LANES[0] ? 'P' : 'F'),
+        ).join('')),
+        expectedMeasuredRowsPerLane: FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES / 2,
+        expectedRenderCallsPerFrame: 1,
+        expectedRenderTimestampUidCount: 1,
+        expectedComputeTimestampsPerFrame: 0,
+        commandSegments: 2,
+        commandRecordsPerSegment: BUCKET_COUNT,
+        scheduleSha256ByOrientation: {
+          ...FIRST_INSTANCE_SCHEDULE_SHA256_BY_ORIENTATION,
+        },
       },
     } : {}),
     objectCount: OBJECT_COUNT,
@@ -1402,6 +1708,8 @@ const metadata = {
       ? 'six-repetition-balanced-ab-ba-with-rotated-visibility-order'
       : FROZEN_CROSSOVER_MATRIX
         ? 'twelve-repetition-paired-eight-frame-frozen-crossover-with-balanced-layout-storage-base-and-starting-orientation'
+        : FIRST_INSTANCE_CROSSOVER_MATRIX
+          ? 'twelve-repetition-two-visibility-eight-frame-crossover-with-pairwise-balanced-command-segment-visibility-order-and-starting-orientation'
         : BENCHMARK_MATRIX === 'depth-ordering'
           ? 'all-six-mode-permutations-with-alternating-high-low-layout-order'
           : 'all-six-mode-permutations-with-rotated-visibility-order',
@@ -1420,6 +1728,7 @@ const metadata = {
   frameRowCount: frameRows.length,
   validationArtifactCount: validationArtifacts.length,
   validationArtifactSha256: validationArtifacts.map((artifact) => artifact.sha256),
+  firstInstanceAnalysisAudit,
   pageErrors,
   error: runError ? errorRecord(runError) : null,
 };

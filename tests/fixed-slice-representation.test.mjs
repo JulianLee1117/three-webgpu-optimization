@@ -6,6 +6,7 @@ import { createIndexedGeometryFixtures } from '../src/scenes/geometry-fixtures.j
 import {
   buildFixedSlicePerBucketStrategy,
   buildFixedSliceStrategy,
+  buildIndirectFirstInstanceStrategy,
 } from '../src/strategies/fixed-slice.js';
 import { disposeStrategyResources } from '../src/strategies/resources.js';
 
@@ -20,6 +21,93 @@ function exactBytes(attribute) {
 function disposeStrategy(strategy) {
   disposeStrategyResources({ _attributes: { delete() {} } }, strategy);
 }
+
+test('indirect first-instance path changes only addressing-specific geometry and command state', () => {
+  const bucketCount = 32;
+  const sourceGeometries = createIndexedGeometryFixtures(bucketCount, 'medium');
+  const scenario = createFixedSubsetScenario({
+    objectCount: 4_096,
+    bucketCount,
+    visibilityFraction: 0.99,
+    geometrySpheres: sourceGeometries.map((geometry) => geometry.boundingSphere),
+    seed: 0xb1ad_2026,
+  });
+  let portable;
+  let feature;
+  try {
+    portable = buildFixedSliceStrategy({ scenario, sourceGeometries });
+    feature = buildIndirectFirstInstanceStrategy({
+      scenario,
+      sourceGeometries,
+      renderer: { hasFeature: (name) => name === 'indirect-first-instance' },
+    });
+
+    assert.equal(feature.id, 'fixed-slice-indirect-first-instance');
+    assert.equal(feature.usesCompute, portable.usesCompute);
+    assert.equal(feature.configuredDrawCommands, portable.configuredDrawCommands);
+    assert.equal(feature.configuredRenderObjects, portable.configuredRenderObjects);
+    assert.equal(feature.configuredComputeDispatches, portable.configuredComputeDispatches);
+    assert.equal(feature.configuredComputeSubmissions, portable.configuredComputeSubmissions);
+    assert.equal(feature.computeNodes.length, portable.computeNodes.length);
+
+    const portableGeometry = portable.geometries[0];
+    const featureGeometry = feature.geometries[0];
+    assert.ok(portableGeometry.getAttribute('bucketBase'));
+    assert.equal(featureGeometry.getAttribute('bucketBase'), undefined);
+    for (const name of Object.keys(featureGeometry.attributes)) {
+      assert.deepEqual(
+        exactBytes(featureGeometry.getAttribute(name)),
+        exactBytes(portableGeometry.getAttribute(name)),
+      );
+    }
+    assert.deepEqual(exactBytes(featureGeometry.index), exactBytes(portableGeometry.index));
+
+    const portableCommands = portableGeometry.indirect.array;
+    const featureCommands = featureGeometry.indirect.array;
+    for (let bucket = 0; bucket < bucketCount; bucket += 1) {
+      const base = bucket * 5;
+      assert.deepEqual(
+        [...featureCommands.subarray(base, base + 4)],
+        [...portableCommands.subarray(base, base + 4)],
+      );
+      assert.equal(portableCommands[base + 4], 0);
+      assert.equal(featureCommands[base + 4], scenario.bucketBases[bucket]);
+    }
+
+    assert.equal(
+      portable.materials[0].userData.storageTransformAddressMode,
+      'bucket-base',
+    );
+    assert.equal(
+      feature.materials[0].userData.storageTransformAddressMode,
+      'indirect-first-instance',
+    );
+    assert.deepEqual(feature.diagnostics(), {
+      kind: 'single-merged-geometry-indirect-first-instance',
+      addressMode: 'indirect-first-instance',
+      hasBucketBaseAttribute: false,
+      nonzeroFirstInstanceCount: bucketCount - 1,
+      bundleRecordCallbackCount: 0,
+      geometryIdentityCount: 1,
+      materialIdentityCount: 1,
+      meshCount: 1,
+      geometryInstanceCount: Math.ceil(scenario.objectCount / bucketCount),
+    });
+
+    assert.throws(
+      () => buildIndirectFirstInstanceStrategy({
+        scenario,
+        sourceGeometries,
+        renderer: { hasFeature: () => false },
+      }),
+      /requires the indirect-first-instance WebGPU feature/,
+    );
+  } finally {
+    if (portable) disposeStrategy(portable);
+    if (feature) disposeStrategy(feature);
+    sourceGeometries.forEach((geometry) => geometry.dispose());
+  }
+});
 
 for (const bucketCount of [1, 4, 32, 128]) {
   test(`fixed-slice control holds compute schedule, commands, and geometry payload constant at B=${bucketCount}`, () => {

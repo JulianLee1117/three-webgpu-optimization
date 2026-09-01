@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { StorageBufferAttribute } from 'three/webgpu';
 import { createIndexedIndirectCommands, INDEXED_INDIRECT_STRIDE_BYTES } from '../src/culling/indexed-command-layout.js';
+import {
+  STORAGE_TRANSFORM_ADDRESS_MODES,
+  createStorageTransformMaterial,
+} from '../src/materials/storage-transform.js';
 import { createIndexedGeometryFixtures } from '../src/scenes/geometry-fixtures.js';
 import { createMergedIndexedBucketGeometry } from '../src/render/indexed-bucket-geometry.js';
 import { validateIndexedCommands } from '../src/validation/membership.js';
@@ -35,6 +40,120 @@ test('one-bucket commands retain an indexable struct-array binding', () => {
     expectedCounts: Uint32Array.of(7),
   }).pass, true);
   geometries.forEach((geometry) => geometry.dispose());
+});
+
+test('indexed commands accept exact unsigned firstInstance values without changing defaults', () => {
+  const geometries = createIndexedGeometryFixtures(4, 'low');
+  try {
+    const capacities = Uint32Array.of(8, 7, 6, 5);
+    const counts = Uint32Array.of(4, 3, 2, 1);
+    const firstInstances = Uint32Array.of(0, 8, 15, 21);
+    const configured = createIndexedIndirectCommands(
+      geometries,
+      capacities,
+      counts,
+      null,
+      firstInstances,
+    );
+    const defaults = createIndexedIndirectCommands(geometries, capacities, counts);
+
+    assert.deepEqual(
+      [...configured.commands.filter((_, index) => index % 5 === 4)],
+      [...firstInstances],
+    );
+    assert.deepEqual(
+      [...defaults.commands.filter((_, index) => index % 5 === 4)],
+      [0, 0, 0, 0],
+    );
+    assert.equal(validateIndexedCommands({
+      commands: configured.commands,
+      geometries,
+      expectedCounts: counts,
+      expectedFirstInstances: firstInstances,
+    }).pass, true);
+    assert.equal(validateIndexedCommands({
+      commands: configured.commands,
+      geometries,
+      expectedCounts: counts,
+    }).pass, false);
+    for (let bucket = 0; bucket < geometries.length; bucket += 1) {
+      const base = bucket * 5;
+      assert.deepEqual(
+        [...configured.commands.subarray(base, base + 4)],
+        [...defaults.commands.subarray(base, base + 4)],
+      );
+    }
+  } finally {
+    geometries.forEach((geometry) => geometry.dispose());
+  }
+});
+
+test('indexed commands reject malformed firstInstance inputs', () => {
+  const geometries = createIndexedGeometryFixtures(2, 'low');
+  try {
+    const capacities = Uint32Array.of(8, 8);
+    assert.throws(
+      () => createIndexedIndirectCommands(geometries, capacities, null, null, [0]),
+      /equal lengths/,
+    );
+    for (const invalid of [-1, 1.5, Number.NaN, 0x1_0000_0000]) {
+      assert.throws(
+        () => createIndexedIndirectCommands(
+          geometries,
+          capacities,
+          null,
+          null,
+          [0, invalid],
+        ),
+        /unsigned 32-bit integer/,
+      );
+    }
+  } finally {
+    geometries.forEach((geometry) => geometry.dispose());
+  }
+});
+
+test('storage-transform material exposes validated static address modes', () => {
+  const matrixAttribute = new StorageBufferAttribute(new Float32Array(2 * 16), 16);
+  const visibleIdsAttribute = new StorageBufferAttribute(Uint32Array.of(0, 1), 1);
+  const materials = [];
+  try {
+    const portable = createStorageTransformMaterial({
+      matrixAttribute,
+      objectCount: 2,
+      visibleIdsAttribute,
+    });
+    const firstInstance = createStorageTransformMaterial({
+      matrixAttribute,
+      objectCount: 2,
+      visibleIdsAttribute,
+      addressMode: STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
+    });
+    materials.push(portable, firstInstance);
+
+    assert.equal(
+      portable.userData.storageTransformAddressMode,
+      STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE,
+    );
+    assert.equal(
+      firstInstance.userData.storageTransformAddressMode,
+      STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
+    );
+    assert.notEqual(portable.positionNode, firstInstance.positionNode);
+    assert.throws(
+      () => createStorageTransformMaterial({
+        matrixAttribute,
+        objectCount: 2,
+        visibleIdsAttribute,
+        addressMode: 'draw-id',
+      }),
+      /addressMode must be one of/,
+    );
+  } finally {
+    materials.forEach((material) => material.dispose());
+    matrixAttribute.dispose();
+    visibleIdsAttribute.dispose();
+  }
 });
 
 function createBucketLayout(bucketCount) {
@@ -181,3 +300,48 @@ for (const bucketCount of [1, 4, 32, 128]) {
     assertMergedFixedSliceLayout(bucketCount);
   });
 }
+
+test('merged indexed geometry can omit bucketBase without changing indexed payloads', () => {
+  const bucketCount = 4;
+  const sources = createIndexedGeometryFixtures(bucketCount, 'medium');
+  const { bucketBases, instanceCounts } = createBucketLayout(bucketCount);
+  let portable;
+  let firstInstance;
+  try {
+    portable = createMergedIndexedBucketGeometry(sources, bucketBases, instanceCounts);
+    firstInstance = createMergedIndexedBucketGeometry(
+      sources,
+      bucketBases,
+      instanceCounts,
+      { includeBucketBase: false },
+    );
+
+    assert.ok(portable.geometry.getAttribute('bucketBase'));
+    assert.equal(firstInstance.geometry.getAttribute('bucketBase'), undefined);
+    assert.deepEqual(firstInstance.firstIndexes, portable.firstIndexes);
+    assert.deepEqual(
+      exactAttributeBytes(firstInstance.geometry.index),
+      exactAttributeBytes(portable.geometry.index),
+    );
+    for (const name of Object.keys(firstInstance.geometry.attributes)) {
+      assert.deepEqual(
+        exactAttributeBytes(firstInstance.geometry.getAttribute(name)),
+        exactAttributeBytes(portable.geometry.getAttribute(name)),
+        `${name} changed when bucketBase was omitted`,
+      );
+    }
+    assert.throws(
+      () => createMergedIndexedBucketGeometry(
+        sources,
+        bucketBases,
+        instanceCounts,
+        { includeBucketBase: 'no' },
+      ),
+      /includeBucketBase must be a boolean/,
+    );
+  } finally {
+    portable?.geometry.dispose();
+    firstInstance?.geometry.dispose();
+    sources.forEach((source) => source.dispose());
+  }
+});

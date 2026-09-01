@@ -13,6 +13,13 @@ import {
   frozenCrossoverFrame,
 } from './benchmark/frozen-crossover-schedule.js';
 import {
+  FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES,
+  FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES,
+  firstInstanceCrossoverFrame,
+} from './benchmark/first-instance-crossover-schedule.js';
+import {
+  FIRST_INSTANCE_CROSSOVER_LANES,
+  FIRST_INSTANCE_CROSSOVER_MODE,
   FROZEN_DEPTH_CROSSOVER_LANES,
   FROZEN_DEPTH_CROSSOVER_MODE,
 } from './benchmark/plan.js';
@@ -30,9 +37,11 @@ import {
   buildDepthBinnedReverseStrategy,
 } from './strategies/depth-binned-fixed-slice.js';
 import { buildFrozenDepthCrossoverStrategy } from './strategies/frozen-depth-crossover.js';
+import { buildFirstInstanceCrossoverStrategy } from './strategies/first-instance-crossover.js';
 import {
   buildFixedSlicePerBucketStrategy,
   buildFixedSliceStrategy,
+  buildIndirectFirstInstanceStrategy,
 } from './strategies/fixed-slice.js';
 import { disposeStrategyResources } from './strategies/resources.js';
 import {
@@ -97,6 +106,11 @@ const frozenCrossoverRenderTarget = new THREE.RenderTarget(
   VIEWPORT.height,
   { depthBuffer: true, samples: 0 },
 );
+const firstInstanceCrossoverRenderTarget = new THREE.RenderTarget(
+  VIEWPORT.width,
+  VIEWPORT.height,
+  { depthBuffer: true, samples: 0 },
+);
 
 let strategy = null;
 let scenario = null;
@@ -109,8 +123,14 @@ let validating = false;
 let lastRows = [];
 let lastValidation = null;
 let frozenSelectorWriteSerial = 0;
+let firstInstanceSelectorWriteSerial = 0;
+let firstInstanceLifecycleAtTimingStart = null;
 let frozenCrossoverConfiguration = Object.freeze({
   laneStorageOrder: Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES]),
+  superblockOrientationOffset: 0,
+});
+let firstInstanceCrossoverConfiguration = Object.freeze({
+  laneCommandSegmentOrder: Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES]),
   superblockOrientationOffset: 0,
 });
 
@@ -121,6 +141,14 @@ const FROZEN_LANE_ORDER_BY_ID = Object.freeze({
 
 function isFrozenCrossoverStrategy() {
   return strategy?.id === FROZEN_DEPTH_CROSSOVER_MODE;
+}
+
+function isFirstInstanceCrossoverStrategy() {
+  return strategy?.id === FIRST_INSTANCE_CROSSOVER_MODE;
+}
+
+function isRenderOnlyCrossoverStrategy() {
+  return isFrozenCrossoverStrategy() || isFirstInstanceCrossoverStrategy();
 }
 
 function frozenLaneOrder(laneId) {
@@ -139,16 +167,44 @@ function fnv1a64Float32(values) {
   return hash.toString(16).padStart(16, '0');
 }
 
+function fnv1a64Text(value) {
+  const bytes = new TextEncoder().encode(value);
+  let hash = 0xcbf29ce484222325n;
+  for (const byte of bytes) {
+    hash ^= BigInt(byte);
+    hash = BigInt.asUintN(64, hash * 0x100000001b3n);
+  }
+  return hash.toString(16).padStart(16, '0');
+}
+
+function firstInstanceStaticLifecycle(lifecycle) {
+  if (!lifecycle || typeof lifecycle !== 'object') return null;
+  const {
+    activeLane: _activeLane,
+    laneSelectionSerial: _laneSelectionSerial,
+    ...staticLifecycle
+  } = lifecycle;
+  return staticLifecycle;
+}
+
+function firstInstanceLifecycleCommitment(lifecycle) {
+  const staticLifecycle = firstInstanceStaticLifecycle(lifecycle);
+  return staticLifecycle === null ? null : fnv1a64Text(JSON.stringify(staticLifecycle));
+}
+
 function renderBenchmarkScene() {
-  if (!isFrozenCrossoverStrategy()) {
+  if (!isRenderOnlyCrossoverStrategy()) {
     renderer.render(scene, camera);
     return;
   }
+  const renderTarget = isFirstInstanceCrossoverStrategy()
+    ? firstInstanceCrossoverRenderTarget
+    : frozenCrossoverRenderTarget;
   const previousTarget = renderer.getRenderTarget();
   const previousCubeFace = renderer.getActiveCubeFace();
   const previousMipmapLevel = renderer.getActiveMipmapLevel();
   try {
-    renderer.setRenderTarget(frozenCrossoverRenderTarget);
+    renderer.setRenderTarget(renderTarget);
     renderer.render(scene, camera);
   } finally {
     renderer.setRenderTarget(previousTarget, previousCubeFace, previousMipmapLevel);
@@ -164,6 +220,151 @@ const DEPTH_ORDERING_LAYOUT_IDS = new Set(['high-overlap', 'low-overlap']);
 function validateTrialCompletion(context) {
   const diagnostics = strategy?.diagnostics?.() ?? null;
   const lifecycleDiagnostics = strategy?.lifecycleDiagnostics?.() ?? null;
+  if (context.modeId === FIRST_INSTANCE_CROSSOVER_MODE) {
+    const timedFrameCount = FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES
+      + FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES;
+    const selectorWritesDuringTiming = firstInstanceSelectorWriteSerial
+      - context.selectorWriteSerialAtTimingStart;
+    const strategySelectionsDuringTiming = (lifecycleDiagnostics?.laneSelectionSerial ?? -1)
+      - context.strategySelectionSerialAtTimingStart;
+    const renderCallsDuringTiming = renderer.info.render.calls
+      - context.renderCallSerialAtTimingStart;
+    const computeCallsDuringTiming = renderer.info.compute.calls
+      - context.computeCallSerialAtTimingStart;
+    const cacheAtTimingEnd = pinnedRendererCacheDiagnostics();
+    const cameraViewFnv64AtTimingEnd = fnv1a64Float32(camera.matrixWorldInverse.elements);
+    const cameraProjectionFnv64AtTimingEnd = fnv1a64Float32(camera.projectionMatrix.elements);
+    const lifecycleAtTimingEnd = firstInstanceStaticLifecycle(lifecycleDiagnostics);
+    const lifecycleCommitmentAtTimingEnd = firstInstanceLifecycleCommitment(
+      lifecycleDiagnostics,
+    );
+    const lifecycleExact = firstInstanceLifecycleAtTimingStart !== null
+      && JSON.stringify(lifecycleAtTimingEnd)
+        === JSON.stringify(firstInstanceLifecycleAtTimingStart);
+    const plannedCommandOrder = context.plannedLaneCommandSegmentOrder?.split('|') ?? [];
+    const configuredCommandOrderExact = plannedCommandOrder.length
+      === FIRST_INSTANCE_CROSSOVER_LANES.length
+      && plannedCommandOrder.every(
+        (laneId, index) => lifecycleDiagnostics?.laneCommandSegmentOrder?.[index] === laneId,
+      );
+    const commandSegmentsExact = JSON.stringify(lifecycleDiagnostics?.commandSegments ?? null)
+      === context.plannedCommandSegments;
+    const bundleRecordCountsExact = FIRST_INSTANCE_CROSSOVER_LANES.every(
+      (laneId) => lifecycleDiagnostics?.bundleRecordCounts?.[laneId] === 1,
+    );
+    return {
+      pass: diagnostics?.kind === 'frozen-first-instance-addressing-crossover'
+        && diagnostics.activeRenderObjectCount === 1
+        && diagnostics.geometryIdentityCount === 2
+        && diagnostics.materialIdentityCount === 2
+        && diagnostics.commonIndexIdentityCount === 1
+        && diagnostics.commandRecordCount === Math.max(2, context.bucketCount) * 2
+        && diagnostics.visibleIdsCount === context.objectCount
+        && lifecycleDiagnostics?.kind
+          === 'first-instance-crossover-static-resource-lifecycle'
+        && lifecycleDiagnostics.bundlesPrimed === true
+        && lifecycleDiagnostics.allBundlesStatic === true
+        && lifecycleDiagnostics.bundleCount === 2
+        && lifecycleDiagnostics.meshCount === 2
+        && lifecycleDiagnostics.activeRenderObjectCount === 1
+        && lifecycleDiagnostics.shaderEvidence?.pass === true
+        && bundleRecordCountsExact
+        && lifecycleDiagnostics.configuredComputeDispatches === 0
+        && lifecycleDiagnostics.configuredComputeSubmissions === 0
+        && configuredCommandOrderExact
+        && commandSegmentsExact
+        && lifecycleExact
+        && lifecycleCommitmentAtTimingEnd === context.lifecycleCommitmentAtTimingStart
+        && firstInstanceCrossoverRenderTarget.texture.uuid
+          === context.renderTargetTextureUuidAtTimingStart
+        && firstInstanceCrossoverRenderTarget.width === context.renderTargetWidthAtTimingStart
+        && firstInstanceCrossoverRenderTarget.height === context.renderTargetHeightAtTimingStart
+        && firstInstanceCrossoverRenderTarget.samples === context.renderTargetSamplesAtTimingStart
+        && firstInstanceCrossoverRenderTarget.depthBuffer
+          === context.renderTargetDepthBufferAtTimingStart
+        && cameraViewFnv64AtTimingEnd === context.cameraViewFnv64AtTimingStart
+        && cameraProjectionFnv64AtTimingEnd === context.cameraProjectionFnv64AtTimingStart
+        && selectorWritesDuringTiming === timedFrameCount
+        && strategySelectionsDuringTiming === timedFrameCount
+        && renderCallsDuringTiming === timedFrameCount
+        && computeCallsDuringTiming === 0
+        && cacheAtTimingEnd.available === true
+        && cacheAtTimingEnd.totalPipelineCacheEntries
+          === context.totalPipelineCacheEntriesAtTimingStart
+        && cacheAtTimingEnd.computePipelineCacheEntries
+          === context.computePipelineCacheEntriesAtTimingStart,
+      kind: 'first-instance-crossover-static-resource-invariant',
+      bundlesPrimed: lifecycleDiagnostics?.bundlesPrimed ?? null,
+      bundleStaticFlags: lifecycleDiagnostics?.bundleStaticFlags ?? null,
+      allBundlesStatic: lifecycleDiagnostics?.allBundlesStatic ?? null,
+      bundleCount: lifecycleDiagnostics?.bundleCount ?? null,
+      meshCount: lifecycleDiagnostics?.meshCount ?? null,
+      activeRenderObjectCount: lifecycleDiagnostics?.activeRenderObjectCount ?? null,
+      bundleRecordCounts: lifecycleDiagnostics?.bundleRecordCounts ?? null,
+      shaderEvidencePass: lifecycleDiagnostics?.shaderEvidence?.pass ?? null,
+      plannedLaneCommandSegmentOrder: context.plannedLaneCommandSegmentOrder,
+      observedLaneCommandSegmentOrder:
+        lifecycleDiagnostics?.laneCommandSegmentOrder?.join('|') ?? null,
+      configuredCommandOrderExact,
+      plannedCommandSegments: context.plannedCommandSegments,
+      observedCommandSegments: lifecycleDiagnostics?.commandSegments ?? null,
+      commandSegmentsExact,
+      representation: diagnostics ? {
+        kind: diagnostics.kind,
+        activeRenderObjectCount: diagnostics.activeRenderObjectCount,
+        geometryIdentityCount: diagnostics.geometryIdentityCount,
+        materialIdentityCount: diagnostics.materialIdentityCount,
+        commonIndexIdentityCount: diagnostics.commonIndexIdentityCount,
+        commandRecordCount: diagnostics.commandRecordCount,
+        visibleIdsCount: diagnostics.visibleIdsCount,
+      } : null,
+      lifecycleExact,
+      staticLifecycleAtTimingStart: firstInstanceLifecycleAtTimingStart === null
+        ? null
+        : structuredClone(firstInstanceLifecycleAtTimingStart),
+      staticLifecycleAtTimingEnd: lifecycleAtTimingEnd === null
+        ? null
+        : structuredClone(lifecycleAtTimingEnd),
+      lifecycleCommitmentAtTimingStart: context.lifecycleCommitmentAtTimingStart,
+      lifecycleCommitmentAtTimingEnd,
+      selectorWriteSerialAtTimingStart: context.selectorWriteSerialAtTimingStart,
+      selectorWriteSerialAtTimingEnd: firstInstanceSelectorWriteSerial,
+      selectorWritesDuringTiming,
+      strategySelectionSerialAtTimingStart: context.strategySelectionSerialAtTimingStart,
+      strategySelectionSerialAtTimingEnd:
+        lifecycleDiagnostics?.laneSelectionSerial ?? null,
+      strategySelectionsDuringTiming,
+      renderCallSerialAtTimingStart: context.renderCallSerialAtTimingStart,
+      renderCallSerialAtTimingEnd: renderer.info.render.calls,
+      renderCallsDuringTiming,
+      computeCallSerialAtTimingStart: context.computeCallSerialAtTimingStart,
+      computeCallSerialAtTimingEnd: renderer.info.compute.calls,
+      computeCallsDuringTiming,
+      renderTargetTextureUuidAtTimingStart: context.renderTargetTextureUuidAtTimingStart,
+      renderTargetTextureUuidAtTimingEnd: firstInstanceCrossoverRenderTarget.texture.uuid,
+      renderTargetWidthAtTimingStart: context.renderTargetWidthAtTimingStart,
+      renderTargetWidthAtTimingEnd: firstInstanceCrossoverRenderTarget.width,
+      renderTargetHeightAtTimingStart: context.renderTargetHeightAtTimingStart,
+      renderTargetHeightAtTimingEnd: firstInstanceCrossoverRenderTarget.height,
+      renderTargetSamplesAtTimingStart: context.renderTargetSamplesAtTimingStart,
+      renderTargetSamplesAtTimingEnd: firstInstanceCrossoverRenderTarget.samples,
+      renderTargetDepthBufferAtTimingStart: context.renderTargetDepthBufferAtTimingStart,
+      renderTargetDepthBufferAtTimingEnd: firstInstanceCrossoverRenderTarget.depthBuffer,
+      cameraViewFnv64AtTimingStart: context.cameraViewFnv64AtTimingStart,
+      cameraViewFnv64AtTimingEnd,
+      cameraProjectionFnv64AtTimingStart: context.cameraProjectionFnv64AtTimingStart,
+      cameraProjectionFnv64AtTimingEnd,
+      totalPipelineCacheEntriesAtTimingStart:
+        context.totalPipelineCacheEntriesAtTimingStart,
+      totalPipelineCacheEntriesAtTimingEnd:
+        cacheAtTimingEnd.totalPipelineCacheEntries ?? null,
+      computePipelineCacheEntriesAtTimingStart:
+        context.computePipelineCacheEntriesAtTimingStart,
+      computePipelineCacheEntriesAtTimingEnd:
+        cacheAtTimingEnd.computePipelineCacheEntries ?? null,
+      expectedTimedFrameCount: timedFrameCount,
+    };
+  }
   if (context.modeId === FROZEN_DEPTH_CROSSOVER_MODE) {
     const timedFrameCount = FROZEN_CROSSOVER_WARMUP_FRAMES
       + FROZEN_CROSSOVER_MEASURED_FRAMES;
@@ -385,6 +586,31 @@ function validateTrialCompletion(context) {
       materialIdentityCount: lifecycleDiagnostics?.materialIdentityCount ?? null,
     };
   }
+  if (context.modeId === 'fixed-slice-indirect-first-instance') {
+    return {
+      pass: diagnostics?.kind === 'single-merged-geometry-indirect-first-instance'
+        && diagnostics.addressMode === 'indirect-first-instance'
+        && diagnostics.hasBucketBaseAttribute === false
+        && diagnostics.nonzeroFirstInstanceCount === Math.max(0, context.bucketCount - 1)
+        && diagnostics.meshCount === 1
+        && diagnostics.geometryIdentityCount === 1
+        && diagnostics.materialIdentityCount === 1
+        && context.bundleRecordCallbackCountAtTimingStart === 1
+        && diagnostics.bundleRecordCallbackCount
+          === context.bundleRecordCallbackCountAtTimingStart,
+      kind: 'indirect-first-instance-static-bundle-invariant',
+      addressMode: diagnostics?.addressMode ?? null,
+      hasBucketBaseAttribute: diagnostics?.hasBucketBaseAttribute ?? null,
+      nonzeroFirstInstanceCount: diagnostics?.nonzeroFirstInstanceCount ?? null,
+      bundleRecordCallbackCountAtTimingStart:
+        context.bundleRecordCallbackCountAtTimingStart,
+      bundleRecordCallbackCountAtTimingEnd:
+        diagnostics?.bundleRecordCallbackCount ?? null,
+      meshCount: diagnostics?.meshCount ?? null,
+      geometryIdentityCount: diagnostics?.geometryIdentityCount ?? null,
+      materialIdentityCount: diagnostics?.materialIdentityCount ?? null,
+    };
+  }
   if (context.modeId !== 'fixed-slice-per-bucket') {
     return {
       pass: context.bundleRecordCallbackCountAtTimingStart === null && diagnostics === null,
@@ -447,6 +673,13 @@ function selectedConfig() {
     config.superblockOrientationOffset =
       frozenCrossoverConfiguration.superblockOrientationOffset;
   }
+  if (config.strategyId === FIRST_INSTANCE_CROSSOVER_MODE) {
+    config.laneCommandSegmentOrder = [
+      ...firstInstanceCrossoverConfiguration.laneCommandSegmentOrder,
+    ];
+    config.superblockOrientationOffset =
+      firstInstanceCrossoverConfiguration.superblockOrientationOffset;
+  }
   return config;
 }
 
@@ -468,6 +701,31 @@ function configureFrozenCrossover({
   }
   frozenCrossoverConfiguration = Object.freeze({
     laneStorageOrder: Object.freeze([...laneStorageOrder]),
+    superblockOrientationOffset,
+  });
+  return selectedConfig();
+}
+
+function configureFirstInstanceCrossover({
+  laneCommandSegmentOrder,
+  superblockOrientationOffset,
+} = {}) {
+  if (rebuilding || validating || trial.active || trial.resolving) {
+    throw new Error('First-instance crossover configuration cannot change during active work.');
+  }
+  if (!Array.isArray(laneCommandSegmentOrder)
+    || laneCommandSegmentOrder.length !== FIRST_INSTANCE_CROSSOVER_LANES.length
+    || new Set(laneCommandSegmentOrder).size !== FIRST_INSTANCE_CROSSOVER_LANES.length
+    || FIRST_INSTANCE_CROSSOVER_LANES.some(
+      (laneId) => !laneCommandSegmentOrder.includes(laneId),
+    )) {
+    throw new RangeError('laneCommandSegmentOrder must be the exact portable/feature pair.');
+  }
+  if (superblockOrientationOffset !== 0 && superblockOrientationOffset !== 1) {
+    throw new RangeError('superblockOrientationOffset must be zero or one.');
+  }
+  firstInstanceCrossoverConfiguration = Object.freeze({
+    laneCommandSegmentOrder: Object.freeze([...laneCommandSegmentOrder]),
     superblockOrientationOffset,
   });
   return selectedConfig();
@@ -507,6 +765,8 @@ async function rebuild() {
     sourceScenarioManifest = null;
     lastValidation = null;
     frozenSelectorWriteSerial = 0;
+    firstInstanceSelectorWriteSerial = 0;
+    firstInstanceLifecycleAtTimingStart = null;
     const config = selectedConfig();
     sourceGeometries = createIndexedGeometryFixtures(config.bucketCount, 'medium');
     sourceGeometryManifest = await fingerprintGeometryFixtures(sourceGeometries, 'medium');
@@ -536,9 +796,11 @@ async function rebuild() {
     const builders = {
       'draw-all': buildDrawAllStrategy,
       'fixed-slice': buildFixedSliceStrategy,
+      'fixed-slice-indirect-first-instance': buildIndirectFirstInstanceStrategy,
       'fixed-slice-depth-front-to-back': buildDepthBinnedFrontToBackStrategy,
       'fixed-slice-depth-reverse': buildDepthBinnedReverseStrategy,
       [FROZEN_DEPTH_CROSSOVER_MODE]: buildFrozenDepthCrossoverStrategy,
+      [FIRST_INSTANCE_CROSSOVER_MODE]: buildFirstInstanceCrossoverStrategy,
       'fixed-slice-per-bucket': buildFixedSlicePerBucketStrategy,
       'three-blocks-coalesced': buildThreeBlocksCoalescedStrategy,
       'three-blocks-current': buildThreeBlocksCurrentStrategy,
@@ -554,11 +816,36 @@ async function rebuild() {
       laneStorageOrder: config.strategyId === FROZEN_DEPTH_CROSSOVER_MODE
         ? frozenLaneOrder(config.laneStorageOrder[0])
         : undefined,
+      laneCommandSegmentOrder: config.strategyId === FIRST_INSTANCE_CROSSOVER_MODE
+        ? config.laneCommandSegmentOrder
+        : undefined,
     });
     scene.add(strategy.root);
     strategy.update(camera, renderer);
     if (strategy.usesCompute) strategy.submitCompute(renderer);
-    await renderer.compileAsync(scene, camera);
+    if (isFirstInstanceCrossoverStrategy()) {
+      const previousTarget = renderer.getRenderTarget();
+      const previousCubeFace = renderer.getActiveCubeFace();
+      const previousMipmapLevel = renderer.getActiveMipmapLevel();
+      try {
+        // compileAsync and shader capture both derive their render context from
+        // the current target, so hold the exact timed target for the full prime.
+        renderer.setRenderTarget(firstInstanceCrossoverRenderTarget);
+        await strategy.primeBundles({
+          scene,
+          render: () => renderer.render(scene, camera),
+        });
+        await strategy.collectShaderSources(scene);
+      } finally {
+        renderer.setRenderTarget(
+          previousTarget,
+          previousCubeFace,
+          previousMipmapLevel,
+        );
+      }
+    } else {
+      await renderer.compileAsync(scene, camera);
+    }
     elements['expected-visible'].textContent = `${scenario.expectedVisibleCount.toLocaleString()} / ${scenario.objectCount.toLocaleString()}`;
     elements.validation.textContent = 'not run';
     elements.details.textContent = '';
@@ -580,6 +867,9 @@ async function validateCurrent() {
     if (isFrozenCrossoverStrategy()) {
       strategy.setActiveLane(frozenLaneOrder(FROZEN_DEPTH_CROSSOVER_LANES[0]));
     }
+    if (isFirstInstanceCrossoverStrategy()) {
+      strategy.setActiveLane(FIRST_INSTANCE_CROSSOVER_LANES[0]);
+    }
     strategy.update(camera, renderer);
     if (strategy.usesCompute) strategy.submitCompute(renderer);
     renderBenchmarkScene();
@@ -595,7 +885,7 @@ async function validateCurrent() {
   }
 }
 
-function frozenParityIdentity(parity) {
+function parityIdentity(parity) {
   return ['color', 'depth', 'objectId'].map((channel) => (
     `${parity?.[channel]?.format}|${parity?.[channel]?.arrayType}`
     + `|${parity?.[channel]?.byteLength}|${parity?.[channel]?.sha256}`
@@ -632,7 +922,7 @@ async function captureRenderParity() {
         strategy.setActiveLane(previousLane);
       }
       const identities = FROZEN_DEPTH_CROSSOVER_LANES.map(
-        (laneId) => frozenParityIdentity(lanes[laneId]),
+        (laneId) => parityIdentity(lanes[laneId]),
       );
       const crossLaneExact = identities[0] === identities[1];
       const result = {
@@ -641,6 +931,41 @@ async function captureRenderParity() {
         pass: crossLaneExact
           && FROZEN_DEPTH_CROSSOVER_LANES.every((laneId) => lanes[laneId]?.pass === true),
         laneIds: [...FROZEN_DEPTH_CROSSOVER_LANES],
+        crossLaneExact,
+        lanes,
+        snapshotValidation,
+      };
+      setStatus(result.pass ? 'Render parity captured.' : 'Render parity capture was unstable.');
+      return result;
+    }
+    if (isFirstInstanceCrossoverStrategy()) {
+      const previousLane = strategy.activeLane;
+      const lanes = {};
+      try {
+        for (const laneId of FIRST_INSTANCE_CROSSOVER_LANES) {
+          strategy.setActiveLane(laneId);
+          lanes[laneId] = await captureExactRenderParity({
+            renderer,
+            camera,
+            strategy,
+            expectedIds: expectedCpuVisible,
+          });
+        }
+      } finally {
+        strategy.setActiveLane(previousLane);
+      }
+      const identities = FIRST_INSTANCE_CROSSOVER_LANES.map(
+        (laneId) => parityIdentity(lanes[laneId]),
+      );
+      const crossLaneExact = identities[0] === identities[1];
+      const result = {
+        schemaVersion: 1,
+        kind: 'first-instance-crossover-exact-render-parity',
+        pass: crossLaneExact
+          && FIRST_INSTANCE_CROSSOVER_LANES.every(
+            (laneId) => lanes[laneId]?.pass === true,
+          ),
+        laneIds: [...FIRST_INSTANCE_CROSSOVER_LANES],
         crossLaneExact,
         lanes,
         snapshotValidation,
@@ -671,16 +996,31 @@ async function startTrial(extraContext = {}) {
   const config = selectedConfig();
   const workload = await fingerprintWorkload();
   const representationDiagnostics = strategy.diagnostics?.() ?? null;
-  const timingDiagnostics = DEPTH_ORDERING_LAYOUT_IDS.has(config.layout)
+  const depthCrossover = strategy.id === FROZEN_DEPTH_CROSSOVER_MODE;
+  const firstInstanceCrossover = strategy.id === FIRST_INSTANCE_CROSSOVER_MODE;
+  const renderOnlyCrossover = depthCrossover || firstInstanceCrossover;
+  const timingDiagnostics = renderOnlyCrossover
+    ? strategy.lifecycleDiagnostics?.() ?? representationDiagnostics
+    : DEPTH_ORDERING_LAYOUT_IDS.has(config.layout)
     ? strategy.lifecycleDiagnostics?.() ?? representationDiagnostics
     : representationDiagnostics;
-  const frozenCrossover = strategy.id === FROZEN_DEPTH_CROSSOVER_MODE;
   const frontOrder = frozenLaneOrder(FROZEN_DEPTH_CROSSOVER_LANES[0]);
   const reverseOrder = frozenLaneOrder(FROZEN_DEPTH_CROSSOVER_LANES[1]);
-  const cacheAtTimingStart = frozenCrossover ? pinnedRendererCacheDiagnostics() : null;
-  if (frozenCrossover && cacheAtTimingStart?.available !== true) {
-    throw new Error('Frozen crossover requires pinned renderer cache diagnostics.');
+  const cacheAtTimingStart = renderOnlyCrossover ? pinnedRendererCacheDiagnostics() : null;
+  if (renderOnlyCrossover && cacheAtTimingStart?.available !== true) {
+    throw new Error('Render-only crossover requires pinned renderer cache diagnostics.');
   }
+  const timingRenderTarget = firstInstanceCrossover
+    ? firstInstanceCrossoverRenderTarget
+    : depthCrossover
+      ? frozenCrossoverRenderTarget
+      : null;
+  firstInstanceLifecycleAtTimingStart = firstInstanceCrossover
+    ? structuredClone(firstInstanceStaticLifecycle(timingDiagnostics))
+    : null;
+  const firstInstanceLifecycleCommitmentAtTimingStart = firstInstanceCrossover
+    ? firstInstanceLifecycleCommitment(timingDiagnostics)
+    : null;
   const trialContext = {
     ...extraContext,
     schemaVersion: 2,
@@ -701,74 +1041,148 @@ async function startTrial(extraContext = {}) {
     bundleRecordCallbackCountAtTimingStart:
       timingDiagnostics?.bundleRecordCallbackCount ?? null,
     timestampAvailable,
-    expectedRenderTimestampUidCount: frozenCrossover ? 1 : null,
-    plannedLaneStorageOrder: frozenCrossover
+    expectedRenderTimestampUidCount: renderOnlyCrossover ? 1 : null,
+    plannedLaneStorageOrder: depthCrossover
       ? config.laneStorageOrder.join('|')
       : null,
-    superblockOrientationOffset: frozenCrossover
+    plannedLaneCommandSegmentOrder: firstInstanceCrossover
+      ? config.laneCommandSegmentOrder.join('|')
+      : null,
+    plannedCommandSegments: firstInstanceCrossover
+      ? JSON.stringify(strategy.commandSegments)
+      : null,
+    superblockOrientationOffset: renderOnlyCrossover
       ? config.superblockOrientationOffset
       : null,
-    frontLaneBase: frozenCrossover ? strategy.laneOffsets[frontOrder] : null,
-    reverseLaneBase: frozenCrossover ? strategy.laneOffsets[reverseOrder] : null,
-    selectorWriteSerialAtTimingStart: frozenCrossover
+    frontLaneBase: depthCrossover ? strategy.laneOffsets[frontOrder] : null,
+    reverseLaneBase: depthCrossover ? strategy.laneOffsets[reverseOrder] : null,
+    selectorWriteSerialAtTimingStart: depthCrossover
       ? frozenSelectorWriteSerial
+      : firstInstanceCrossover
+        ? firstInstanceSelectorWriteSerial
+        : null,
+    strategySelectionSerialAtTimingStart: firstInstanceCrossover
+      ? strategy.laneSelectionSerial
       : null,
-    renderCallSerialAtTimingStart: frozenCrossover
+    lifecycleCommitmentAtTimingStart: firstInstanceLifecycleCommitmentAtTimingStart,
+    rootUuidAtTimingStart: firstInstanceCrossover ? timingDiagnostics.rootUuid : null,
+    rootVersionAtTimingStart: firstInstanceCrossover ? timingDiagnostics.rootVersion : null,
+    bundleUuidsAtTimingStart: firstInstanceCrossover
+      ? FIRST_INSTANCE_CROSSOVER_LANES.map(
+        (laneId) => timingDiagnostics.bundleUuids[laneId],
+      ).join('|')
+      : null,
+    bundleVersionsAtTimingStart: firstInstanceCrossover
+      ? FIRST_INSTANCE_CROSSOVER_LANES.map(
+        (laneId) => timingDiagnostics.bundleVersions[laneId],
+      ).join('|')
+      : null,
+    meshUuidsAtTimingStart: firstInstanceCrossover
+      ? FIRST_INSTANCE_CROSSOVER_LANES.map(
+        (laneId) => timingDiagnostics.meshUuids[laneId],
+      ).join('|')
+      : null,
+    geometryUuidsAtTimingStart: firstInstanceCrossover
+      ? FIRST_INSTANCE_CROSSOVER_LANES.map(
+        (laneId) => timingDiagnostics.geometryUuids[laneId],
+      ).join('|')
+      : null,
+    materialUuidsAtTimingStart: firstInstanceCrossover
+      ? FIRST_INSTANCE_CROSSOVER_LANES.map(
+        (laneId) => timingDiagnostics.materialUuids[laneId],
+      ).join('|')
+      : null,
+    commonAttributeIdsAtTimingStart: firstInstanceCrossover
+      ? JSON.stringify(timingDiagnostics.commonAttributeIds)
+      : null,
+    commonAttributeVersionsAtTimingStart: firstInstanceCrossover
+      ? JSON.stringify(timingDiagnostics.commonAttributeVersions)
+      : null,
+    indexAttributeIdAtTimingStart: firstInstanceCrossover
+      ? timingDiagnostics.indexAttributeId
+      : null,
+    indexAttributeVersionAtTimingStart: firstInstanceCrossover
+      ? timingDiagnostics.indexAttributeVersion
+      : null,
+    bucketBaseAttributeIdAtTimingStart: firstInstanceCrossover
+      ? timingDiagnostics.bucketBaseAttributeId
+      : null,
+    bucketBaseAttributeVersionAtTimingStart: firstInstanceCrossover
+      ? timingDiagnostics.bucketBaseAttributeVersion
+      : null,
+    shaderPortableVertexSha256AtTimingStart: firstInstanceCrossover
+      ? timingDiagnostics.shaderEvidence?.portableVertexSha256 ?? null
+      : null,
+    shaderFeatureVertexSha256AtTimingStart: firstInstanceCrossover
+      ? timingDiagnostics.shaderEvidence?.featureVertexSha256 ?? null
+      : null,
+    shaderNormalizedVertexSha256AtTimingStart: firstInstanceCrossover
+      ? timingDiagnostics.shaderEvidence?.normalizedVertexSha256 ?? null
+      : null,
+    shaderFragmentSha256AtTimingStart: firstInstanceCrossover
+      ? timingDiagnostics.shaderEvidence?.fragmentSha256 ?? null
+      : null,
+    renderCallSerialAtTimingStart: renderOnlyCrossover
       ? renderer.info.render.calls
       : null,
-    computeCallSerialAtTimingStart: frozenCrossover
+    computeCallSerialAtTimingStart: renderOnlyCrossover
       ? renderer.info.compute.calls
       : null,
     bundleGroupUuidAtTimingStart:
-      frozenCrossover ? timingDiagnostics.bundleGroupUuid : null,
-    meshUuidAtTimingStart: frozenCrossover ? timingDiagnostics.meshUuid : null,
-    geometryUuidAtTimingStart: frozenCrossover ? timingDiagnostics.geometryUuid : null,
-    materialUuidAtTimingStart: frozenCrossover ? timingDiagnostics.materialUuid : null,
+      depthCrossover ? timingDiagnostics.bundleGroupUuid : null,
+    meshUuidAtTimingStart: depthCrossover ? timingDiagnostics.meshUuid : null,
+    geometryUuidAtTimingStart: depthCrossover ? timingDiagnostics.geometryUuid : null,
+    materialUuidAtTimingStart: depthCrossover ? timingDiagnostics.materialUuid : null,
     matrixAttributeIdAtTimingStart:
-      frozenCrossover ? timingDiagnostics.matrixAttributeId : null,
+      renderOnlyCrossover ? timingDiagnostics.matrixAttributeId : null,
     visibleIdsAttributeIdAtTimingStart:
-      frozenCrossover ? timingDiagnostics.visibleIdsAttributeId : null,
+      renderOnlyCrossover ? timingDiagnostics.visibleIdsAttributeId : null,
     indirectAttributeIdAtTimingStart:
-      frozenCrossover ? timingDiagnostics.indirectAttributeId : null,
+      renderOnlyCrossover ? timingDiagnostics.indirectAttributeId : null,
     selectorChallengeAttributeIdAtTimingStart:
-      frozenCrossover ? timingDiagnostics.selectorChallengeAttributeId : null,
+      depthCrossover ? timingDiagnostics.selectorChallengeAttributeId : null,
     bundleGroupVersionAtTimingStart:
-      frozenCrossover ? timingDiagnostics.bundleGroupVersion : null,
+      depthCrossover ? timingDiagnostics.bundleGroupVersion : null,
     matrixAttributeVersionAtTimingStart:
-      frozenCrossover ? timingDiagnostics.matrixAttributeVersion : null,
+      renderOnlyCrossover ? timingDiagnostics.matrixAttributeVersion : null,
     visibleIdsAttributeVersionAtTimingStart:
-      frozenCrossover ? timingDiagnostics.visibleIdsAttributeVersion : null,
+      renderOnlyCrossover ? timingDiagnostics.visibleIdsAttributeVersion : null,
     indirectAttributeVersionAtTimingStart:
-      frozenCrossover ? timingDiagnostics.indirectAttributeVersion : null,
+      renderOnlyCrossover ? timingDiagnostics.indirectAttributeVersion : null,
     selectorUniformUuidAtTimingStart:
-      frozenCrossover ? timingDiagnostics.selectorUniformUuid : null,
+      depthCrossover ? timingDiagnostics.selectorUniformUuid : null,
     renderTargetTextureUuidAtTimingStart:
-      frozenCrossover ? frozenCrossoverRenderTarget.texture.uuid : null,
+      renderOnlyCrossover ? timingRenderTarget.texture.uuid : null,
     renderTargetWidthAtTimingStart:
-      frozenCrossover ? frozenCrossoverRenderTarget.width : null,
+      renderOnlyCrossover ? timingRenderTarget.width : null,
     renderTargetHeightAtTimingStart:
-      frozenCrossover ? frozenCrossoverRenderTarget.height : null,
+      renderOnlyCrossover ? timingRenderTarget.height : null,
     renderTargetSamplesAtTimingStart:
-      frozenCrossover ? frozenCrossoverRenderTarget.samples : null,
+      renderOnlyCrossover ? timingRenderTarget.samples : null,
     renderTargetDepthBufferAtTimingStart:
-      frozenCrossover ? frozenCrossoverRenderTarget.depthBuffer : null,
+      renderOnlyCrossover ? timingRenderTarget.depthBuffer : null,
     cameraViewFnv64AtTimingStart:
-      frozenCrossover ? fnv1a64Float32(camera.matrixWorldInverse.elements) : null,
+      renderOnlyCrossover ? fnv1a64Float32(camera.matrixWorldInverse.elements) : null,
     cameraProjectionFnv64AtTimingStart:
-      frozenCrossover ? fnv1a64Float32(camera.projectionMatrix.elements) : null,
+      renderOnlyCrossover ? fnv1a64Float32(camera.projectionMatrix.elements) : null,
     totalPipelineCacheEntriesAtTimingStart:
-      frozenCrossover ? cacheAtTimingStart.totalPipelineCacheEntries : null,
+      renderOnlyCrossover ? cacheAtTimingStart.totalPipelineCacheEntries : null,
     computePipelineCacheEntriesAtTimingStart:
-      frozenCrossover ? cacheAtTimingStart.computePipelineCacheEntries : null,
+      renderOnlyCrossover ? cacheAtTimingStart.computePipelineCacheEntries : null,
   };
   await trial.start(
     trialContext,
-    frozenCrossover
+    depthCrossover
       ? {
         warmupFrames: FROZEN_CROSSOVER_WARMUP_FRAMES,
         measuredFrames: FROZEN_CROSSOVER_MEASURED_FRAMES,
       }
-      : undefined,
+      : firstInstanceCrossover
+        ? {
+          warmupFrames: FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES,
+          measuredFrames: FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES,
+        }
+        : undefined,
   );
   return {
     validation: structuredClone(validation),
@@ -779,6 +1193,67 @@ async function startTrial(extraContext = {}) {
 function frame() {
   if (rebuilding || validating || !strategy || trial.resolving) return;
   const frameStart = performance.now();
+  if (isFirstInstanceCrossoverStrategy() && trial.active) {
+    const descriptor = trial.frameDescriptor;
+    if (!descriptor) throw new Error('First-instance crossover lacks an active-frame descriptor.');
+    const scheduled = firstInstanceCrossoverFrame(
+      descriptor.phaseFrameIndex,
+      trial.context.superblockOrientationOffset,
+    );
+    const selectionSerialBefore = strategy.laneSelectionSerial;
+    const commonStart = performance.now();
+    const commandByteBase = strategy.setActiveLane(scheduled.laneId);
+    firstInstanceSelectorWriteSerial += 1;
+    const selectorWriteSerial = firstInstanceSelectorWriteSerial;
+    const strategySelectionSerial = strategy.laneSelectionSerial;
+    const commandSegment = strategy.commandSegments[scheduled.laneId];
+    if (strategySelectionSerial !== selectionSerialBefore + 1) {
+      throw new Error('First-instance crossover must perform exactly one lane selection per frame.');
+    }
+    if (!commandSegment || commandByteBase !== commandSegment.byteBase) {
+      throw new Error('First-instance crossover selected the wrong physical command segment.');
+    }
+    const cpuCommonUpdateMs = performance.now() - commonStart;
+    const gpuFrameId = renderer.info.frame;
+    const renderCallSerialBefore = renderer.info.render.calls;
+    const renderStart = performance.now();
+    renderBenchmarkScene();
+    const cpuRenderSubmitMs = performance.now() - renderStart;
+    const renderCallSerial = renderer.info.render.calls;
+    if (renderCallSerial !== renderCallSerialBefore + 1) {
+      throw new Error(
+        'First-instance crossover must issue exactly one top-level render call per frame.',
+      );
+    }
+    const cpuSubmitTotalMs = cpuRenderSubmitMs;
+    const cpuFrameBodyMs = performance.now() - frameStart;
+    trial.recordFrame({
+      gpuFrameId,
+      phaseFrameIndex: descriptor.phaseFrameIndex,
+      crossoverBlockIndex: scheduled.crossoverBlockIndex,
+      withinBlockPosition: scheduled.withinBlockPosition,
+      crossoverPattern: scheduled.pattern,
+      crossoverPatternIndex: scheduled.patternIndex,
+      laneId: scheduled.laneId,
+      commandSegmentIndex: commandSegment.index,
+      commandRecordBase: commandSegment.recordBase,
+      commandByteBase,
+      selectorWriteSerial,
+      strategySelectionSerial,
+      renderCallSerial,
+      cpuCommonUpdateMs,
+      cpuComputeSubmitMs: null,
+      cpuRenderSubmitMs,
+      cpuSubmitTotalMs,
+      cpuFrameBodyMs,
+      configuredDrawCommands: strategy.configuredDrawCommands,
+      configuredRenderObjects: strategy.configuredRenderObjects,
+      configuredComputeDispatches: strategy.configuredComputeDispatches,
+      configuredComputeSubmissions: strategy.configuredComputeSubmissions,
+      configuredSubmittedInstances: strategy.configuredSubmittedInstances,
+    });
+    return;
+  }
   if (isFrozenCrossoverStrategy() && trial.active) {
     const descriptor = trial.frameDescriptor;
     if (!descriptor) throw new Error('Frozen crossover lacks an active-frame descriptor.');
@@ -950,6 +1425,7 @@ window.__WEBGPU_BENCH__ = {
   environment,
   selectedConfig,
   configureFrozenCrossover,
+  configureFirstInstanceCrossover,
   rebuild,
   validate: validateCurrent,
   captureRenderParity,
@@ -958,6 +1434,11 @@ window.__WEBGPU_BENCH__ = {
   cacheDiagnostics: pinnedRendererCacheDiagnostics,
   get geometryManifest() { return sourceGeometryManifest; },
   get scenarioManifest() { return sourceScenarioManifest; },
+  get strategyDiagnostics() { return strategy?.diagnostics?.() ?? null; },
+  get strategyLifecycle() { return strategy?.lifecycleDiagnostics?.() ?? null; },
+  get firstInstanceShaderEvidence() {
+    return isFirstInstanceCrossoverStrategy() ? strategy.shaderEvidence : null;
+  },
   get lastValidation() { return lastValidation; },
   get phase() { return trial.phase; },
   get trialError() { return trial.error?.message ?? null; },

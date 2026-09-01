@@ -20,6 +20,7 @@ import {
   vec4,
 } from 'three/tsl';
 import { VIEWPORT } from '../config.js';
+import { STORAGE_TRANSFORM_ADDRESS_MODES } from '../materials/storage-transform.js';
 
 function freezeStaticTransform(object) {
   object.matrixAutoUpdate = false;
@@ -141,12 +142,14 @@ function createObjectIdMaterial({
   visibleIdsCount,
   visibleIdOffset,
   objectCount,
+  addressMode,
 }) {
   const matrixRead = storage(matrixAttribute, 'mat4', objectCount).toReadOnly();
   const visibleRead = storage(visibleIdsAttribute, 'uint', visibleIdsCount).toReadOnly();
-  const sliceIndex = uint(visibleIdOffset)
-    .add(attribute('bucketBase', 'uint'))
-    .add(instanceIndex);
+  const localIndex = addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE
+    ? instanceIndex
+    : attribute('bucketBase', 'uint').add(instanceIndex);
+  const sliceIndex = uint(visibleIdOffset).add(localIndex);
   const objectId = visibleRead.element(sliceIndex);
   const fragmentObjectId = objectId.toVarying('v_renderParityObjectId');
 
@@ -170,7 +173,10 @@ function createObjectIdMaterial({
 }
 
 export function resolveRenderParityResources(strategy) {
-  const resources = strategy?.parityResources;
+  const activeView = typeof strategy?.getActiveParityView === 'function'
+    ? strategy.getActiveParityView()
+    : null;
+  const resources = activeView?.parityResources ?? activeView ?? strategy?.parityResources;
   if (!resources
     || !resources.matrixAttribute
     || !resources.visibleIdsAttribute
@@ -181,6 +187,13 @@ export function resolveRenderParityResources(strategy) {
   }
   const visibleIdsCount = resources.visibleIdsCount ?? resources.objectCount;
   const visibleIdOffset = resources.visibleIdOffset ?? 0;
+  const addressMode = resources.addressMode
+    ?? STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE;
+  if (!Object.values(STORAGE_TRANSFORM_ADDRESS_MODES).includes(addressMode)) {
+    throw new RangeError(
+      `Strategy ${strategy?.id ?? 'unknown'} exposes an invalid parity addressMode.`,
+    );
+  }
   if (!Number.isInteger(visibleIdsCount)
     || visibleIdsCount < resources.objectCount
     || visibleIdsCount > resources.visibleIdsAttribute.count) {
@@ -195,13 +208,22 @@ export function resolveRenderParityResources(strategy) {
       `Strategy ${strategy?.id ?? 'unknown'} exposes an invalid parity visibleIdOffset.`,
     );
   }
-  if (strategy.geometries?.length !== 1 || strategy.materials?.length !== 1) {
-    throw new Error('Render parity requires exactly one merged geometry and material.');
+  const geometry = activeView?.geometry
+    ?? (strategy.geometries?.length === 1 ? strategy.geometries[0] : null);
+  const material = activeView?.material
+    ?? (strategy.materials?.length === 1 ? strategy.materials[0] : null);
+  if (!geometry || !material) {
+    throw new Error(
+      'Render parity requires one active merged geometry and material view.',
+    );
   }
   return {
     ...resources,
     visibleIdsCount,
     visibleIdOffset,
+    addressMode,
+    geometry,
+    material,
   };
 }
 
@@ -278,8 +300,7 @@ export async function captureExactRenderParity({
     throw new Error('Exact parity requires an unpadded 256-byte-aligned readback row.');
   }
   const resources = resolveRenderParityResources(strategy);
-  const geometry = strategy.geometries[0];
-  const sourceMaterial = strategy.materials[0];
+  const { geometry, material: sourceMaterial } = resources;
   const objectIdMaterial = createObjectIdMaterial(resources);
   const colorScene = createParityScene(geometry, sourceMaterial, {
     background: 0x030711,

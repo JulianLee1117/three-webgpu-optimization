@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { pathToFileURL } from 'node:url';
 import { summarizeFrozenCrossoverRows } from './frozen-crossover-summary.mjs';
+import { summarizeFirstInstanceCrossoverRows } from './first-instance-crossover-summary.mjs';
 import {
   FROZEN_CROSSOVER_BLOCK_SIZE,
   FROZEN_CROSSOVER_MEASURED_BLOCKS,
@@ -14,6 +15,20 @@ import {
   frozenCrossoverFrame,
 } from '../src/benchmark/frozen-crossover-schedule.js';
 import {
+  FIRST_INSTANCE_CROSSOVER_BLOCK_SIZE,
+  FIRST_INSTANCE_CROSSOVER_MEASURED_BLOCKS,
+  FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES,
+  FIRST_INSTANCE_CROSSOVER_PATTERNS,
+  FIRST_INSTANCE_CROSSOVER_WARMUP_BLOCKS,
+  FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES,
+} from '../src/benchmark/first-instance-crossover-schedule.js';
+import {
+  FIRST_INSTANCE_CROSSOVER_COMMAND_SEGMENT_ORDERS,
+  FIRST_INSTANCE_CROSSOVER_LANES,
+  FIRST_INSTANCE_CROSSOVER_MODE,
+  FIRST_INSTANCE_CROSSOVER_ORIENTATION_OFFSETS,
+  FIRST_INSTANCE_CROSSOVER_REPETITIONS,
+  FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS,
   FROZEN_DEPTH_CROSSOVER_LANES,
   FROZEN_DEPTH_CROSSOVER_MODE,
   FROZEN_DEPTH_CROSSOVER_ORIENTATION_OFFSETS,
@@ -27,7 +42,22 @@ import {
   validateExactValidation,
   validateFrozenCrossoverCompletionInvariant,
   validateFrozenCrossoverRenderParity,
+  validateGeometryFixtureManifest,
+  validateScenarioManifest,
 } from '../scripts/evidence-validation.mjs';
+import {
+  firstInstanceCrossoverScheduleSha256,
+  firstInstanceRenderParityIdentity,
+  firstInstanceValidationSemanticSha256,
+  validateFirstInstanceCrossoverRenderParity,
+  validateFirstInstanceCrossoverValidation,
+  validateFirstInstanceTrialEvidence,
+} from '../scripts/first-instance-evidence-validation.mjs';
+import {
+  NVIDIA_QUERY_FIELDS,
+  TELEMETRY_CSV_FIELDS,
+  summarizeTelemetryRows,
+} from '../scripts/nvidia-telemetry.mjs';
 
 const REQUIRED_RUN_ARTIFACTS = Object.freeze([
   'frames.csv',
@@ -134,6 +164,53 @@ const FROZEN_DEPTH_CROSSOVER_ORDERING =
   'twelve-repetition-paired-eight-frame-frozen-crossover-with-balanced-layout-storage-base-and-starting-orientation';
 const FROZEN_DEPTH_CROSSOVER_RENDER_PARITY =
   'preflight, timing-start, and postflight paired-lane exact validation plus two stable offscreen captures per lane of rgba8 color, depth32float, and encoded object ID';
+const FIRST_INSTANCE_CROSSOVER_MATRIX = 'first-instance-render-only';
+const FIRST_INSTANCE_CROSSOVER_LAYOUTS = Object.freeze(['baseline']);
+const FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT = 65_536;
+const FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT = 32;
+const FIRST_INSTANCE_CROSSOVER_MAXIMUM_TIMESTAMP_QUANTUM_NS = 10_000;
+const FIRST_INSTANCE_CROSSOVER_VALIDATION_KIND =
+  'first-instance-crossover-exact-paired-snapshots';
+const FIRST_INSTANCE_CROSSOVER_PATTERNS_AS_STRINGS = Object.freeze(
+  FIRST_INSTANCE_CROSSOVER_PATTERNS.map((pattern) => pattern.map(
+    (laneId) => (laneId === FIRST_INSTANCE_CROSSOVER_LANES[0] ? 'P' : 'F'),
+  ).join('')),
+);
+const FIRST_INSTANCE_CROSSOVER_ORDERING =
+  'twelve-repetition-two-visibility-eight-frame-crossover-with-pairwise-balanced-command-segment-visibility-order-and-starting-orientation';
+const FIRST_INSTANCE_CROSSOVER_RENDER_PARITY =
+  'preflight, timing-start, and postflight paired portable/feature exact validation plus two stable offscreen captures per lane of rgba8 color, depth32float, and encoded object ID';
+const FIRST_INSTANCE_CROSSOVER_BROWSER_ARGS = Object.freeze([
+  '--enable-unsafe-webgpu',
+  '--enable-webgpu-developer-features',
+  '--disable-background-timer-throttling',
+  '--disable-renderer-backgrounding',
+]);
+const FIRST_INSTANCE_CROSSOVER_ADAPTER_INFO_FIELDS = Object.freeze([
+  'vendor',
+  'architecture',
+  'device',
+  'description',
+  'backend',
+  'type',
+  'driver',
+  'isFallbackAdapter',
+]);
+const FIRST_INSTANCE_CROSSOVER_TIMING_FIELDS = Object.freeze({
+  cpuCommonUpdateMs: Object.freeze([
+    'cpuCommonUpdateP50Ms',
+    'cpuCommonUpdateP95Ms',
+  ]),
+  cpuFrameBodyMs: Object.freeze(['cpuFrameBodyP50Ms', 'cpuFrameBodyP95Ms']),
+  cpuSubmitTotalMs: Object.freeze(['cpuSubmitP50Ms', 'cpuSubmitP95Ms']),
+  gpuRenderMs: Object.freeze(['gpuRenderP50Ms', 'gpuRenderP95Ms']),
+  gpuPassTotalMs: Object.freeze(['gpuPassTotalP50Ms', 'gpuPassTotalP95Ms']),
+});
+const FIRST_INSTANCE_CROSSOVER_TIMING_SCHEMA = Object.freeze([
+  ...Object.values(FIRST_INSTANCE_CROSSOVER_TIMING_FIELDS).flat(),
+  'gpuComputeP50Ms',
+  'gpuComputeP95Ms',
+]);
 const PROVENANCE_STABILITY_FIELDS = Object.freeze([
   'commit',
   'tree',
@@ -288,6 +365,169 @@ const FROZEN_CROSSOVER_ROW_IDENTITY_FIELDS = Object.freeze([
   'cameraProjectionFnv64AtTimingStart',
 ]);
 
+const FIRST_INSTANCE_CROSSOVER_REQUIRED_COLUMNS = Object.freeze([
+  'schemaVersion',
+  'runId',
+  'trialId',
+  'planIndex',
+  'repetitionIndex',
+  'modeOrderPosition',
+  'visibilityOrderPosition',
+  'layoutOrderPosition',
+  'plannedModeOrder',
+  'plannedVisibilityOrder',
+  'plannedLayoutOrder',
+  'frameIndex',
+  'phaseFrameIndex',
+  'modeId',
+  'objectCount',
+  'bucketCount',
+  'targetVisibilityFraction',
+  'scenarioLayout',
+  'expectedVisibleCount',
+  'protocolWarmupFrames',
+  'protocolMeasuredFrames',
+  'validationKind',
+  'validationPass',
+  'usesCompute',
+  'configuredDrawCommands',
+  'configuredRenderObjects',
+  'configuredComputeDispatches',
+  'configuredComputeSubmissions',
+  'configuredSubmittedInstances',
+  'timestampAvailable',
+  'expectedRenderTimestampUidCount',
+  'plannedLaneCommandSegmentOrder',
+  'plannedCommandSegments',
+  'plannedScheduleSha256',
+  'superblockOrientationOffset',
+  'lifecycleCommitmentAtTimingStart',
+  'rootUuidAtTimingStart',
+  'rootVersionAtTimingStart',
+  'bundleUuidsAtTimingStart',
+  'bundleVersionsAtTimingStart',
+  'meshUuidsAtTimingStart',
+  'geometryUuidsAtTimingStart',
+  'materialUuidsAtTimingStart',
+  'commonAttributeIdsAtTimingStart',
+  'commonAttributeVersionsAtTimingStart',
+  'indexAttributeIdAtTimingStart',
+  'indexAttributeVersionAtTimingStart',
+  'bucketBaseAttributeIdAtTimingStart',
+  'bucketBaseAttributeVersionAtTimingStart',
+  'shaderPortableVertexSha256AtTimingStart',
+  'shaderFeatureVertexSha256AtTimingStart',
+  'shaderNormalizedVertexSha256AtTimingStart',
+  'shaderFragmentSha256AtTimingStart',
+  'matrixAttributeIdAtTimingStart',
+  'matrixAttributeVersionAtTimingStart',
+  'visibleIdsAttributeIdAtTimingStart',
+  'visibleIdsAttributeVersionAtTimingStart',
+  'indirectAttributeIdAtTimingStart',
+  'indirectAttributeVersionAtTimingStart',
+  'computeCallSerialAtTimingStart',
+  'selectorWriteSerialAtTimingStart',
+  'strategySelectionSerialAtTimingStart',
+  'renderCallSerialAtTimingStart',
+  'renderTargetTextureUuidAtTimingStart',
+  'renderTargetWidthAtTimingStart',
+  'renderTargetHeightAtTimingStart',
+  'renderTargetSamplesAtTimingStart',
+  'renderTargetDepthBufferAtTimingStart',
+  'cameraViewFnv64AtTimingStart',
+  'cameraProjectionFnv64AtTimingStart',
+  'totalPipelineCacheEntriesAtTimingStart',
+  'computePipelineCacheEntriesAtTimingStart',
+  'crossoverBlockIndex',
+  'withinBlockPosition',
+  'crossoverPattern',
+  'crossoverPatternIndex',
+  'laneId',
+  'commandSegmentIndex',
+  'commandRecordBase',
+  'commandByteBase',
+  'selectorWriteSerial',
+  'strategySelectionSerial',
+  'renderCallSerial',
+  'gpuFrameId',
+  'gpuRenderTimestampUidCount',
+  'cpuCommonUpdateMs',
+  'cpuComputeSubmitMs',
+  'cpuRenderSubmitMs',
+  'cpuSubmitTotalMs',
+  'cpuFrameBodyMs',
+  'gpuComputeMs',
+  'gpuRenderMs',
+  'gpuPassTotalMs',
+]);
+
+const FIRST_INSTANCE_CROSSOVER_SAFE_INTEGER_COLUMNS = Object.freeze([
+  'schemaVersion',
+  'planIndex',
+  'repetitionIndex',
+  'modeOrderPosition',
+  'visibilityOrderPosition',
+  'layoutOrderPosition',
+  'frameIndex',
+  'phaseFrameIndex',
+  'objectCount',
+  'bucketCount',
+  'expectedVisibleCount',
+  'protocolWarmupFrames',
+  'protocolMeasuredFrames',
+  'configuredDrawCommands',
+  'configuredRenderObjects',
+  'configuredComputeDispatches',
+  'configuredComputeSubmissions',
+  'configuredSubmittedInstances',
+  'expectedRenderTimestampUidCount',
+  'superblockOrientationOffset',
+  'indexAttributeIdAtTimingStart',
+  'indexAttributeVersionAtTimingStart',
+  'bucketBaseAttributeIdAtTimingStart',
+  'bucketBaseAttributeVersionAtTimingStart',
+  'matrixAttributeIdAtTimingStart',
+  'matrixAttributeVersionAtTimingStart',
+  'visibleIdsAttributeIdAtTimingStart',
+  'visibleIdsAttributeVersionAtTimingStart',
+  'indirectAttributeIdAtTimingStart',
+  'indirectAttributeVersionAtTimingStart',
+  'computeCallSerialAtTimingStart',
+  'selectorWriteSerialAtTimingStart',
+  'strategySelectionSerialAtTimingStart',
+  'renderCallSerialAtTimingStart',
+  'renderTargetWidthAtTimingStart',
+  'renderTargetHeightAtTimingStart',
+  'renderTargetSamplesAtTimingStart',
+  'totalPipelineCacheEntriesAtTimingStart',
+  'computePipelineCacheEntriesAtTimingStart',
+  'crossoverBlockIndex',
+  'withinBlockPosition',
+  'crossoverPatternIndex',
+  'commandSegmentIndex',
+  'commandRecordBase',
+  'commandByteBase',
+  'selectorWriteSerial',
+  'strategySelectionSerial',
+  'renderCallSerial',
+  'gpuFrameId',
+  'gpuRenderTimestampUidCount',
+]);
+
+const FIRST_INSTANCE_CROSSOVER_NULLABLE_SAFE_INTEGER_COLUMNS = Object.freeze([
+  'rootVersionAtTimingStart',
+]);
+
+const FIRST_INSTANCE_CROSSOVER_NUMBER_COLUMNS = Object.freeze([
+  'targetVisibilityFraction',
+  'cpuCommonUpdateMs',
+  'cpuRenderSubmitMs',
+  'cpuSubmitTotalMs',
+  'cpuFrameBodyMs',
+  'gpuRenderMs',
+  'gpuPassTotalMs',
+]);
+
 function csvError(message, line) {
   const suffix = line === undefined ? '' : ` at CSV line ${line}`;
   return new Error(`${message}${suffix}`);
@@ -296,7 +536,7 @@ function csvError(message, line) {
 /**
  * Parse RFC-4180-style CSV, including quoted commas, newlines, and doubled quotes.
  */
-export function parseCsv(text) {
+export function parseCsv(text, { allowEmptyRecords = false } = {}) {
   if (typeof text !== 'string') throw new TypeError('CSV input must be a string.');
 
   const source = text.charCodeAt(0) === 0xfeff ? text.slice(1) : text;
@@ -388,7 +628,9 @@ export function parseCsv(text) {
     return Object.fromEntries(headers.map((header, columnIndex) => [header, values[columnIndex]]));
   });
 
-  if (records.length === 0) throw new Error('CSV input contains a header but no frame rows.');
+  if (records.length === 0 && !allowEmptyRecords) {
+    throw new Error('CSV input contains a header but no frame rows.');
+  }
   return { headers, records };
 }
 
@@ -927,6 +1169,104 @@ function parseFrozenCrossoverRecords(parsed) {
   return normalized;
 }
 
+function isFirstInstanceCrossoverCsv(parsed) {
+  const headers = new Set(parsed.headers);
+  return parsed.records.some((record) => record.modeId === FIRST_INSTANCE_CROSSOVER_MODE)
+    || headers.has('plannedLaneCommandSegmentOrder')
+    || headers.has('commandSegmentIndex')
+    || headers.has('strategySelectionSerial');
+}
+
+function parseFirstInstanceCrossoverRecords(parsed) {
+  const headers = new Set(parsed.headers);
+  const missing = FIRST_INSTANCE_CROSSOVER_REQUIRED_COLUMNS.filter(
+    (column) => !headers.has(column),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `First-instance crossover CSV is missing required columns: ${missing.join(', ')}.`,
+    );
+  }
+  if (parsed.records.some((record) => record.modeId !== FIRST_INSTANCE_CROSSOVER_MODE)) {
+    throw new Error('First-instance crossover CSV cannot mix crossover and non-crossover modes.');
+  }
+
+  return parsed.records.map((record, index) => {
+    const recordNumber = index + 2;
+    const row = { ...record };
+    for (const field of FIRST_INSTANCE_CROSSOVER_SAFE_INTEGER_COLUMNS) {
+      const value = Number(record[field]);
+      if (record[field]?.trim() === '' || !Number.isSafeInteger(value) || value < 0) {
+        throw new Error(
+          `Record ${recordNumber} has invalid safe integer ${field}: ${JSON.stringify(record[field])}.`,
+        );
+      }
+      row[field] = value;
+    }
+    for (const field of FIRST_INSTANCE_CROSSOVER_NULLABLE_SAFE_INTEGER_COLUMNS) {
+      if (record[field] === '') {
+        row[field] = null;
+        continue;
+      }
+      const value = Number(record[field]);
+      if (!Number.isSafeInteger(value) || value < 0) {
+        throw new Error(
+          `Record ${recordNumber} has invalid nullable safe integer ${field}: ${JSON.stringify(record[field])}.`,
+        );
+      }
+      row[field] = value;
+    }
+    for (const field of FIRST_INSTANCE_CROSSOVER_NUMBER_COLUMNS) {
+      row[field] = finiteNumber(record[field], field, recordNumber, { minimum: 0 });
+    }
+    for (const field of ['validationPass', 'usesCompute', 'timestampAvailable']) {
+      const value = optionalBoolean(record[field], field, recordNumber);
+      if (value === null) throw new Error(`Record ${recordNumber} has no ${field}.`);
+      row[field] = value;
+    }
+    const depthBuffer = optionalBoolean(
+      record.renderTargetDepthBufferAtTimingStart,
+      'renderTargetDepthBufferAtTimingStart',
+      recordNumber,
+    );
+    if (depthBuffer === null) {
+      throw new Error(
+        `Record ${recordNumber} has no renderTargetDepthBufferAtTimingStart.`,
+      );
+    }
+    row.renderTargetDepthBufferAtTimingStart = depthBuffer;
+    for (const field of ['cpuComputeSubmitMs', 'gpuComputeMs']) {
+      if (record[field] !== '') {
+        throw new Error(`Record ${recordNumber} contains an unexpected ${field}.`);
+      }
+      row[field] = null;
+    }
+    for (const field of [
+      'runId',
+      'trialId',
+      'plannedModeOrder',
+      'plannedVisibilityOrder',
+      'plannedLayoutOrder',
+      'scenarioLayout',
+      'validationKind',
+      'plannedLaneCommandSegmentOrder',
+      'plannedCommandSegments',
+      'plannedScheduleSha256',
+      'lifecycleCommitmentAtTimingStart',
+      'renderTargetTextureUuidAtTimingStart',
+      'cameraViewFnv64AtTimingStart',
+      'cameraProjectionFnv64AtTimingStart',
+      'crossoverPattern',
+      'laneId',
+    ]) {
+      if (typeof record[field] !== 'string' || record[field].trim() === '') {
+        throw new Error(`Record ${recordNumber} has no ${field}.`);
+      }
+    }
+    return row;
+  });
+}
+
 function metricP50(frames) {
   return Object.fromEntries(METRICS.map((metric) => [
     metric,
@@ -1417,8 +1757,8 @@ function requireNonemptyString(value, label) {
 }
 
 function requireInteger(value, label, { minimum = 0 } = {}) {
-  if (!Number.isInteger(value) || value < minimum) {
-    failVerification(`${label} must be an integer greater than or equal to ${minimum}.`);
+  if (!Number.isSafeInteger(value) || value < minimum) {
+    failVerification(`${label} must be a safe integer greater than or equal to ${minimum}.`);
   }
   return value;
 }
@@ -1670,6 +2010,375 @@ function validateCandidateProvenance(metadata) {
   }
 }
 
+function requireExactRecordKeys(value, expectedKeys, label) {
+  const record = requireRecord(value, label);
+  const keys = Object.keys(record);
+  if (keys.length !== expectedKeys.length
+    || expectedKeys.some((key) => !Object.hasOwn(record, key))) {
+    failVerification(`${label} has an unexpected schema.`);
+  }
+  return record;
+}
+
+function requireNullableNonemptyString(value, label) {
+  if (value !== null) requireNonemptyString(value, label);
+  return value;
+}
+
+function validateTelemetryNumericSummary(value, label) {
+  if (value === null) return;
+  const summary = requireExactRecordKeys(
+    value,
+    ['minimum', 'median', 'maximum'],
+    label,
+  );
+  for (const field of ['minimum', 'median', 'maximum']) {
+    requireFiniteNumber(summary[field], `${label}.${field}`);
+  }
+  if (summary.minimum > summary.median || summary.median > summary.maximum) {
+    failVerification(`${label} is not ordered minimum/median/maximum.`);
+  }
+}
+
+function validateTelemetryCounts(value, sampleCount, label) {
+  const counts = requireRecord(value, label);
+  let total = 0;
+  for (const [key, count] of Object.entries(counts)) {
+    requireNonemptyString(key, `${label} key`);
+    requireInteger(count, `${label}.${key}`, { minimum: 1 });
+    total += count;
+  }
+  if (!Number.isSafeInteger(total) || total !== sampleCount) {
+    failVerification(`${label} does not sum to the GPU sample count.`);
+  }
+}
+
+function validateTelemetrySummarySchema(summary, status) {
+  requireExactRecordKeys(
+    summary,
+    ['sampleCount', 'gpuCount', 'firstObservedAtIso', 'lastObservedAtIso', 'gpus'],
+    'gpu-telemetry-summary.json summary',
+  );
+  requireInteger(summary.sampleCount, 'gpu-telemetry-summary.json summary.sampleCount');
+  requireInteger(summary.gpuCount, 'gpu-telemetry-summary.json summary.gpuCount');
+  const gpus = requireArray(summary.gpus, 'gpu-telemetry-summary.json summary.gpus');
+  if (summary.gpuCount !== gpus.length) {
+    failVerification('gpu-telemetry-summary.json summary.gpuCount differs from gpus.length.');
+  }
+  if (summary.sampleCount === 0) {
+    if (summary.gpuCount !== 0
+      || summary.firstObservedAtIso !== null
+      || summary.lastObservedAtIso !== null) {
+      failVerification('empty GPU telemetry summary has non-empty observations.');
+    }
+  } else {
+    requireIsoTimestamp(
+      summary.firstObservedAtIso,
+      'gpu-telemetry-summary.json summary.firstObservedAtIso',
+    );
+    requireIsoTimestamp(
+      summary.lastObservedAtIso,
+      'gpu-telemetry-summary.json summary.lastObservedAtIso',
+    );
+    if (Date.parse(summary.lastObservedAtIso) < Date.parse(summary.firstObservedAtIso)) {
+      failVerification('GPU telemetry summary observations are time-reversed.');
+    }
+  }
+  if ((status === 'available' || status === 'interrupted' || status === 'recorded-not-written')
+      !== (summary.sampleCount > 0)) {
+    failVerification('GPU telemetry status and sample count are inconsistent.');
+  }
+  const numericFields = [
+    'graphicsClockMHz',
+    'memoryClockMHz',
+    'gpuUtilizationPercent',
+    'memoryUtilizationPercent',
+    'memoryUsedMiB',
+    'memoryTotalMiB',
+    'temperatureC',
+    'powerDrawW',
+  ];
+  let totalSamples = 0;
+  for (const [index, gpu] of gpus.entries()) {
+    const label = `gpu-telemetry-summary.json summary.gpus[${index}]`;
+    requireExactRecordKeys(gpu, [
+      'gpuIndex',
+      'gpuName',
+      'gpuUuid',
+      'sampleCount',
+      'firstObservedAtIso',
+      'lastObservedAtIso',
+      'maximumSampleGapMs',
+      'phaseSampleCounts',
+      'pstateSampleCounts',
+      ...numericFields,
+    ], label);
+    if (gpu.gpuIndex !== null) requireInteger(gpu.gpuIndex, `${label}.gpuIndex`);
+    requireNullableNonemptyString(gpu.gpuName, `${label}.gpuName`);
+    requireNullableNonemptyString(gpu.gpuUuid, `${label}.gpuUuid`);
+    requireInteger(gpu.sampleCount, `${label}.sampleCount`, { minimum: 1 });
+    totalSamples += gpu.sampleCount;
+    requireIsoTimestamp(gpu.firstObservedAtIso, `${label}.firstObservedAtIso`);
+    requireIsoTimestamp(gpu.lastObservedAtIso, `${label}.lastObservedAtIso`);
+    if (Date.parse(gpu.lastObservedAtIso) < Date.parse(gpu.firstObservedAtIso)) {
+      failVerification(`${label} observations are time-reversed.`);
+    }
+    if (gpu.maximumSampleGapMs !== null) {
+      requireFiniteNumber(gpu.maximumSampleGapMs, `${label}.maximumSampleGapMs`, {
+        minimum: 0,
+      });
+    }
+    validateTelemetryCounts(gpu.phaseSampleCounts, gpu.sampleCount, `${label}.phaseSampleCounts`);
+    validateTelemetryCounts(gpu.pstateSampleCounts, gpu.sampleCount, `${label}.pstateSampleCounts`);
+    for (const field of numericFields) {
+      validateTelemetryNumericSummary(gpu[field], `${label}.${field}`);
+    }
+  }
+  if (totalSamples !== summary.sampleCount) {
+    failVerification('GPU telemetry per-device samples do not sum to summary.sampleCount.');
+  }
+}
+
+function validateComputeProcessSnapshot(snapshot, expectedLabel, label) {
+  if (snapshot === null) return;
+  requireExactRecordKeys(
+    snapshot,
+    ['label', 'status', 'capturedAtIso', 'runElapsedMs', 'reason', 'processes'],
+    label,
+  );
+  if (snapshot.label !== expectedLabel
+    || (snapshot.status !== 'available' && snapshot.status !== 'unavailable')) {
+    failVerification(`${label} has an invalid label or status.`);
+  }
+  requireIsoTimestamp(snapshot.capturedAtIso, `${label}.capturedAtIso`);
+  requireFiniteNumber(snapshot.runElapsedMs, `${label}.runElapsedMs`, { minimum: 0 });
+  const processes = requireArray(snapshot.processes, `${label}.processes`);
+  if (snapshot.status === 'available') {
+    if (snapshot.reason !== null) {
+      failVerification(`${label} available snapshot has a reason.`);
+    }
+  } else {
+    requireNonemptyString(snapshot.reason, `${label}.reason`);
+    if (processes.length !== 0) {
+      failVerification(`${label} unavailable snapshot contains processes.`);
+    }
+  }
+  for (const [index, processRecord] of processes.entries()) {
+    const processLabel = `${label}.processes[${index}]`;
+    requireExactRecordKeys(
+      processRecord,
+      ['gpuUuid', 'pid', 'processName', 'usedMemoryMiB'],
+      processLabel,
+    );
+    requireNullableNonemptyString(processRecord.gpuUuid, `${processLabel}.gpuUuid`);
+    if (processRecord.pid !== null) requireInteger(processRecord.pid, `${processLabel}.pid`);
+    requireNullableNonemptyString(processRecord.processName, `${processLabel}.processName`);
+    if (processRecord.usedMemoryMiB !== null) {
+      requireFiniteNumber(processRecord.usedMemoryMiB, `${processLabel}.usedMemoryMiB`, {
+        minimum: 0,
+      });
+    }
+  }
+}
+
+function nullableTelemetryCsvValue(value, parser, label) {
+  if (value === '') return null;
+  return parser(value, label);
+}
+
+function parseTelemetryCsv(contents, runId) {
+  const parsed = parseCsv(contents.toString('utf8'), { allowEmptyRecords: true });
+  if (!orderedValuesMatch(parsed.headers, TELEMETRY_CSV_FIELDS)) {
+    failVerification('gpu-telemetry.csv headers differ from the Nvidia telemetry schema.');
+  }
+  const integer = (value, label) => {
+    const result = Number(value);
+    if (!Number.isSafeInteger(result) || result < 0) {
+      failVerification(`${label} must be a nonnegative safe integer.`);
+    }
+    return result;
+  };
+  const number = (value, label) => {
+    const result = Number(value);
+    if (!Number.isFinite(result)) failVerification(`${label} must be finite.`);
+    return result;
+  };
+  return parsed.records.map((record, index) => {
+    const label = `gpu-telemetry.csv record ${index + 2}`;
+    requireIsoTimestamp(record.observedAtIso, `${label}.observedAtIso`);
+    if (record.runId !== runId) failVerification(`${label}.runId differs from metadata.`);
+    requireNonemptyString(record.phase, `${label}.phase`);
+    return {
+      observedAtIso: record.observedAtIso,
+      runElapsedMs: number(record.runElapsedMs, `${label}.runElapsedMs`),
+      runId: record.runId,
+      trialId: record.trialId === '' ? null : requireNonemptyString(record.trialId, `${label}.trialId`),
+      planIndex: nullableTelemetryCsvValue(record.planIndex, integer, `${label}.planIndex`),
+      repetitionIndex: nullableTelemetryCsvValue(
+        record.repetitionIndex,
+        integer,
+        `${label}.repetitionIndex`,
+      ),
+      modeId: record.modeId === '' ? null : requireNonemptyString(record.modeId, `${label}.modeId`),
+      visibilityFraction: nullableTelemetryCsvValue(
+        record.visibilityFraction,
+        number,
+        `${label}.visibilityFraction`,
+      ),
+      layout: record.layout === '' ? null : requireNonemptyString(record.layout, `${label}.layout`),
+      phase: record.phase,
+      gpuIndex: nullableTelemetryCsvValue(record.gpuIndex, integer, `${label}.gpuIndex`),
+      gpuName: record.gpuName === '' ? null : requireNonemptyString(record.gpuName, `${label}.gpuName`),
+      gpuUuid: record.gpuUuid === '' ? null : requireNonemptyString(record.gpuUuid, `${label}.gpuUuid`),
+      pstate: record.pstate === '' ? null : requireNonemptyString(record.pstate, `${label}.pstate`),
+      ...Object.fromEntries([
+        'graphicsClockMHz',
+        'memoryClockMHz',
+        'gpuUtilizationPercent',
+        'memoryUtilizationPercent',
+        'memoryUsedMiB',
+        'memoryTotalMiB',
+        'temperatureC',
+        'powerDrawW',
+      ].map((field) => [field, nullableTelemetryCsvValue(
+        record[field],
+        number,
+        `${label}.${field}`,
+      )])),
+    };
+  });
+}
+
+function validateNvidiaTelemetryReport(report, metadata, manifest, contentsByName) {
+  requireExactRecordKeys(report, [
+    'provider',
+    'status',
+    'reason',
+    'command',
+    'sampling',
+    'summary',
+    'computeProcesses',
+    'acceptanceBoundary',
+  ], 'gpu-telemetry-summary.json');
+  const allowedStatuses = new Set([
+    'available',
+    'unavailable',
+    'interrupted',
+    'recorded-not-written',
+  ]);
+  if (report.provider !== 'nvidia-smi' || !allowedStatuses.has(report.status)) {
+    failVerification('gpu-telemetry-summary.json has an invalid provider or terminal status.');
+  }
+  requireNonemptyString(report.command, 'gpu-telemetry-summary.json command');
+  if (report.status === 'available') {
+    if (report.reason !== null) failVerification('available GPU telemetry has a reason.');
+  } else {
+    requireNonemptyString(report.reason, 'gpu-telemetry-summary.json reason');
+  }
+  if (report.status === 'recorded-not-written'
+    && report.reason !== 'telemetry-output-write-failed') {
+    failVerification('recorded-not-written GPU telemetry has the wrong reason.');
+  }
+  const sampling = requireExactRecordKeys(report.sampling, [
+    'processModel',
+    'requestedIntervalMs',
+    'queryFields',
+    'outputFile',
+    'malformedLineCount',
+    'stderrByteCount',
+    'exit',
+  ], 'gpu-telemetry-summary.json sampling');
+  if (sampling.processModel !== 'one-long-lived-process'
+    || sampling.requestedIntervalMs !== 250
+    || !orderedValuesMatch(sampling.queryFields, NVIDIA_QUERY_FIELDS)
+    || sampling.outputFile !== 'gpu-telemetry.csv') {
+    failVerification('gpu-telemetry-summary.json sampling contract differs from the runner.');
+  }
+  requireInteger(sampling.malformedLineCount, 'gpu telemetry malformedLineCount');
+  requireInteger(sampling.stderrByteCount, 'gpu telemetry stderrByteCount');
+  if (sampling.exit !== null) {
+    requireExactRecordKeys(sampling.exit, ['code', 'signal'], 'gpu telemetry sampling.exit');
+    if (sampling.exit.code !== null) {
+      requireInteger(sampling.exit.code, 'gpu telemetry sampling.exit.code');
+    }
+    requireNullableNonemptyString(sampling.exit.signal, 'gpu telemetry sampling.exit.signal');
+    if (sampling.exit.code === null && sampling.exit.signal === null) {
+      failVerification('gpu telemetry sampling.exit lacks both code and signal.');
+    }
+  }
+  validateTelemetrySummarySchema(report.summary, report.status);
+  const computeProcesses = requireExactRecordKeys(
+    report.computeProcesses,
+    ['pre', 'post'],
+    'gpu-telemetry-summary.json computeProcesses',
+  );
+  validateComputeProcessSnapshot(
+    computeProcesses.pre,
+    'pre-run',
+    'gpu-telemetry-summary.json computeProcesses.pre',
+  );
+  validateComputeProcessSnapshot(
+    computeProcesses.post,
+    'post-run',
+    'gpu-telemetry-summary.json computeProcesses.post',
+  );
+  const acceptance = requireExactRecordKeys(report.acceptanceBoundary, [
+    'affectsTechnicalRunAcceptance',
+    'candidateEnvironmentReviewRequired',
+    'automaticPstateRejectionThreshold',
+  ], 'gpu-telemetry-summary.json acceptanceBoundary');
+  if (acceptance.affectsTechnicalRunAcceptance !== false
+    || acceptance.candidateEnvironmentReviewRequired !== true
+    || acceptance.automaticPstateRejectionThreshold !== null) {
+    failVerification('gpu-telemetry-summary.json changes the telemetry acceptance boundary.');
+  }
+
+  if (manifest.optionalFiles.length !== 1
+    || manifest.optionalFiles[0]?.name !== 'gpu-telemetry.csv') {
+    failVerification(
+      'first-instance artifact manifest must declare exactly gpu-telemetry.csv as optional.',
+    );
+  }
+  const optional = requireRecord(
+    manifest.optionalFiles[0],
+    'artifact-manifest.json gpu-telemetry.csv optional declaration',
+  );
+  const file = requireRecord(
+    manifest.files.find((record) => record.name === 'gpu-telemetry.csv'),
+    'artifact-manifest.json gpu-telemetry.csv file entry',
+  );
+  const present = contentsByName.has('gpu-telemetry.csv');
+  const evidenceAvailable = report.status === 'available' && present;
+  const absenceReason = report.reason ?? `telemetry status: ${report.status}`;
+  if (optional.present !== present
+    || file.present !== present
+    || optional.evidenceAvailable !== evidenceAvailable
+    || optional.absenceReason !== (evidenceAvailable ? null : absenceReason)
+    || file.absenceReason !== (present ? null : absenceReason)) {
+    failVerification(
+      'gpu-telemetry.csv manifest presence/evidence fields are incoherent with telemetry status.',
+    );
+  }
+  if ((report.status === 'available' || report.status === 'interrupted') && !present) {
+    failVerification(`GPU telemetry status ${report.status} requires gpu-telemetry.csv.`);
+  }
+  if (report.status === 'recorded-not-written' && present) {
+    failVerification('recorded-not-written GPU telemetry cannot include gpu-telemetry.csv.');
+  }
+  if (report.status === 'unavailable'
+    && !present
+    && report.reason !== 'telemetry-output-write-failed') {
+    failVerification('unavailable telemetry without gpu-telemetry.csv has an incoherent reason.');
+  }
+  if (present) {
+    const rows = parseTelemetryCsv(contentsByName.get('gpu-telemetry.csv'), metadata.runId);
+    const recomputed = summarizeTelemetryRows(rows);
+    if (JSON.stringify(recomputed) !== JSON.stringify(report.summary)) {
+      failVerification('gpu-telemetry.csv does not reconstruct gpu-telemetry-summary.json.');
+    }
+  }
+}
+
 function orderedValuesMatch(actual, expected) {
   return Array.isArray(actual)
     && actual.length === expected.length
@@ -1722,6 +2431,128 @@ export function validateProtocolMatrix(protocol) {
       : 'primary-one-versus-b-mesh-render-object-representation-ablation';
     if (protocol.representationScaleRole !== expectedScaleRole) {
       failVerification('fixed-slice-representation scale role does not match its bucket count.');
+    }
+    return;
+  }
+
+  if (protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    if (!orderedValuesMatch(protocol.modes, [FIRST_INSTANCE_CROSSOVER_MODE])
+      || !orderedValuesMatch(protocol.layouts, FIRST_INSTANCE_CROSSOVER_LAYOUTS)
+      || !orderedValuesMatch(
+        protocol.visibilityLevels,
+        FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS,
+      )) {
+      failVerification(
+        'first-instance-render-only protocol has the wrong mode, layout, or visibility levels.',
+      );
+    }
+    if (protocol.repetitions !== FIRST_INSTANCE_CROSSOVER_REPETITIONS
+      || protocol.warmupFrames !== FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES
+      || protocol.measuredFrames !== FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES) {
+      failVerification(
+        'first-instance-render-only protocol has the wrong repetitions or frame counts.',
+      );
+    }
+    if (protocol.objectCount !== FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT
+      || protocol.bucketCount !== FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT
+      || protocol.depthBinCount !== null) {
+      failVerification(
+        'first-instance-render-only protocol must use 65536 objects, 32 buckets, and no depth bins.',
+      );
+    }
+    if (!orderedValuesMatch(
+      protocol.allowedObjectCounts,
+      FIXED_SLICE_REPRESENTATION_OBJECT_COUNTS,
+    )
+      || !orderedValuesMatch(
+        protocol.allowedBucketCounts,
+        FIXED_SLICE_REPRESENTATION_BUCKET_COUNTS,
+      )
+      || !orderedValuesMatch(
+        protocol.allowedHeterogeneousComparators,
+        ['coalesced-v11', 'historical-v10'],
+      )) {
+      failVerification(
+        'first-instance-render-only protocol changes the runner workload/comparator domain.',
+      );
+    }
+    if (protocol.matrix
+      !== `${FIRST_INSTANCE_CROSSOVER_MATRIX}-o${FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT}-b${FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT}`) {
+      failVerification(
+        'first-instance-render-only matrix identifier does not match its exact workload.',
+      );
+    }
+    if (protocol.reversedDepthBuffer !== true
+      || protocol.minimumStorageBuffersPerShaderStage !== null
+      || protocol.heterogeneousComparator !== null
+      || protocol.representationScaleRole !== null
+      || protocol.threeBlocksScheduling !== null) {
+      failVerification(
+        'first-instance-render-only protocol has the wrong renderer or comparator contract.',
+      );
+    }
+    if (protocol.maximumCpuTimerQuantumMs !== 0.01
+      || protocol.ordering !== FIRST_INSTANCE_CROSSOVER_ORDERING
+      || protocol.renderParity !== FIRST_INSTANCE_CROSSOVER_RENDER_PARITY) {
+      failVerification(
+        'first-instance-render-only protocol has the wrong timer, ordering, or parity contract.',
+      );
+    }
+    const crossover = requireRecord(
+      protocol.firstInstanceCrossover,
+      'metadata.json protocol.firstInstanceCrossover',
+    );
+    const crossoverKeys = [
+      'requiredFeature',
+      'lanes',
+      'blockSize',
+      'warmupBlocks',
+      'measuredBlocks',
+      'patterns',
+      'expectedMeasuredRowsPerLane',
+      'expectedRenderCallsPerFrame',
+      'expectedRenderTimestampUidCount',
+      'expectedComputeTimestampsPerFrame',
+      'commandSegments',
+      'commandRecordsPerSegment',
+      'scheduleSha256ByOrientation',
+    ];
+    if (Object.keys(crossover).length !== crossoverKeys.length
+      || crossoverKeys.some((key) => !Object.hasOwn(crossover, key))) {
+      failVerification(
+        'first-instance-render-only firstInstanceCrossover has an unexpected schema.',
+      );
+    }
+    if (crossover.requiredFeature !== 'indirect-first-instance'
+      || !orderedValuesMatch(crossover.lanes, FIRST_INSTANCE_CROSSOVER_LANES)
+      || crossover.blockSize !== FIRST_INSTANCE_CROSSOVER_BLOCK_SIZE
+      || crossover.warmupBlocks !== FIRST_INSTANCE_CROSSOVER_WARMUP_BLOCKS
+      || crossover.measuredBlocks !== FIRST_INSTANCE_CROSSOVER_MEASURED_BLOCKS
+      || !orderedValuesMatch(
+        crossover.patterns,
+        FIRST_INSTANCE_CROSSOVER_PATTERNS_AS_STRINGS,
+      )
+      || crossover.expectedMeasuredRowsPerLane
+        !== FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES / 2
+      || crossover.expectedRenderCallsPerFrame !== 1
+      || crossover.expectedRenderTimestampUidCount !== 1
+      || crossover.expectedComputeTimestampsPerFrame !== 0
+      || crossover.commandSegments !== FIRST_INSTANCE_CROSSOVER_LANES.length
+      || crossover.commandRecordsPerSegment !== FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT) {
+      failVerification(
+        'first-instance-render-only crossover constants differ from the preregistration.',
+      );
+    }
+    const scheduleDigests = requireRecord(
+      crossover.scheduleSha256ByOrientation,
+      'metadata.json protocol.firstInstanceCrossover.scheduleSha256ByOrientation',
+    );
+    if (Object.keys(scheduleDigests).length !== 2
+      || scheduleDigests['0'] !== firstInstanceCrossoverScheduleSha256(0)
+      || scheduleDigests['1'] !== firstInstanceCrossoverScheduleSha256(1)) {
+      failVerification(
+        'first-instance-render-only schedule commitments are incomplete or inconsistent.',
+      );
     }
     return;
   }
@@ -1928,27 +2759,157 @@ function requireMetadataCompleteness(metadata, manifest) {
   }
   validateProtocolMatrix(protocol);
   if (protocol.matrixKind === DEPTH_ORDERING_MATRIX
-    || protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+    || protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
+    || protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
     const benchmarkPage = requireRecord(
       metadata.environment.benchmarkPage,
       'metadata.json environment.benchmarkPage',
     );
-    if (protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
+    if ((protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
+      || protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX)
       && benchmarkPage.reversedDepth !== true) {
       failVerification(
-        'depth-ordering-render-only metadata does not prove camera reversed-depth operation.',
+        `${protocol.matrixKind} metadata does not prove camera reversed-depth operation.`,
       );
     }
     if (benchmarkPage.rendererReversedDepthBuffer !== true) {
       failVerification('depth-ordering metadata does not prove renderer reversed-depth operation.');
     }
-    requireInteger(
-      benchmarkPage.maxStorageBuffersPerShaderStage,
-      'metadata.json environment.benchmarkPage.maxStorageBuffersPerShaderStage',
-    );
-    if (benchmarkPage.maxStorageBuffersPerShaderStage
-      < DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS) {
-      failVerification('depth-ordering metadata reports fewer than eight storage buffers per shader stage.');
+    if (protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      const browser = requireRecord(
+        metadata.environment.browser,
+        'metadata.json environment.browser',
+      );
+      const browserKeys = ['executable', 'version', 'headless', 'args', 'viewport'];
+      if (Object.keys(browser).length !== browserKeys.length
+        || browserKeys.some((key) => !Object.hasOwn(browser, key))) {
+        failVerification(
+          'first-instance-render-only browser metadata has an unexpected schema.',
+        );
+      }
+      requireNonemptyString(
+        browser.executable,
+        'metadata.json environment.browser.executable',
+      );
+      requireNonemptyString(
+        browser.version,
+        'metadata.json environment.browser.version',
+      );
+      if (browser.headless !== true
+        || !orderedValuesMatch(browser.args, FIRST_INSTANCE_CROSSOVER_BROWSER_ARGS)) {
+        failVerification(
+          'first-instance-render-only browser launch identity differs from the runner.',
+        );
+      }
+      const browserViewport = requireRecord(
+        browser.viewport,
+        'metadata.json environment.browser.viewport',
+      );
+      if (Object.keys(browserViewport).length !== 3
+        || browserViewport.width !== 1280
+        || browserViewport.height !== 900
+        || browserViewport.deviceScaleFactor !== 1) {
+        failVerification(
+          'first-instance-render-only browser viewport differs from the runner.',
+        );
+      }
+      if (benchmarkPage.indirectFirstInstanceAvailable !== true) {
+        failVerification(
+          'first-instance-render-only metadata does not prove indirect-first-instance availability.',
+        );
+      }
+      if (benchmarkPage.timestampAvailable !== true) {
+        failVerification(
+          'first-instance-render-only metadata does not prove GPU timestamp availability.',
+        );
+      }
+      if (benchmarkPage.crossOriginIsolated !== true) {
+        failVerification(
+          'first-instance-render-only metadata does not prove cross-origin isolation.',
+        );
+      }
+      if (!Number.isFinite(benchmarkPage.performanceNowQuantumMs)
+        || benchmarkPage.performanceNowQuantumMs <= 0
+        || benchmarkPage.performanceNowQuantumMs > protocol.maximumCpuTimerQuantumMs) {
+        failVerification(
+          'first-instance-render-only metadata does not prove the preregistered CPU timer quantum.',
+        );
+      }
+      if (benchmarkPage.threeRevision !== '185') {
+        failVerification(
+          'first-instance-render-only metadata does not prove the pinned Three.js revision.',
+        );
+      }
+      const pageViewport = requireRecord(
+        benchmarkPage.viewport,
+        'metadata.json environment.benchmarkPage.viewport',
+      );
+      if (Object.keys(pageViewport).length !== 3
+        || pageViewport.width !== 1280
+        || pageViewport.height !== 720
+        || pageViewport.devicePixelRatio !== 1) {
+        failVerification(
+          'first-instance-render-only page viewport differs from the pinned render target.',
+        );
+      }
+      if (benchmarkPage.rendererBackend !== 'WebGPUBackend'
+        || benchmarkPage.coordinateSystem !== 2001) {
+        failVerification(
+          'first-instance-render-only metadata does not prove the pinned WebGPU renderer identity.',
+        );
+      }
+      requireNonemptyString(
+        benchmarkPage.userAgent,
+        'metadata.json environment.benchmarkPage.userAgent',
+      );
+      const adapterInfo = requireRecord(
+        benchmarkPage.adapterInfo,
+        'metadata.json environment.benchmarkPage.adapterInfo',
+      );
+      if (Object.keys(adapterInfo).length !== FIRST_INSTANCE_CROSSOVER_ADAPTER_INFO_FIELDS.length
+        || FIRST_INSTANCE_CROSSOVER_ADAPTER_INFO_FIELDS.some(
+          (field) => !Object.hasOwn(adapterInfo, field),
+        )) {
+        failVerification(
+          'first-instance-render-only adapterInfo has an unexpected schema.',
+        );
+      }
+      for (const field of FIRST_INSTANCE_CROSSOVER_ADAPTER_INFO_FIELDS.slice(0, -1)) {
+        if (adapterInfo[field] !== null
+          && (typeof adapterInfo[field] !== 'string' || adapterInfo[field].trim() === '')) {
+          failVerification(
+            `first-instance-render-only adapterInfo.${field} must be null or a non-empty string.`,
+          );
+        }
+      }
+      if (adapterInfo.isFallbackAdapter !== null
+        && typeof adapterInfo.isFallbackAdapter !== 'boolean') {
+        failVerification(
+          'first-instance-render-only adapterInfo.isFallbackAdapter must be null or boolean.',
+        );
+      }
+      if (!['vendor', 'architecture', 'device', 'description'].some(
+        (field) => typeof adapterInfo[field] === 'string',
+      )) {
+        failVerification(
+          'first-instance-render-only adapterInfo lacks a non-empty adapter identity.',
+        );
+      }
+      const expectedBackend = `${adapterInfo.description ?? adapterInfo.device ?? 'WebGPU'} · ${adapterInfo.backend ?? 'unknown backend'}`;
+      if (metadata.environment.backend !== expectedBackend) {
+        failVerification(
+          'first-instance-render-only runner backend identity differs from page adapterInfo.',
+        );
+      }
+    } else {
+      requireInteger(
+        benchmarkPage.maxStorageBuffersPerShaderStage,
+        'metadata.json environment.benchmarkPage.maxStorageBuffersPerShaderStage',
+      );
+      if (benchmarkPage.maxStorageBuffersPerShaderStage
+        < DEPTH_ORDERING_MINIMUM_STORAGE_BUFFERS) {
+        failVerification('depth-ordering metadata reports fewer than eight storage buffers per shader stage.');
+      }
     }
   }
   const plan = requireArray(metadata.plan, 'metadata.json plan');
@@ -1964,6 +2925,7 @@ function requireMetadataCompleteness(metadata, manifest) {
   }
   const layoutCount = protocol.matrixKind === DEPTH_ORDERING_MATRIX
     || protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
+    || protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
     ? requireArray(protocol.layouts, 'metadata.json protocol.layouts').length
     : 1;
   const protocolTrialCount = protocol.repetitions
@@ -2011,7 +2973,9 @@ export function validateBenchmarkPlan(plan, metadata) {
   validateProtocolMatrix(metadata.protocol);
   const isDepthOrdering = metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX;
   const isFrozenCrossover = metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX;
-  const hasLayouts = isDepthOrdering || isFrozenCrossover;
+  const isFirstInstanceCrossover =
+    metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX;
+  const hasLayouts = isDepthOrdering || isFrozenCrossover || isFirstInstanceCrossover;
   const byTrialId = new Map();
   const byPlanIndex = new Map();
   const matrixCells = new Set();
@@ -2089,6 +3053,32 @@ export function validateBenchmarkPlan(plan, metadata) {
         failVerification(`metadata.json plan[${arrayIndex}] changes a preregistered frozen crossover factor.`);
       }
     }
+    if (isFirstInstanceCrossover) {
+      const laneCommandSegmentOrder = requireExactPermutation(
+        item.laneCommandSegmentOrder,
+        FIRST_INSTANCE_CROSSOVER_LANES,
+        `metadata.json plan[${arrayIndex}].laneCommandSegmentOrder`,
+      );
+      requireInteger(
+        item.superblockOrientationOffset,
+        `metadata.json plan[${arrayIndex}].superblockOrientationOffset`,
+      );
+      if (item.superblockOrientationOffset !== 0
+        && item.superblockOrientationOffset !== 1) {
+        failVerification(
+          `metadata.json plan[${arrayIndex}].superblockOrientationOffset must be 0 or 1.`,
+        );
+      }
+      if (!orderedValuesMatch(
+        laneCommandSegmentOrder,
+        FIRST_INSTANCE_CROSSOVER_COMMAND_SEGMENT_ORDERS[item.repetitionIndex],
+      ) || item.superblockOrientationOffset
+        !== FIRST_INSTANCE_CROSSOVER_ORIENTATION_OFFSETS[item.repetitionIndex]) {
+        failVerification(
+          `metadata.json plan[${arrayIndex}] changes a preregistered first-instance crossover factor.`,
+        );
+      }
+    }
     if (item.runId !== metadata.runId) failVerification(`metadata.json plan[${arrayIndex}] has the wrong runId.`);
     requireInteger(item.objectCount, `metadata.json plan[${arrayIndex}].objectCount`, { minimum: 1 });
     requireInteger(item.bucketCount, `metadata.json plan[${arrayIndex}].bucketCount`, { minimum: 1 });
@@ -2102,6 +3092,12 @@ export function validateBenchmarkPlan(plan, metadata) {
     }
     if (item.planIndex !== arrayIndex) {
       failVerification('metadata.json plan indexes are not contiguous and ordered from zero.');
+    }
+    if (isFirstInstanceCrossover
+      && trialId !== `${metadata.runId}-t${String(arrayIndex + 1).padStart(2, '0')}`) {
+      failVerification(
+        `metadata.json plan[${arrayIndex}] changes the exact first-instance trial identity.`,
+      );
     }
     if (byTrialId.has(trialId) || byPlanIndex.has(item.planIndex)) {
       failVerification('metadata.json plan has duplicate trial identities.');
@@ -2206,6 +3202,43 @@ export function validateBenchmarkPlan(plan, metadata) {
           || item.modeOrderPosition !== 0
           || item.modeId !== FROZEN_DEPTH_CROSSOVER_MODE) {
           failVerification('metadata.json frozen crossover plan execution order is not repetition-contiguous and layout-paired.');
+        }
+        executionIndex += 1;
+      }
+      continue;
+    }
+    if (isFirstInstanceCrossover) {
+      const expectedVisibilityOrder = repetition % 2 === 0
+        ? [...FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS]
+        : [...FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS].reverse();
+      if (!orderedValuesMatch(orderRecord.modeOrder, [FIRST_INSTANCE_CROSSOVER_MODE])
+        || !orderedValuesMatch(orderRecord.visibilityOrder, expectedVisibilityOrder)
+        || !orderedValuesMatch(orderRecord.layoutOrder, FIRST_INSTANCE_CROSSOVER_LAYOUTS)) {
+        failVerification(
+          'first-instance-render-only plan changes its exact mode, visibility, or layout order.',
+        );
+      }
+      for (let visibilityPosition = 0;
+        visibilityPosition < expectedVisibilityOrder.length;
+        visibilityPosition += 1) {
+        const item = plan[executionIndex];
+        if (item.repetitionIndex !== repetition
+          || item.planIndex !== executionIndex
+          || item.layoutOrderPosition !== 0
+          || item.layout !== FIRST_INSTANCE_CROSSOVER_LAYOUTS[0]
+          || item.visibilityOrderPosition !== visibilityPosition
+          || item.visibilityFraction !== expectedVisibilityOrder[visibilityPosition]
+          || item.modeOrderPosition !== 0
+          || item.modeId !== FIRST_INSTANCE_CROSSOVER_MODE
+          || !orderedValuesMatch(
+            item.laneCommandSegmentOrder,
+            FIRST_INSTANCE_CROSSOVER_COMMAND_SEGMENT_ORDERS[repetition],
+          )
+          || item.superblockOrientationOffset
+            !== FIRST_INSTANCE_CROSSOVER_ORIENTATION_OFFSETS[repetition]) {
+          failVerification(
+            'metadata.json first-instance crossover plan execution order is not repetition-contiguous and visibility-paired.',
+          );
         }
         executionIndex += 1;
       }
@@ -2326,6 +3359,9 @@ function validateTrialSummaries(trialSummaries, metadata, planIndex) {
     if (planned === undefined) {
       failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} is absent from the plan.`);
     }
+    if (planned.planIndex !== index) {
+      failVerification('trial-summaries.json is not in exact plan-index order.');
+    }
     requireMatchingIdentity(summary, planned, `trial-summaries.json trial ${JSON.stringify(trialId)}`);
     if (summary.objectCount !== planned.objectCount || summary.bucketCount !== planned.bucketCount) {
       failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} workload size differs from the plan.`);
@@ -2376,7 +3412,8 @@ function validateTrialSummaries(trialSummaries, metadata, planIndex) {
       failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} lacks complete accepted timestamps.`);
     }
     if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX
-      || metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+      || metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
+      || metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
       requireRecord(
         summary.completionInvariant,
         `trial-summaries.json trial ${JSON.stringify(trialId)} completionInvariant`,
@@ -2410,6 +3447,86 @@ function validateTrialSummaries(trialSummaries, metadata, planIndex) {
         || !orderedValuesMatch(selected.laneStorageOrder, planned.laneStorageOrder)
         || selected.superblockOrientationOffset !== planned.superblockOrientationOffset) {
         failVerification(`trial-summaries.json trial ${JSON.stringify(trialId)} selectedConfig differs from its frozen plan.`);
+      }
+    }
+    if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      const plannedScheduleSha256 = metadata.protocol.firstInstanceCrossover
+        .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)];
+      const semanticSha256 = requireSha256(
+        validation.firstInstanceSemanticSha256,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} validation firstInstanceSemanticSha256`,
+      );
+      if (validation.kind !== FIRST_INSTANCE_CROSSOVER_VALIDATION_KIND
+        || !orderedValuesMatch(summary.modeOrder, planned.modeOrder)
+        || !orderedValuesMatch(summary.visibilityOrder, planned.visibilityOrder)
+        || !orderedValuesMatch(summary.layoutOrder, planned.layoutOrder)
+        || !orderedValuesMatch(
+          summary.laneCommandSegmentOrder,
+          planned.laneCommandSegmentOrder,
+        )
+        || summary.superblockOrientationOffset !== planned.superblockOrientationOffset
+        || summary.plannedScheduleSha256 !== plannedScheduleSha256) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} changes its first-instance plan commitments.`,
+        );
+      }
+      if (timestamps.expectedRenderTimestampUidCount !== 1
+        || timestamps.invalidRenderTimestampUidCountFrames !== 0
+        || timestamps.classification !== 'fine'
+        || !Number.isFinite(timestamps.quantumNs)
+        || timestamps.quantumNs <= 0
+        || timestamps.quantumNs > FIRST_INSTANCE_CROSSOVER_MAXIMUM_TIMESTAMP_QUANTUM_NS) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} violates the first-instance timestamp contract.`,
+        );
+      }
+      const selected = requireRecord(
+        summary.selectedConfig,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} selectedConfig`,
+      );
+      if (selected.strategyId !== planned.modeId
+        || selected.objectCount !== planned.objectCount
+        || selected.bucketCount !== planned.bucketCount
+        || selected.visibilityFraction !== planned.visibilityFraction
+        || selected.layout !== planned.layout
+        || !orderedValuesMatch(
+          selected.laneCommandSegmentOrder,
+          planned.laneCommandSegmentOrder,
+        )
+        || selected.superblockOrientationOffset !== planned.superblockOrientationOffset) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} selectedConfig differs from its first-instance plan.`,
+        );
+      }
+      const timing = requireRecord(
+        summary.timing,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} timing`,
+      );
+      const timingKeys = Object.keys(timing);
+      if (timingKeys.length !== FIRST_INSTANCE_CROSSOVER_TIMING_SCHEMA.length
+        || FIRST_INSTANCE_CROSSOVER_TIMING_SCHEMA.some(
+          (key) => !Object.hasOwn(timing, key),
+        )) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} timing has an unexpected schema.`,
+        );
+      }
+      for (const key of Object.values(FIRST_INSTANCE_CROSSOVER_TIMING_FIELDS).flat()) {
+        requireFiniteNumber(
+          timing[key],
+          `trial-summaries.json trial ${JSON.stringify(trialId)} timing ${key}`,
+          { minimum: 0 },
+        );
+      }
+      if (timing.gpuComputeP50Ms !== null || timing.gpuComputeP95Ms !== null) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} timing contains compute durations in the render-only crossover.`,
+        );
+      }
+      if (semanticSha256 !== validation.firstInstanceSemanticSha256) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} has an invalid first-instance semantic commitment.`,
+        );
       }
     }
     byTrialId.set(trialId, summary);
@@ -2586,6 +3703,108 @@ function validateWorkloadManifests(catalog, metadata) {
   if (geometries[metadataGeometrySha256] === undefined) {
     failVerification('metadata geometry digest is absent from workload-manifests.json.');
   }
+  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    if (metadata.workload.scenarioGenerator !== 'createFixedSubsetScenario') {
+      failVerification('first-instance workload uses an unexpected scenario generator.');
+    }
+    const scenarioSeedValue = requireInteger(
+      metadata.workload.scenarioSeed,
+      'metadata.json workload.scenarioSeed',
+    );
+    if (Object.keys(geometries).length !== 1) {
+      failVerification(
+        'first-instance workload catalog must contain exactly one geometry fixture manifest.',
+      );
+    }
+    const geometryReasons = validateGeometryFixtureManifest(
+      geometries[metadataGeometrySha256],
+      { bucketCount: FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT, tier: 'medium' },
+    );
+    if (geometryReasons.length !== 0) {
+      failVerification(
+        `first-instance geometry fixture manifest failed: ${geometryReasons.join('; ')}.`,
+      );
+    }
+    const visibilityLinks = requireRecord(
+      metadata.workload.scenarioSha256ByVisibility,
+      'metadata.json workload.scenarioSha256ByVisibility',
+    );
+    const cellLinks = requireRecord(
+      metadata.workload.scenarioSha256ByCell,
+      'metadata.json workload.scenarioSha256ByCell',
+    );
+    const parityLinks = requireRecord(
+      metadata.workload.renderParitySha256ByCell,
+      'metadata.json workload.renderParitySha256ByCell',
+    );
+    const visibilityKeys = FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS.map(String);
+    const cellKeys = visibilityKeys.map((visibility) => `baseline|${visibility}`);
+    const hasExactKeys = (record, expected) => {
+      const actual = Object.keys(record);
+      return actual.length === expected.length
+        && expected.every((key) => Object.hasOwn(record, key));
+    };
+    if (!hasExactKeys(visibilityLinks, visibilityKeys)
+      || !hasExactKeys(cellLinks, cellKeys)) {
+      failVerification(
+        'first-instance scenario links must exactly cover both preregistered visibility cells.',
+      );
+    }
+    if (!hasExactKeys(parityLinks, cellKeys)) {
+      failVerification(
+        'first-instance render-parity links must exactly cover both preregistered visibility cells.',
+      );
+    }
+    if (metadata.workload.physicalBinSequenceSha256ByPair !== null) {
+      failVerification(
+        'first-instance physicalBinSequenceSha256ByPair must be null.',
+      );
+    }
+    const linkedScenarioDigests = new Set();
+    for (const visibility of FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS) {
+      const visibilityKey = String(visibility);
+      const cellKey = `baseline|${visibilityKey}`;
+      const digest = requireSha256(
+        visibilityLinks[visibilityKey],
+        `metadata first-instance scenario digest for visibility ${visibilityKey}`,
+      );
+      if (cellLinks[cellKey] !== digest) {
+        failVerification(
+          `metadata first-instance scenario aliases differ for ${cellKey}.`,
+        );
+      }
+      const manifest = scenarios[digest];
+      if (manifest === undefined) {
+        failVerification(
+          `metadata first-instance scenario digest for ${cellKey} is absent from the catalog.`,
+        );
+      }
+      const scenarioReasons = validateScenarioManifest(manifest, {
+        objectCount: FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT,
+        bucketCount: FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT,
+        visibilityFraction: visibility,
+        seed: scenarioSeedValue,
+        layout: 'baseline',
+      });
+      if (scenarioReasons.length !== 0) {
+        failVerification(
+          `first-instance scenario manifest ${JSON.stringify(cellKey)} failed: ${scenarioReasons.join('; ')}.`,
+        );
+      }
+      requireSha256(
+        parityLinks[cellKey],
+        `metadata first-instance render-parity digest for ${cellKey}`,
+      );
+      linkedScenarioDigests.add(digest);
+    }
+    if (Object.keys(scenarios).length !== linkedScenarioDigests.size
+      || Object.keys(scenarios).some((digest) => !linkedScenarioDigests.has(digest))) {
+      failVerification(
+        'first-instance workload catalog contains an unlinked or duplicate scenario manifest.',
+      );
+    }
+    return { geometries, scenarios };
+  }
   if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX
     || metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
     if (metadata.workload.scenarioSha256ByVisibility !== null) {
@@ -2710,12 +3929,13 @@ function renderParityDigestForTrial(metadata, trial) {
   ];
 }
 
-function validateValidationArtifacts(
+async function validateValidationArtifacts(
   validationArtifacts,
   metadata,
   planIndex,
   summariesByTrialId,
   workloadCatalog,
+  firstInstanceRowsByTrial = null,
 ) {
   requireArray(validationArtifacts, 'validation-artifacts.json');
   if (validationArtifacts.length !== metadata.validationArtifactCount
@@ -2742,6 +3962,9 @@ function validateValidationArtifacts(
     const planned = planIndex.byTrialId.get(trialId);
     if (planned === undefined) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} is absent from the plan.`);
+    }
+    if (planned.planIndex !== index) {
+      failVerification('validation-artifacts.json is not in exact plan-index order.');
     }
     requireMatchingIdentity(artifact, planned, `validation artifact ${JSON.stringify(trialId)}`);
     if (artifact.objectCount !== planned.objectCount || artifact.bucketCount !== planned.bucketCount) {
@@ -2780,6 +4003,22 @@ function validateValidationArtifacts(
           !== planned.superblockOrientationOffset)) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} selectedConfig differs from the frozen plan.`);
     }
+    if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
+      && (selectedConfig.strategyId !== planned.modeId
+        || selectedConfig.objectCount !== planned.objectCount
+        || selectedConfig.bucketCount !== planned.bucketCount
+        || selectedConfig.visibilityFraction !== planned.visibilityFraction
+        || selectedConfig.layout !== planned.layout
+        || !orderedValuesMatch(
+          selectedConfig.laneCommandSegmentOrder,
+          planned.laneCommandSegmentOrder,
+        )
+        || selectedConfig.superblockOrientationOffset
+          !== planned.superblockOrientationOffset)) {
+      failVerification(
+        `validation artifact ${JSON.stringify(trialId)} selectedConfig differs from the first-instance plan.`,
+      );
+    }
     if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
       const plannedScheduleSha256 = metadata.protocol.frozenCrossover
         .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)];
@@ -2787,6 +4026,20 @@ function validateValidationArtifacts(
         || artifact.superblockOrientationOffset !== planned.superblockOrientationOffset
         || artifact.plannedScheduleSha256 !== plannedScheduleSha256) {
         failVerification(`validation artifact ${JSON.stringify(trialId)} changes its frozen plan commitments.`);
+      }
+    }
+    if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      const plannedScheduleSha256 = metadata.protocol.firstInstanceCrossover
+        .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)];
+      if (!orderedValuesMatch(
+        artifact.laneCommandSegmentOrder,
+        planned.laneCommandSegmentOrder,
+      )
+        || artifact.superblockOrientationOffset !== planned.superblockOrientationOffset
+        || artifact.plannedScheduleSha256 !== plannedScheduleSha256) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} changes its first-instance plan commitments.`,
+        );
       }
     }
     requireSha256(artifact.sha256, `validation artifact ${JSON.stringify(trialId)} sha256`);
@@ -2902,6 +4155,131 @@ function validateValidationArtifacts(
       }
       physicalBinSequencePairs.set(pairKey, { sha256: sequenceSha256, modeIds: null });
     }
+    if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      const phaseSemanticDigests = [];
+      const phaseParityDigests = [];
+      const environment = metadata.environment.benchmarkPage;
+      for (const captureName of ['pre', 'timingStart', 'post']) {
+        const capture = artifact[captureName];
+        const validationReasons = await validateFirstInstanceCrossoverValidation(
+          capture.validation.payload,
+          { spec: planned, environment },
+        );
+        if (validationReasons.length !== 0) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} first-instance payload failed: ${validationReasons.join('; ')}.`,
+          );
+        }
+        const semanticSha256 = firstInstanceValidationSemanticSha256(
+          capture.validation.payload,
+        );
+        if (capture.validation.semanticSha256 !== semanticSha256) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} first-instance semantic SHA-256 is inconsistent.`,
+          );
+        }
+        const parityReasons = validateFirstInstanceCrossoverRenderParity(
+          capture.renderParity,
+          { spec: planned, validation: capture.validation.payload },
+        );
+        if (parityReasons.length !== 0) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} first-instance render parity failed: ${parityReasons.join('; ')}.`,
+          );
+        }
+        const paritySha256 = firstInstanceRenderParityIdentity(capture.renderParity);
+        if (capture.renderParitySemanticSha256 !== paritySha256
+          || capture.renderParityOutputSha256 !== paritySha256) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} first-instance render-parity SHA-256 is inconsistent.`,
+          );
+        }
+        if (capture.validation.payload?.membership?.expectedCount
+            !== scenarioManifest.expectedVisibleCount
+          || capture.validation.payload?.membershipDigests?.expected?.sha256
+            !== scenarioManifest.expectedVisibleIdsCanonicalSha256
+          || capture.validation.payload?.membershipDigests?.actual?.sha256
+            !== scenarioManifest.expectedVisibleIdsCanonicalSha256) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} first-instance membership differs from the signed scenario manifest.`,
+          );
+        }
+        phaseSemanticDigests.push(semanticSha256);
+        phaseParityDigests.push(paritySha256);
+      }
+      if (phaseSemanticDigests.some((digest) => digest !== phaseSemanticDigests[0])) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} changes first-instance validation semantics across phases.`,
+        );
+      }
+      if (phaseParityDigests.some((digest) => digest !== phaseParityDigests[0])) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} changes first-instance render output across phases.`,
+        );
+      }
+      const expectedParitySha256 = renderParityDigestForTrial(metadata, artifact);
+      if (phaseParityDigests[0] !== expectedParitySha256) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} first-instance render parity differs from its visibility cell.`,
+        );
+      }
+      const rows = firstInstanceRowsByTrial?.get(trialId);
+      if (!Array.isArray(rows)
+        || rows.length !== FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} lacks its exact retained row set.`,
+        );
+      }
+      const pageSummary = {
+        accepted: summary.timestamps.accepted,
+        timestampAvailable: summary.timestamps.available,
+        rowCount: summary.timestamps.rowCount,
+        missingRenderFrames: summary.timestamps.missingRenderFrames,
+        invalidRenderTimestampUidCountFrames:
+          summary.timestamps.invalidRenderTimestampUidCountFrames,
+        expectedRenderTimestampUidCount:
+          summary.timestamps.expectedRenderTimestampUidCount,
+        missingComputeFrames: summary.timestamps.missingComputeFrames,
+        classification: summary.timestamps.classification,
+        quantumNs: summary.timestamps.quantumNs,
+        completionInvariant: summary.completionInvariant,
+      };
+      const evidence = await validateFirstInstanceTrialEvidence({
+        spec: planned,
+        environment,
+        validation: artifact.timingStart.validation.payload,
+        renderParity: artifact.timingStart.renderParity,
+        rows,
+        summary: pageSummary,
+        protocol: {
+          schemaVersion: 2,
+          warmupFrames: FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES,
+          measuredFrames: FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES,
+          plannedScheduleSha256: artifact.plannedScheduleSha256,
+        },
+      });
+      const persisted = requireRecord(
+        artifact.firstInstanceTrialEvidence,
+        `validation artifact ${JSON.stringify(trialId)} firstInstanceTrialEvidence`,
+      );
+      const persistedKeys = Object.keys(persisted);
+      if (persistedKeys.length !== 3
+        || !['pass', 'rejectionReasons', 'semanticSha256'].every(
+          (key) => Object.hasOwn(persisted, key),
+        )
+        || persisted.pass !== true
+        || !Array.isArray(persisted.rejectionReasons)
+        || persisted.rejectionReasons.length !== 0
+        || persisted.semanticSha256 !== phaseSemanticDigests[0]
+        || persisted.semanticSha256 !== summary.validation.firstInstanceSemanticSha256
+        || JSON.stringify(persisted) !== JSON.stringify(evidence)
+        || evidence.pass !== true
+        || evidence.rejectionReasons.length !== 0) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} persisted first-instance trial evidence is absent or inconsistent.`,
+        );
+      }
+    }
     if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
       for (const captureName of ['pre', 'timingStart', 'post']) {
         const capture = artifact[captureName];
@@ -2988,6 +4366,7 @@ function validateValidationArtifacts(
       }
     }
     if (artifact.modeId !== 'three-blocks-historical'
+      && metadata.protocol.matrixKind !== FIRST_INSTANCE_CROSSOVER_MATRIX
       && captures.some((capture) => capture.payloadSha256 !== captures[0].payloadSha256)) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} changed its exact payload.`);
     }
@@ -3141,6 +4520,124 @@ function validateVerifiedFrozenFrames(
   }
 }
 
+function validateVerifiedFirstInstanceFrames(
+  parsed,
+  metadata,
+  planIndex,
+  summariesByTrialId,
+  workloadCatalog,
+) {
+  let rows;
+  try {
+    rows = parseFirstInstanceCrossoverRecords(parsed);
+  } catch (error) {
+    failVerification(error instanceof Error ? error.message : String(error));
+  }
+  const expectedRows = FIRST_INSTANCE_CROSSOVER_REPETITIONS
+    * FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS.length
+    * FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES;
+  if (metadata.expectedTrialCount
+      !== FIRST_INSTANCE_CROSSOVER_REPETITIONS
+        * FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS.length
+    || metadata.completedTrialCount !== metadata.expectedTrialCount
+    || metadata.acceptedTrialCount !== metadata.expectedTrialCount
+    || metadata.validationArtifactCount !== metadata.expectedTrialCount
+    || metadata.frameRowCount !== expectedRows
+    || rows.length !== expectedRows) {
+    failVerification(
+      'first-instance run must contain exactly 24 accepted trials and 11,520 retained rows.',
+    );
+  }
+  let analysis;
+  try {
+    analysis = summarizeFirstInstanceCrossoverRows(rows);
+  } catch (error) {
+    failVerification(error instanceof Error ? error.message : String(error));
+  }
+  const audit = requireRecord(
+    metadata.firstInstanceAnalysisAudit,
+    'metadata.json firstInstanceAnalysisAudit',
+  );
+  const expectedAudit = {
+    schemaVersion: analysis.schemaVersion,
+    kind: analysis.kind,
+    deltaConvention: analysis.deltaConvention,
+    nTrials: analysis.nTrials,
+    nRows: analysis.nRows,
+    sha256: sha256Json(analysis),
+  };
+  if (Object.keys(audit).length !== Object.keys(expectedAudit).length
+    || Object.entries(expectedAudit).some(([key, value]) => audit[key] !== value)) {
+    failVerification(
+      'metadata.json firstInstanceAnalysisAudit does not exactly match the reconstructed analysis.',
+    );
+  }
+  const rowsByTrial = new Map();
+  for (const [index, row] of rows.entries()) {
+    const label = `frames.csv record ${index + 2}`;
+    const planned = planIndex.byTrialId.get(row.trialId);
+    const summary = summariesByTrialId.get(row.trialId);
+    if (row.runId !== metadata.runId || planned === undefined || summary === undefined) {
+      failVerification(`${label} has an unknown run or trial identity.`);
+    }
+    const scenarioSha256 = scenarioDigestForTrial(metadata, planned);
+    const scenario = workloadCatalog.scenarios[scenarioSha256];
+    if (scenario === undefined
+      || row.expectedVisibleCount !== scenario.expectedVisibleCount) {
+      failVerification(`${label} differs from its signed first-instance scenario.`);
+    }
+    if (row.planIndex !== planned.planIndex
+      || row.repetitionIndex !== planned.repetitionIndex
+      || row.modeId !== planned.modeId
+      || row.modeOrderPosition !== planned.modeOrderPosition
+      || row.visibilityOrderPosition !== planned.visibilityOrderPosition
+      || row.layoutOrderPosition !== planned.layoutOrderPosition
+      || row.targetVisibilityFraction !== planned.visibilityFraction
+      || row.scenarioLayout !== planned.layout
+      || row.plannedModeOrder !== planned.modeOrder.join('|')
+      || row.plannedVisibilityOrder !== planned.visibilityOrder.join('|')
+      || row.plannedLayoutOrder !== planned.layoutOrder.join('|')
+      || row.plannedLaneCommandSegmentOrder
+        !== planned.laneCommandSegmentOrder.join('|')
+      || row.superblockOrientationOffset !== planned.superblockOrientationOffset
+      || row.plannedScheduleSha256 !== metadata.protocol.firstInstanceCrossover
+        .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)]) {
+      failVerification(`${label} differs from its first-instance plan commitment.`);
+    }
+    let trialRows = rowsByTrial.get(row.trialId);
+    if (trialRows === undefined) {
+      trialRows = [];
+      rowsByTrial.set(row.trialId, trialRows);
+    }
+    trialRows.push(row);
+  }
+  if (rowsByTrial.size !== metadata.expectedTrialCount
+    || [...planIndex.byTrialId.keys()].some(
+      (trialId) => rowsByTrial.get(trialId)?.length
+        !== FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES,
+    )) {
+    failVerification(
+      'first-instance frames.csv does not contain exactly 480 rows for every planned trial.',
+    );
+  }
+  for (const [trialId, trialRows] of rowsByTrial) {
+    const timing = summariesByTrialId.get(trialId).timing;
+    for (const [rowField, [p50Field, p95Field]] of Object.entries(
+      FIRST_INSTANCE_CROSSOVER_TIMING_FIELDS,
+    )) {
+      const values = trialRows.map((row) => row[rowField]);
+      const expectedP50 = nearestRank(values, 0.5);
+      const expectedP95 = nearestRank(values, 0.95);
+      if (timing[p50Field] !== expectedP50 || timing[p95Field] !== expectedP95) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} timing ${p50Field}/${p95Field} differs from its retained rows.`,
+        );
+      }
+    }
+  }
+  return { rows, rowsByTrial, analysis };
+}
+
 function validateVerifiedFrames(
   parsed,
   metadata,
@@ -3148,6 +4645,15 @@ function validateVerifiedFrames(
   summariesByTrialId,
   workloadCatalog,
 ) {
+  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    return validateVerifiedFirstInstanceFrames(
+      parsed,
+      metadata,
+      planIndex,
+      summariesByTrialId,
+      workloadCatalog,
+    );
+  }
   if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
     validateVerifiedFrozenFrames(
       parsed,
@@ -3156,7 +4662,7 @@ function validateVerifiedFrames(
       summariesByTrialId,
       workloadCatalog,
     );
-    return;
+    return null;
   }
   const requiredAuditColumns = [
     'runId',
@@ -3310,6 +4816,7 @@ function validateVerifiedFrames(
       }
     }
   }
+  return null;
 }
 
 export async function verifyRunDirectory(runDirectory) {
@@ -3338,6 +4845,17 @@ export async function verifyRunDirectory(runDirectory) {
     'gpu-telemetry-summary.json',
   );
   const { plan } = requireMetadataCompleteness(metadata, manifest);
+  if (JSON.stringify(metadata.environment.gpuTelemetry) !== JSON.stringify(telemetrySummary)) {
+    failVerification('metadata GPU telemetry summary differs from gpu-telemetry-summary.json.');
+  }
+  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    validateNvidiaTelemetryReport(
+      telemetrySummary,
+      metadata,
+      manifest,
+      contentsByName,
+    );
+  }
   const planIndex = validateBenchmarkPlan(plan, metadata);
   const summariesByTrialId = validateTrialSummaries(
     trialSummaries,
@@ -3345,19 +4863,15 @@ export async function verifyRunDirectory(runDirectory) {
     planIndex,
   );
   const workloadCatalog = validateWorkloadManifests(workloadManifests, metadata);
-  validateValidationArtifacts(
-    validationArtifacts,
-    metadata,
-    planIndex,
-    summariesByTrialId,
-    workloadCatalog,
-  );
-  if (JSON.stringify(metadata.environment.gpuTelemetry) !== JSON.stringify(telemetrySummary)) {
-    failVerification('metadata GPU telemetry summary differs from gpu-telemetry-summary.json.');
-  }
   const csvText = contentsByName.get('frames.csv').toString('utf8');
   const parsed = parseCsv(csvText);
-  if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
+  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    try {
+      parseFirstInstanceCrossoverRecords(parsed);
+    } catch (error) {
+      failVerification(error instanceof Error ? error.message : String(error));
+    }
+  } else if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
     try {
       parseFrozenCrossoverRecords(parsed);
     } catch (error) {
@@ -3366,12 +4880,20 @@ export async function verifyRunDirectory(runDirectory) {
   } else {
     parseFrameRecords(parsed);
   }
-  validateVerifiedFrames(
+  const verifiedFrames = validateVerifiedFrames(
     parsed,
     metadata,
     planIndex,
     summariesByTrialId,
     workloadCatalog,
+  );
+  await validateValidationArtifacts(
+    validationArtifacts,
+    metadata,
+    planIndex,
+    summariesByTrialId,
+    workloadCatalog,
+    verifiedFrames?.rowsByTrial ?? null,
   );
 
   return {
@@ -3395,6 +4917,21 @@ export async function verifyRunDirectory(runDirectory) {
 
 export function summarizeCsv(text) {
   const parsed = parseCsv(text);
+  if (isFirstInstanceCrossoverCsv(parsed)) {
+    return {
+      ...summarizeFirstInstanceCrossoverRows(
+        parseFirstInstanceCrossoverRecords(parsed),
+      ),
+      artifactVerification: {
+        status: 'unverified',
+        scope: 'artifact-integrity-and-schema-only',
+        authenticityVerified: false,
+        inputKind: 'raw-csv-content',
+        evidenceStatus: null,
+        reason: 'Raw CSV is not bound to a consistent run artifact manifest.',
+      },
+    };
+  }
   if (isFrozenCrossoverCsv(parsed)) {
     return {
       ...summarizeFrozenCrossoverRows(parseFrozenCrossoverRecords(parsed)),

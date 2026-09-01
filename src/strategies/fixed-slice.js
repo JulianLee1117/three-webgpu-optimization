@@ -18,7 +18,10 @@ import {
 } from 'three/tsl';
 import { createFrustumPlaneState, updateFrustumPlaneState } from '../culling/frustum-planes.js';
 import { createIndexedIndirectCommands } from '../culling/indexed-command-layout.js';
-import { createStorageTransformMaterial } from '../materials/storage-transform.js';
+import {
+  STORAGE_TRANSFORM_ADDRESS_MODES,
+  createStorageTransformMaterial,
+} from '../materials/storage-transform.js';
 import { createMergedIndexedBucketGeometry } from '../render/indexed-bucket-geometry.js';
 import { compareMembership, validateIndexedCommands } from '../validation/membership.js';
 import { createMembershipDigestEvidence } from '../validation/membership-digests.js';
@@ -49,18 +52,26 @@ function freezeStaticTransform(object) {
 
 function buildFixedSliceRepresentation(
   { scenario, sourceGeometries },
-  { id, perBucketRenderObjects },
+  {
+    id,
+    perBucketRenderObjects,
+    addressMode = STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE,
+  },
 ) {
+  const indirectFirstInstance =
+    addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE;
   const { geometry, firstIndexes } = createMergedIndexedBucketGeometry(
     sourceGeometries,
     scenario.bucketBases,
     scenario.bucketCounts,
+    { includeBucketBase: !indirectFirstInstance },
   );
   const commandLayout = createIndexedIndirectCommands(
     sourceGeometries,
     scenario.bucketCounts,
     null,
     firstIndexes,
+    indirectFirstInstance ? scenario.bucketBases : null,
   );
   const matrixAttribute = new StorageBufferAttribute(scenario.matrices, 16);
   const boundsAttribute = new StorageBufferAttribute(scenario.bounds, 4);
@@ -119,6 +130,7 @@ function buildFixedSliceRepresentation(
     matrixAttribute,
     objectCount: scenario.objectCount,
     visibleIdsAttribute,
+    addressMode,
   });
   const root = new BundleGroup();
   freezeStaticTransform(root);
@@ -160,16 +172,31 @@ function buildFixedSliceRepresentation(
     geometries = [geometry];
   }
 
-  const diagnostics = () => (perBucketRenderObjects
-    ? {
+  const diagnostics = () => {
+    if (perBucketRenderObjects) return {
       kind: 'shared-merged-geometry-per-bucket-render-objects',
       bundleRecordCallbackCount,
       geometryIdentityCount: new Set(root.children.map((child) => child.geometry)).size,
       materialIdentityCount: new Set(root.children.map((child) => child.material)).size,
       meshCount: root.children.length,
       geometryInstanceCount: geometry.instanceCount,
-    }
-    : null);
+    };
+    if (indirectFirstInstance) return {
+      kind: 'single-merged-geometry-indirect-first-instance',
+      addressMode,
+      hasBucketBaseAttribute: geometry.getAttribute('bucketBase') !== undefined,
+      nonzeroFirstInstanceCount: Array.from(
+        { length: scenario.bucketCount },
+        (_, bucket) => commandLayout.commands[bucket * 5 + 4],
+      ).filter((value) => value !== 0).length,
+      bundleRecordCallbackCount,
+      geometryIdentityCount: 1,
+      materialIdentityCount: 1,
+      meshCount: root.children.length,
+      geometryInstanceCount: geometry.instanceCount,
+    };
+    return null;
+  };
 
   const lifecycleDiagnostics = () => (perBucketRenderObjects
     ? null
@@ -191,6 +218,7 @@ function buildFixedSliceRepresentation(
       matrixAttribute,
       visibleIdsAttribute,
       objectCount: scenario.objectCount,
+      addressMode,
     }),
     storageAttributes: [
       matrixAttribute,
@@ -245,6 +273,7 @@ function buildFixedSliceRepresentation(
         geometries: sourceGeometries,
         expectedCounts: scenario.visibleCounts,
         expectedFirstIndexes: firstIndexes,
+        expectedFirstInstances: indirectFirstInstance ? scenario.bucketBases : null,
       });
       const membershipDigests = await createMembershipDigestEvidence({
         expectedIds,
@@ -292,5 +321,18 @@ export function buildFixedSlicePerBucketStrategy(options) {
   return buildFixedSliceRepresentation(options, {
     id: 'fixed-slice-per-bucket',
     perBucketRenderObjects: true,
+  });
+}
+
+export function buildIndirectFirstInstanceStrategy(options) {
+  if (options?.renderer?.hasFeature?.('indirect-first-instance') !== true) {
+    throw new Error(
+      'fixed-slice-indirect-first-instance requires the indirect-first-instance WebGPU feature.',
+    );
+  }
+  return buildFixedSliceRepresentation(options, {
+    id: 'fixed-slice-indirect-first-instance',
+    perBucketRenderObjects: false,
+    addressMode: STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
   });
 }
