@@ -287,7 +287,17 @@ history, reconstructs every scheduled lane, command buffer, submitted compute
 group, node set, serial, GPU frame, and raw UID record, and commits the final
 two executed lanes and serials at the post-warmup boundary. Measurement frame
 zero must join that executed tail; no conceptual cyclic predecessor is accepted
-for the first two warmup frames.
+for the first two warmup frames. Here the recorded GPU frame is Three.js r185's
+global RAF identifier, not a submission counter. It may advance through idle
+callbacks while the controller asynchronously resolves warmup timestamp
+buffers. The first measured identifier must therefore be strictly greater than
+the last warmup identifier, while identifiers remain consecutive within each
+active phase. Across the boundary, the selector-write, strategy-selection,
+strategy-compute, renderer-compute, and render serials must each advance by
+exactly one; lane history must join exactly; and the retained timestamp UIDs
+must name the actual first measured identifier.
+The benchmark callback submits no compute or render work during any skipped
+resolving-phase RAF.
 Timestamp tracking is disabled during construction, priming, every validation,
 address challenge, production capture, and readback. The compute and render
 pool capacities, start/end indices, resolved UID sets, and phase resets are

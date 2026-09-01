@@ -26,6 +26,8 @@ const OBJECT_COUNT = 65_536;
 const BUCKET_COUNT = 32;
 const SCENARIO_SEED = 0xb1ad_2026;
 const RUN_ID = 'first-instance-live-crossover-smoke';
+const MULTI_TRIAL_SMOKE_COUNT = 3;
+const FORCED_TIMESTAMP_RESOLVE_DELAY_MS = 50;
 const BROWSER_ARGS = [
   '--enable-unsafe-webgpu',
   '--enable-webgpu-developer-features',
@@ -37,34 +39,37 @@ const ISOLATION_HEADERS = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const spec = Object.freeze({
-  ...buildFirstInstanceLiveCrossoverPlan({
-    runId: RUN_ID,
-    objectCount: OBJECT_COUNT,
-    bucketCount: BUCKET_COUNT,
-  })[0],
+const specs = Object.freeze(buildFirstInstanceLiveCrossoverPlan({
   runId: RUN_ID,
-});
-const shaderObservationChallenges = Object.freeze([
-  ['preflight', 'render-parity'],
-  ['preflight', 'main-validation'],
-  ['timing-start', 'render-parity'],
-  ['timing-start', 'main-validation'],
-  ['postflight', 'render-parity'],
-  ['postflight', 'main-validation'],
-].map(([phase, role], index) => Object.freeze({
-  schemaVersion: 1,
-  kind: 'live-first-instance-shader-observation-challenge',
-  origin: 'node-runner',
+  objectCount: OBJECT_COUNT,
+  bucketCount: BUCKET_COUNT,
+}).slice(0, MULTI_TRIAL_SMOKE_COUNT).map((spec) => Object.freeze({
+  ...spec,
   runId: RUN_ID,
-  trialId: spec.trialId,
-  planIndex: spec.planIndex,
-  repetitionIndex: spec.repetitionIndex,
-  phase,
-  role,
-  captureOrdinal: index + 1,
-  challengeNonce: randomBytes(32).toString('hex'),
 })));
+
+function createShaderObservationChallenges(spec) {
+  return Object.freeze([
+    ['preflight', 'render-parity'],
+    ['preflight', 'main-validation'],
+    ['timing-start', 'render-parity'],
+    ['timing-start', 'main-validation'],
+    ['postflight', 'render-parity'],
+    ['postflight', 'main-validation'],
+  ].map(([phase, role], index) => Object.freeze({
+    schemaVersion: 1,
+    kind: 'live-first-instance-shader-observation-challenge',
+    origin: 'node-runner',
+    runId: RUN_ID,
+    trialId: spec.trialId,
+    planIndex: spec.planIndex,
+    repetitionIndex: spec.repetitionIndex,
+    phase,
+    role,
+    captureOrdinal: index + 1,
+    challengeNonce: randomBytes(32).toString('hex'),
+  })));
+}
 
 function requireCondition(condition, message, evidence = null) {
   if (condition) return;
@@ -160,11 +165,36 @@ function attachErrorCapture(page, records) {
   });
 }
 
-async function openReadyPage(browser, url, errors) {
+async function openReadyPage(browser, url, errors, {
+  timestampResolveDelayMs = 0,
+} = {}) {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     deviceScaleFactor: 1,
   });
+  if (timestampResolveDelayMs > 0) {
+    await context.addInitScript((delayMs) => {
+      const prototype = globalThis.GPUBuffer?.prototype;
+      const originalMapAsync = prototype?.mapAsync;
+      globalThis.__WEBGPU_SMOKE_MAP_DELAY__ = {
+        schemaVersion: 1,
+        delayMs,
+        installed: typeof originalMapAsync === 'function',
+        callCount: 0,
+      };
+      if (typeof originalMapAsync !== 'function') return;
+      Object.defineProperty(prototype, 'mapAsync', {
+        configurable: true,
+        writable: true,
+        value: async function smokeDelayedMapAsync(...args) {
+          const result = await Reflect.apply(originalMapAsync, this, args);
+          globalThis.__WEBGPU_SMOKE_MAP_DELAY__.callCount += 1;
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          return result;
+        },
+      });
+    }, timestampResolveDelayMs);
+  }
   const page = await context.newPage();
   attachErrorCapture(page, errors);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
@@ -221,25 +251,27 @@ async function captureEvidencePoint(page, observationChallenges) {
   }, observationChallenges);
 }
 
-const auditContext = Object.freeze({
-  runId: RUN_ID,
-  trialId: spec.trialId,
-  planIndex: spec.planIndex,
-  repetitionIndex: spec.repetitionIndex,
-  modeOrderPosition: spec.modeOrderPosition,
-  visibilityOrderPosition: spec.visibilityOrderPosition,
-  layoutOrderPosition: spec.layoutOrderPosition,
-  plannedModeOrder: spec.modeOrder.join('|'),
-  plannedVisibilityOrder: spec.visibilityOrder.join('|'),
-  plannedLayoutOrder: spec.layoutOrder.join('|'),
-  protocolWarmupFrames: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
-  protocolMeasuredFrames: FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
-  plannedLanePhysicalOrder: spec.lanePhysicalOrder.join('|'),
-  superblockOrientationOffset: spec.superblockOrientationOffset,
-  plannedScheduleSha256: liveFirstInstanceCrossoverScheduleSha256(
-    spec.superblockOrientationOffset,
-  ),
-});
+function createAuditContext(spec) {
+  return Object.freeze({
+    runId: RUN_ID,
+    trialId: spec.trialId,
+    planIndex: spec.planIndex,
+    repetitionIndex: spec.repetitionIndex,
+    modeOrderPosition: spec.modeOrderPosition,
+    visibilityOrderPosition: spec.visibilityOrderPosition,
+    layoutOrderPosition: spec.layoutOrderPosition,
+    plannedModeOrder: spec.modeOrder.join('|'),
+    plannedVisibilityOrder: spec.visibilityOrder.join('|'),
+    plannedLayoutOrder: spec.layoutOrder.join('|'),
+    protocolWarmupFrames: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
+    protocolMeasuredFrames: FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+    plannedLanePhysicalOrder: spec.lanePhysicalOrder.join('|'),
+    superblockOrientationOffset: spec.superblockOrientationOffset,
+    plannedScheduleSha256: liveFirstInstanceCrossoverScheduleSha256(
+      spec.superblockOrientationOffset,
+    ),
+  });
+}
 
 let server = null;
 let disposableBrowser = null;
@@ -287,77 +319,128 @@ try {
     headless: true,
     args: BROWSER_ARGS,
   });
-  const candidate = await openReadyPage(candidateBrowser, url, pageErrors);
-  const configured = await configureLiveTrial(candidate.page, spec);
-  requireCondition(configured.selectedConfig.strategyId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE,
-    'Live smoke selected the wrong strategy', configured.selectedConfig);
-  requireCondition(configured.environment.indirectFirstInstanceAvailable === true,
-    'indirect-first-instance is unavailable', configured.environment);
-  requireCondition(configured.environment.crossOriginIsolated === true,
-    'Candidate custom entry did not retain cross-origin isolation', configured.environment);
-  requireCondition(configured.environment.webgpuUncapturedErrorCount === 0,
-    'WebGPU error occurred during construction', configured.environment);
-  requireCondition(configured.shaderEvidence?.pass === true,
-    'Compute/render shader evidence failed', compactShaderEvidence(configured.shaderEvidence));
-  requireCondition(configured.timestampPoolPreprime?.kind
-    === 'three-r185-timestamp-pool-preprime',
-  'Timestamp pools were not pre-primed', configured.timestampPoolPreprime);
-
-  const preflight = await captureEvidencePoint(
-    candidate.page,
-    shaderObservationChallenges.slice(0, 2),
-  );
-  const timingParity = await candidate.page.evaluate(
-    (challenge) => window.__WEBGPU_BENCH__.captureRenderParity(challenge),
-    shaderObservationChallenges[2],
-  );
-  const timingStart = await candidate.page.evaluate(
-    ({ context, challenge }) => window.__WEBGPU_BENCH__.startTrial(context, challenge),
-    { context: auditContext, challenge: shaderObservationChallenges[3] },
-  );
-  await candidate.page.waitForFunction(
-    () => ['complete', 'error'].includes(window.__WEBGPU_BENCH__?.phase),
-    null,
-    { timeout: 180_000 },
-  );
-  const timing = await candidate.page.evaluate(() => ({
-    phase: window.__WEBGPU_BENCH__.phase,
-    error: window.__WEBGPU_BENCH__.trialError,
-    rows: window.__WEBGPU_BENCH__.rows,
-    summary: JSON.parse(document.getElementById('details')?.textContent ?? 'null'),
-    webgpuUncapturedErrors: window.__WEBGPU_BENCH__.webgpuUncapturedErrors,
-  }));
-  requireCondition(timing.phase === 'complete', 'Live smoke timing failed', timing.error);
-  const postflight = await captureEvidencePoint(
-    candidate.page,
-    shaderObservationChallenges.slice(4, 6),
-  );
-  const strict = await validateLiveFirstInstanceTrialEvidence({
-    spec,
-    environment: configured.environment,
-    preflightValidation: preflight.validation,
-    preflightRenderParity: preflight.renderParity,
-    validation: timingStart.validation,
-    renderParity: timingParity,
-    postflightValidation: postflight.validation,
-    postflightRenderParity: postflight.renderParity,
-    shaderObservationChallenges,
-    rows: timing.rows,
-    summary: timing.summary,
-    protocol: {
-      schemaVersion: 2,
-      warmupFrames: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
-      measuredFrames: FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
-      plannedScheduleSha256: auditContext.plannedScheduleSha256,
-    },
-    scenarioManifest: preflight.workload.scenario,
-    geometryManifest: preflight.workload.geometryFixtures,
+  const candidate = await openReadyPage(candidateBrowser, url, pageErrors, {
+    timestampResolveDelayMs: FORCED_TIMESTAMP_RESOLVE_DELAY_MS,
   });
-  requireCondition(pageErrors.length === 0, 'Candidate page emitted errors', pageErrors);
-  requireCondition(timing.webgpuUncapturedErrors.length === 0
-    && postflight.webgpuUncapturedErrors.length === 0,
-  'Candidate page observed uncaptured WebGPU errors');
-  requireCondition(strict.pass === true, 'Strict live trial evidence failed', strict);
+  const initialDelayState = await candidate.page.evaluate(
+    () => globalThis.__WEBGPU_SMOKE_MAP_DELAY__ ?? null,
+  );
+  requireCondition(initialDelayState?.installed === true,
+    'Candidate smoke could not install its asynchronous timestamp-resolution boundary',
+    initialDelayState);
+  const smokeTrials = [];
+  for (const spec of specs) {
+    const shaderObservationChallenges = createShaderObservationChallenges(spec);
+    const auditContext = createAuditContext(spec);
+    const configured = await configureLiveTrial(candidate.page, spec);
+    requireCondition(configured.selectedConfig.strategyId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE,
+      `Live smoke selected the wrong strategy for ${spec.trialId}`,
+      configured.selectedConfig);
+    requireCondition(configured.environment.indirectFirstInstanceAvailable === true,
+      'indirect-first-instance is unavailable', configured.environment);
+    requireCondition(configured.environment.crossOriginIsolated === true,
+      'Candidate custom entry did not retain cross-origin isolation', configured.environment);
+    requireCondition(configured.environment.webgpuUncapturedErrorCount === 0,
+      `WebGPU error occurred during construction for ${spec.trialId}`,
+      configured.environment);
+    requireCondition(configured.shaderEvidence?.pass === true,
+      `Compute/render shader evidence failed for ${spec.trialId}`,
+      compactShaderEvidence(configured.shaderEvidence));
+    requireCondition(configured.timestampPoolPreprime?.kind
+      === 'three-r185-timestamp-pool-preprime',
+    `Timestamp pools were not pre-primed for ${spec.trialId}`,
+    configured.timestampPoolPreprime);
+
+    const preflight = await captureEvidencePoint(
+      candidate.page,
+      shaderObservationChallenges.slice(0, 2),
+    );
+    const timingParity = await candidate.page.evaluate(
+      (challenge) => window.__WEBGPU_BENCH__.captureRenderParity(challenge),
+      shaderObservationChallenges[2],
+    );
+    const timingStart = await candidate.page.evaluate(
+      ({ context, challenge }) => window.__WEBGPU_BENCH__.startTrial(context, challenge),
+      { context: auditContext, challenge: shaderObservationChallenges[3] },
+    );
+    await candidate.page.waitForFunction(
+      () => ['complete', 'error'].includes(window.__WEBGPU_BENCH__?.phase),
+      null,
+      { timeout: 180_000 },
+    );
+    const timing = await candidate.page.evaluate(() => ({
+      phase: window.__WEBGPU_BENCH__.phase,
+      error: window.__WEBGPU_BENCH__.trialError,
+      rows: window.__WEBGPU_BENCH__.rows,
+      summary: JSON.parse(document.getElementById('details')?.textContent ?? 'null'),
+      webgpuUncapturedErrors: window.__WEBGPU_BENCH__.webgpuUncapturedErrors,
+    }));
+    requireCondition(timing.phase === 'complete',
+      `Live smoke timing failed for ${spec.trialId}`, timing.error);
+    const postflight = await captureEvidencePoint(
+      candidate.page,
+      shaderObservationChallenges.slice(4, 6),
+    );
+    const strict = await validateLiveFirstInstanceTrialEvidence({
+      spec,
+      environment: configured.environment,
+      preflightValidation: preflight.validation,
+      preflightRenderParity: preflight.renderParity,
+      validation: timingStart.validation,
+      renderParity: timingParity,
+      postflightValidation: postflight.validation,
+      postflightRenderParity: postflight.renderParity,
+      shaderObservationChallenges,
+      rows: timing.rows,
+      summary: timing.summary,
+      protocol: {
+        schemaVersion: 2,
+        warmupFrames: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
+        measuredFrames: FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+        plannedScheduleSha256: auditContext.plannedScheduleSha256,
+      },
+      scenarioManifest: preflight.workload.scenario,
+      geometryManifest: preflight.workload.geometryFixtures,
+    });
+    requireCondition(pageErrors.length === 0, 'Candidate page emitted errors', pageErrors);
+    requireCondition(timing.webgpuUncapturedErrors.length === 0
+      && postflight.webgpuUncapturedErrors.length === 0,
+    `Candidate page observed uncaptured WebGPU errors for ${spec.trialId}`);
+    requireCondition(strict.pass === true,
+      `Strict live trial evidence failed for ${spec.trialId}`, strict);
+    const lastWarmupGpuFrameId = timing.summary?.completionInvariant
+      ?.warmupScheduleAudit?.postWarmupState?.lastWarmupGpuFrameId;
+    const firstMeasuredGpuFrameId = timing.rows[0]?.gpuFrameId;
+    const gpuFrameBoundaryGap = firstMeasuredGpuFrameId - lastWarmupGpuFrameId;
+    smokeTrials.push({
+      trialId: spec.trialId,
+      planIndex: spec.planIndex,
+      visibilityFraction: spec.visibilityFraction,
+      lanePhysicalOrder: [...spec.lanePhysicalOrder],
+      validationPass: timingStart.validation.pass,
+      renderParityPass: timingParity.pass,
+      rows: timing.rows.length,
+      quantumNs: timing.summary.quantumNs,
+      lastWarmupGpuFrameId,
+      firstMeasuredGpuFrameId,
+      gpuFrameBoundaryGap,
+      gpuComputeP50Ms: timing.rows.map((row) => row.gpuComputeMs)
+        .sort((a, b) => a - b)[Math.floor(timing.rows.length / 2)],
+      gpuRenderP50Ms: timing.rows.map((row) => row.gpuRenderMs)
+        .sort((a, b) => a - b)[Math.floor(timing.rows.length / 2)],
+    });
+  }
+  requireCondition(smokeTrials.some((trial) => trial.gpuFrameBoundaryGap > 1),
+    'Controlled timestamp resolution never crossed a global GPU-frame boundary',
+    smokeTrials.map(({ trialId, gpuFrameBoundaryGap }) => ({
+      trialId,
+      gpuFrameBoundaryGap,
+    })));
+  const delayState = await candidate.page.evaluate(
+    () => globalThis.__WEBGPU_SMOKE_MAP_DELAY__ ?? null,
+  );
+  requireCondition(delayState?.callCount > 0,
+    'Controlled timestamp-resolution delay was never exercised', delayState);
 
   await candidateBrowser.close();
   candidateBrowser = null;
@@ -372,14 +455,13 @@ try {
     kind: 'first-instance-live-crossover-browser-smoke',
     browser: path.basename(executablePath),
     gatePass: gate.pass,
-    validationPass: timingStart.validation.pass,
-    renderParityPass: timingParity.pass,
-    rows: timing.rows.length,
-    quantumNs: timing.summary.quantumNs,
-    gpuComputeP50Ms: timing.rows.map((row) => row.gpuComputeMs)
-      .sort((a, b) => a - b)[Math.floor(timing.rows.length / 2)],
-    gpuRenderP50Ms: timing.rows.map((row) => row.gpuRenderMs)
-      .sort((a, b) => a - b)[Math.floor(timing.rows.length / 2)],
+    multiTrialCount: smokeTrials.length,
+    forcedTimestampResolveDelayMs: FORCED_TIMESTAMP_RESOLVE_DELAY_MS,
+    delayedMapAsyncCallCount: delayState.callCount,
+    validationPass: smokeTrials.every((trial) => trial.validationPass),
+    renderParityPass: smokeTrials.every((trial) => trial.renderParityPass),
+    rows: smokeTrials.reduce((sum, trial) => sum + trial.rows, 0),
+    trials: smokeTrials,
     viteRuntimeAudit: {
       policyId: viteRuntimeAudit.policyId,
       entryHtmlResponseCount: viteRuntimeAudit.entryHtml.successfulResponseCount,

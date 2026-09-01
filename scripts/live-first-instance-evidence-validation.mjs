@@ -1745,6 +1745,7 @@ export function validateLiveFirstInstanceCompletionInvariant(invariant, {
   const serials = [
     ['selectorWriteSerial', 'selectorWritesDuringTiming'],
     ['strategySelectionSerial', 'strategySelectionsDuringTiming'],
+    ['strategyComputeCallSerial', 'strategyComputeCallsDuringTiming'],
     ['computeCallSerial', 'computeCallsDuringTiming'],
     ['renderCallSerial', 'renderCallsDuringTiming'],
   ];
@@ -2189,8 +2190,13 @@ function validateCompactWarmupAudit(audit, {
     `${label} measurement-boundary previous-previous lane`, reasons);
   requireEqual(firstMeasured?.previousLaneId, tail?.previousLaneId,
     `${label} measurement-boundary previous lane`, reasons);
-  requireEqual(firstMeasured?.gpuFrameId, tail?.lastWarmupGpuFrameId + 1,
-    `${label} measurement-boundary GPU frame`, reasons);
+  requireCondition(
+    isNonnegativeInteger(firstMeasured?.gpuFrameId)
+      && isNonnegativeInteger(tail?.lastWarmupGpuFrameId)
+      && firstMeasured.gpuFrameId > tail.lastWarmupGpuFrameId,
+    `${label} measurement-boundary GPU frame does not advance after warmup`,
+    reasons,
+  );
   validateTimestampPhase(summary?.timestampPhases?.warmup, {
     phaseName: 'warmup',
     frameCount: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
@@ -2303,6 +2309,7 @@ export function validateLiveFirstInstanceCrossoverRows({
   const bases = {
     selectorWriteSerial: invariant?.selectorWriteSerialAtTimingStart,
     strategySelectionSerial: invariant?.strategySelectionSerialAtTimingStart,
+    strategyComputeCallSerial: invariant?.strategyComputeCallSerialAtTimingStart,
     computeCallSerial: invariant?.computeCallSerialAtTimingStart,
     renderCallSerial: invariant?.renderCallSerialAtTimingStart,
   };

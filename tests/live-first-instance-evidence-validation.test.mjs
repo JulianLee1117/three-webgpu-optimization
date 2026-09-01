@@ -84,6 +84,33 @@ function viewportState() {
   };
 }
 
+function shiftMeasurementGpuFrames(artifact, offset) {
+  const shiftRecord = (record) => {
+    const frameId = record.frameId + offset;
+    return {
+      ...record,
+      uid: record.uid.replace(/:f\d+$/, `:f${frameId}`),
+      frameId,
+    };
+  };
+  for (const row of artifact.rows) {
+    row.gpuFrameId += offset;
+    for (const type of ['Compute', 'Render']) {
+      const recordsField = `gpu${type}TimestampRecords`;
+      const uidsField = `gpu${type}TimestampUids`;
+      const records = JSON.parse(row[recordsField]).map(shiftRecord);
+      row[recordsField] = JSON.stringify(records);
+      row[uidsField] = JSON.stringify(records.map((record) => record.uid));
+    }
+  }
+  for (const type of ['compute', 'render']) {
+    const pool = artifact.summary.timestampPhases.measurement.pools[type];
+    pool.frames = pool.frames.map((frameId) => frameId + offset);
+    pool.uidRecords = pool.uidRecords.map(shiftRecord);
+  }
+  return artifact;
+}
+
 function pool(identity) {
   return {
     poolIdentity: identity,
@@ -183,6 +210,7 @@ function createRowEvidence() {
   const serialStarts = {
     selectorWriteSerial: 1_000,
     strategySelectionSerial: 2_000,
+    strategyComputeCallSerial: 5_000,
     computeCallSerial: 3_000,
     renderCallSerial: 4_000,
   };
@@ -262,9 +290,11 @@ function createRowEvidence() {
       ? 'selectorWritesDuringTiming'
       : prefix === 'strategySelectionSerial'
         ? 'strategySelectionsDuringTiming'
-        : prefix === 'computeCallSerial'
-          ? 'computeCallsDuringTiming'
-          : 'renderCallsDuringTiming';
+        : prefix === 'strategyComputeCallSerial'
+          ? 'strategyComputeCallsDuringTiming'
+          : prefix === 'computeCallSerial'
+            ? 'computeCallsDuringTiming'
+            : 'renderCallsDuringTiming';
     completionInvariant[countField] = LIVE_FIRST_INSTANCE_TIMED_FRAME_COUNT;
   }
   const scheduleSha256 = liveFirstInstanceCrossoverScheduleSha256(0);
@@ -438,7 +468,7 @@ function createRowEvidence() {
         gpuFrameId,
         selectorWriteSerial: serialStarts.selectorWriteSerial + ordinal,
         strategySelectionSerial: serialStarts.strategySelectionSerial + ordinal,
-        strategyComputeCallSerial: 5_000 + ordinal,
+        strategyComputeCallSerial: serialStarts.strategyComputeCallSerial + ordinal,
         computeCallSerial: serialStarts.computeCallSerial + ordinal,
         computeFrameCallIndex: 1,
         renderCallSerial: serialStarts.renderCallSerial + ordinal,
@@ -455,10 +485,6 @@ function createRowEvidence() {
   );
   const lastWarmup = warmupEvents.at(-1);
   const penultimateWarmup = warmupEvents.at(-2);
-  completionInvariant.strategyComputeCallSerialAtTimingStart = 5_000;
-  completionInvariant.strategyComputeCallSerialAtTimingEnd = 5_000
-    + LIVE_FIRST_INSTANCE_TIMED_FRAME_COUNT;
-  completionInvariant.strategyComputeCallsDuringTiming = LIVE_FIRST_INSTANCE_TIMED_FRAME_COUNT;
   completionInvariant.warmupScheduleAudit = {
     schemaVersion: 1,
     kind: 'live-first-instance-compact-warmup-schedule-audit',
@@ -845,6 +871,48 @@ test('live rows require exact compute/render timestamps, serials, and one-micros
     .pools.compute.resolution.quantumNs = 1_001;
   assert.ok(validateLiveFirstInstanceCrossoverRows(coarseWarmupComputePool).some(
     (reason) => reason.includes('warmup compute timestamp pool'),
+  ));
+});
+
+test('live warmup boundary permits idle global RAFs during timestamp resolution', () => {
+  // Three r185 advances renderer.info.frame on every RAF, including RAFs where
+  // the controller is resolving warmup timestamps and submits no timed work.
+  // Trial 3 of the preserved candidate attempt observed exactly this +1 gap.
+  const oneIdleRaf = shiftMeasurementGpuFrames(createRowEvidence(), 1);
+  assert.deepEqual(validateLiveFirstInstanceCrossoverRows(oneIdleRaf), []);
+
+  const changedStrategyComputeSerial = structuredClone(oneIdleRaf);
+  changedStrategyComputeSerial.rows[0].strategyComputeCallSerial += 1;
+  assert.ok(validateLiveFirstInstanceCrossoverRows(changedStrategyComputeSerial).some(
+    (reason) => reason.includes('strategyComputeCallSerial'),
+  ));
+
+  const equalBoundary = shiftMeasurementGpuFrames(createRowEvidence(), -1);
+  assert.ok(validateLiveFirstInstanceCrossoverRows(equalBoundary).some(
+    (reason) => reason.includes(
+      'measurement-boundary GPU frame does not advance after warmup',
+    ),
+  ));
+
+  const backwardBoundary = shiftMeasurementGpuFrames(createRowEvidence(), -2);
+  assert.ok(validateLiveFirstInstanceCrossoverRows(backwardBoundary).some(
+    (reason) => reason.includes(
+      'measurement-boundary GPU frame does not advance after warmup',
+    ),
+  ));
+});
+
+test('live completion reconstructs the strategy compute-call serial interval', () => {
+  const changedEnd = createRowEvidence();
+  changedEnd.summary.completionInvariant.strategyComputeCallSerialAtTimingEnd += 1;
+  assert.ok(validateLiveFirstInstanceCrossoverRows(changedEnd).some(
+    (reason) => reason.includes('strategyComputeCallSerial serial delta'),
+  ));
+
+  const changedCount = createRowEvidence();
+  changedCount.summary.completionInvariant.strategyComputeCallsDuringTiming -= 1;
+  assert.ok(validateLiveFirstInstanceCrossoverRows(changedCount).some(
+    (reason) => reason.includes('strategyComputeCallsDuringTiming'),
   ));
 });
 

@@ -75,9 +75,12 @@ UID-duration record for every warmup and measured frame. Durations must be
 strictly positive, and the compute and render pools must each reconstruct a
 timestamp quantum no greater than 1,000 ns in both phases. A compact 320-frame
 warmup audit records the actual null startup history and joins its executed tail
-to measurement frame zero. The live candidate suppresses the generic idle
-animation path between evidence phases, so no unrecorded compute or render
-submission can advance the frozen execution counters. Untimed parity
+to measurement frame zero. Three.js's global RAF frame identifier may advance
+while warmup timestamp buffers resolve, but the boundary must move forward and
+the compute, render, selection, lane-history, and timestamp records must join
+with no missing submission. The live candidate suppresses the generic idle
+animation path between evidence phases, so those intervening RAF callbacks
+cannot submit unrecorded compute or render work. Untimed parity
 additionally renders the production
 scene through each lane's existing timed `BundleGroup` twice into the existing
 target: both RGBA8 readbacks must be stable, equal across lanes, and equal to
@@ -189,7 +192,9 @@ npm run smoke:first-instance
 
 The live compute-plus-render crossover uses the same fixed scene size and runs
 24 paired trials. Its smoke includes a disposable forced-feature-off fallback
-gate and one complete 800-frame trial:
+gate and three consecutive complete 800-frame trials in one browser page. A
+smoke-only delayed timestamp-map boundary deterministically exercises idle RAF
+callbacks between warmup and measurement without altering candidate code:
 
 ```sh
 npm run smoke:first-instance-live
