@@ -2696,8 +2696,18 @@ export function validateLiveFirstInstanceShaderObservationSequence(validations, 
     (challenge) => challenge?.challengeNonce,
   )).size === shaderObservationChallenges.length,
   'live shader observation challenge nonces are not unique', reasons);
+  // Staged priming selects both lanes once for compute and once for render,
+  // adding two selections before the common shader-capture and timestamp setup.
+  const initialLaneSelectionSerial = spec?.setupPrimeTopology == null
+    || spec.setupPrimeTopology === 'interleaved-v1'
+    ? 7
+    : spec.setupPrimeTopology === 'staged-order-factorial-v1'
+      ? 9
+      : null;
+  requireCondition(initialLaneSelectionSerial !== null,
+    'live shader observation setupPrimeTopology is unsupported', reasons);
   for (const [field, expected] of Object.entries({
-    laneSelectionSerial: 7,
+    laneSelectionSerial: initialLaneSelectionSerial,
     computeCallSerial: 3,
     prepareSerial: 0,
   })) {

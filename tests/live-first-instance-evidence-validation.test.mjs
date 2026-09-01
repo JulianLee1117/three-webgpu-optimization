@@ -928,6 +928,46 @@ test('fresh shader observation sequence binds six runner challenges and exact co
     fresh,
     { spec, shaderObservationChallenges: challenges },
   ), []);
+  assert.deepEqual(validateLiveFirstInstanceShaderObservationSequence(
+    fresh,
+    {
+      spec: { ...spec, setupPrimeTopology: 'interleaved-v1' },
+      shaderObservationChallenges: challenges,
+    },
+  ), []);
+
+  const staged = structuredClone(fresh);
+  for (const validation of staged) {
+    validation.shaderEvidence.observation.executionCountersAtStart.laneSelectionSerial += 2;
+  }
+  assert.deepEqual(validateLiveFirstInstanceShaderObservationSequence(
+    staged,
+    {
+      spec: { ...spec, setupPrimeTopology: 'staged-order-factorial-v1' },
+      shaderObservationChallenges: challenges,
+    },
+  ), []);
+  for (const initialOffset of [-2, -1, 1]) {
+    const wrongStaged = structuredClone(staged);
+    for (const validation of wrongStaged) {
+      validation.shaderEvidence.observation.executionCountersAtStart.laneSelectionSerial
+        += initialOffset;
+    }
+    assert.ok(validateLiveFirstInstanceShaderObservationSequence(
+      wrongStaged,
+      {
+        spec: { ...spec, setupPrimeTopology: 'staged-order-factorial-v1' },
+        shaderObservationChallenges: challenges,
+      },
+    ).some((reason) => reason.includes('initial laneSelectionSerial')));
+  }
+  assert.ok(validateLiveFirstInstanceShaderObservationSequence(
+    staged,
+    {
+      spec: { ...spec, setupPrimeTopology: 'unsupported-topology' },
+      shaderObservationChallenges: challenges,
+    },
+  ).some((reason) => reason.includes('setupPrimeTopology is unsupported')));
 
   const stale = structuredClone(fresh);
   stale[1].shaderEvidence.observation = structuredClone(stale[0].shaderEvidence.observation);
