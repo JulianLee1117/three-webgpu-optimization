@@ -47,6 +47,12 @@ Fixed-slice uses established primitives in a narrower ownership model. Each geom
 
 At 32 buckets, fixed-slice uses two dispatches in one explicit Three.js compute call and one render object containing 32 indexed indirect offsets. Unlike either one-submission package comparator, it changes compaction layout, geometry organization, material/vertex-transform wiring, and dispatch work; compared with v0.11 it also changes render-object count. Compute and render durations must be separated, and a render-pass difference cannot be assigned to compaction alone. A claim that fixed-slice is differentiated therefore requires direct, validated evidence against both the coalesced v0.11 probe and compatible historical v0.10 baseline, as well as against draw all; a win over the 32-call public schedule alone would establish only a scheduling opportunity.
 
+## Indirect `firstInstance` specialization
+
+Using nonzero indirect `firstInstance` values is established WebGPU practice and is already present in prior libraries, including the historical Three Blocks path above. This project does not claim the command-field technique as new. The narrower specialization removes a redundant per-vertex bucket-base input from the fixed-slice representation: the portable shader reads `visibleIds[bucketBase + instanceIndex]`, while the feature-gated shader reads `visibleIds[instanceIndex]` and receives the same base through the indirect command.
+
+The controlled contribution is the causal measurement and Three.js integration boundary. The render-only crossover binds the two address paths to the same survivor list, common geometry payload, storage resources, material output, native draws, and balanced within-block schedule. Its two aggregate estimates reproduce a material reduction on one device, but one of the two matrices fails preregistered nuisance-interaction bounds. The result therefore motivates a live compute-plus-render evaluation; it does not establish novelty of the primitive, cross-device generality, or a total-GPU deployment claim.
+
 ## Three.js, WebGPU, and browser constraints
 
 - [`BufferGeometry.setIndirect`](https://threejs.org/docs/pages/BufferGeometry.html) allows application-provided indirect buffers and offsets.

@@ -40,6 +40,12 @@ The completed experiment isolates the remaining render-order question from compa
 
 Each paired trial alternates the two lanes inside complementary eight-frame superblocks and renders once per animation frame to a fixed offscreen target. Twelve repetitions cover both high- and low-overlap layouts while counterbalancing physical buffer placement, starting superblock orientation, and layout position. Full buffer readback, an untimed selector-address challenge, exact color/depth/object-ID parity, timestamp identity, and static-resource invariants gate every result. The estimand, schedule, replication rule, and decision thresholds are fixed in the [Frozen render-order crossover protocol](docs/FROZEN_DEPTH_CROSSOVER_PROTOCOL.md).
 
+## Indirect `firstInstance` addressing crossover
+
+The latest experiment isolates one redundant address operation in the fixed-slice render path. The portable lane supplies a per-vertex `bucketBase` attribute and reads `visibleIds[bucketBase + instanceIndex]`, with zero in the fifth indirect-command word. The feature lane removes that vertex input and integer addition, places the bucket-slice base in the command's `firstInstance`, and reads `visibleIds[instanceIndex]`. It is enabled only when the adapter exposes WebGPU's optional `indirect-first-instance` feature; the portable lane remains the fallback.
+
+Both lanes share the immutable survivor list, matrix and indirect allocations, common geometry attributes, material behavior, output, 32 native draws, and one selected static bundle per frame. The harness alternates the already-built lanes inside balanced eight-frame blocks and proves every survivor address with an untimed RGBA8 oracle in addition to full-frame color, depth, and object-ID parity. The exact design and claim boundary are in the [indirect `firstInstance` crossover protocol](docs/INDIRECT_FIRST_INSTANCE_CROSSOVER_PROTOCOL.md).
+
 ## Current status
 
 The package baselines, scheduling probe, fixed-slice lane, and fixed-slice representation control are integrated with lane-specific correctness gates; every compute lane requires exact survivor membership and native indexed-command validation. The representation control additionally requires one shared geometry and material, exactly B retained meshes, exactly B bundle-record callbacks before timing, no bundle rebuild during timing, and exact decoded-pixel parity.
@@ -49,6 +55,8 @@ Two independent single-device candidate runs now show that the fixed-ownership s
 Two coarse depth-ordering candidates each completed all 36 trials and passed the correctness, lifecycle, provenance, and artifact gates, but neither passed the preregistered performance decision. The first measured front-to-back render time 4.1% slower than reverse; the replication measured it 10.6% faster but failed the absolute-position stability gate. The deterministic bucket-serial scatter increased total GPU-pass time by 49.1-55.1% in the high-overlap layout and 58.7-66.5% in the low-overlap control.
 
 Two subsequent frozen render-order candidates removed compaction from timing and alternated front-to-back and reverse inside balanced eight-frame blocks. Both accepted all 24 trials and passed exact evidence, low-overlap equivalence, telemetry, and drift gates. Their high-overlap front-to-back-minus-reverse estimates were +0.000886 ms and +0.001014 ms, with only 5 of 12 front-to-back wins in each run. The controlled result therefore finds no material render-order benefit for this workload and does not justify a scalable sorting pipeline. Exact completed comparisons and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
+
+Two indirect-`firstInstance` render-only candidates then accepted all 24 trials and 11,520 rows from the same frozen commit. Their 99%-visibility feature-minus-portable estimates were -0.346 ms (-17.56%) and -0.338 ms (-17.12%), with all 12 repetition estimates negative in each run. The first matrix failed two preregistered nuisance-interaction bounds even though both levels of every stratum favored the feature lane; the second passed every numerical gate. The aggregate mechanism signal therefore reproduced, but the required two-matrix confirmatory decision was not met. A normal live compute-plus-render evaluation is required before treating the feature lane as a deployable total-GPU optimization. Exact outcomes and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
 
 The core techniques, including GPU frustum culling, survivor compaction, indirect drawing, and retained command submission, are established prior art. The research question is whether a narrower Three.js integration or fixed-ownership specialization produces a material, reproducible difference.
 
@@ -117,13 +125,30 @@ $env:BENCHMARK_MATRIX = 'depth-ordering-render-only'
 npm run benchmark:focused
 ```
 
+The indirect-`firstInstance` render crossover also uses 65,536 objects, 32 buckets, and 24 paired trials. It fails at startup when the optional WebGPU feature is unavailable:
+
+```sh
+BENCHMARK_MATRIX=first-instance-render-only npm run benchmark:focused
+```
+
+```powershell
+$env:BENCHMARK_MATRIX = 'first-instance-render-only'
+npm run benchmark:focused
+```
+
+Its exact browser correctness gate can be run separately:
+
+```sh
+npm run smoke:first-instance
+```
+
 A completed run can be summarized with:
 
 ```sh
 npm run analyze -- results/runs/<run-id>
 ```
 
-Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. For the coarse depth matrix it evaluates the preregistered numeric gates, keeps front-to-back versus reverse under causal contrasts, and labels comparisons against atomic fixed-slice as contextual whole-mechanism comparisons. For the frozen crossover it reconstructs every superblock, rejects schedule or base-mapping deviations, and evaluates the preregistered repetition-level, control, interaction, and drift gates. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
+Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. For the coarse depth matrix it evaluates the preregistered numeric gates, keeps front-to-back versus reverse under causal contrasts, and labels comparisons against atomic fixed-slice as contextual whole-mechanism comparisons. For the frozen crossover it reconstructs every superblock, rejects schedule or base-mapping deviations, and evaluates the preregistered repetition-level, control, interaction, and drift gates. For the indirect-`firstInstance` crossover it additionally revalidates the feature, browser/backend, shader, all-address oracle, lifecycle, telemetry, and physical command-segment evidence before recomputing all 24 trial estimates. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
 
 The benchmark requires a WebGPU-capable device and records the actual adapter, backend, browser, timestamp support, and timer precision with each run. The browser smoke additionally requires zero-tolerance decoded-RGBA screenshot agreement among draw all, fixed-slice, and the per-bucket representation control at 4, 32, and 128 buckets, reports PNG byte equality as a diagnostic, verifies 32- and 128-bucket timed replay, and checks repeated strategy teardown against the renderer's resource and cache baseline. Results from a busy or changing device should be retained as development evidence rather than used for performance claims.
 
@@ -156,7 +181,7 @@ The detailed procedure is in [docs/BENCHMARK_PROTOCOL.md](docs/BENCHMARK_PROTOCO
 
 ## Scope
 
-The harness exposes bundled draw all, Three Blocks v0.11 public and coalesced scheduling, the historical Three Blocks v0.10 indirect-batching path, fixed-slice compaction, and a per-bucket fixed-slice representation control. At 4, 32, or 128 buckets, the ecosystem matrix contains draw all, one explicitly selected one-submission package comparator, and fixed-slice. The separate representation matrix compares only the B-object and one-object fixed-slice lanes. The multi-submission public v0.11 lane remains a separate correctness and scheduling reference. Stock Three.js `BatchedMesh`, linear-depth and object-ID output checks, dynamic cameras, production assets, and additional GPU families remain separate comparison stages.
+The harness exposes bundled draw all, Three Blocks v0.11 public and coalesced scheduling, the historical Three Blocks v0.10 indirect-batching path, portable and feature-gated fixed-slice compaction, and a per-bucket fixed-slice representation control. At 4, 32, or 128 buckets, the ecosystem matrix contains draw all, one explicitly selected one-submission package comparator, and fixed-slice. The separate representation matrix compares only the B-object and one-object fixed-slice lanes. The multi-submission public v0.11 lane remains a separate correctness and scheduling reference. Stock Three.js `BatchedMesh`, linear-depth and object-ID output checks, dynamic cameras, production assets, and additional GPU families remain separate comparison stages.
 
 This repository is an experiment harness and does not expose a supported library API.
 

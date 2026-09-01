@@ -91,6 +91,25 @@ Both replications passed the low-overlap equivalence and drift gates. Both faile
 
 The tightly interleaved render-only experiment therefore finds no material front-to-back benefit for this frozen opaque workload. The coarse candidate's apparent -10.6% result does not survive removal of between-trial temporal and ordering effects. On this evidence, a scalable GPU scan, radix, or prefix-compaction pipeline for coarse depth ordering is not warranted. This conclusion is specific to the tested scene and does not weaken the independently reproduced fixed-ownership compaction result.
 
+## Indirect `firstInstance` render crossover result
+
+The indirect-addressing crossover used source commit `cd461b58a9bd84a46904fa610469f8b1f92de7d7`, Three.js 0.185.1, Chrome 151.0.7922.174, and the same RTX 5070 Ti / D3D12 system. It fixed 65,536 objects, 32 medium indexed geometry buckets, 99% and 20% visibility cells, a 1280 x 720 target, reversed depth, and one immutable bucket-sliced survivor list. WebGPU reported `indirect-first-instance`; both runs observed a 32 ns GPU timestamp quantum.
+
+The portable lane retained a per-vertex uint bucket base and zero `firstInstance`. The feature lane removed that vertex input and addition and placed the exact bucket-slice base in the fifth word of each indexed indirect command. Both lanes shared the common index, position, normal, and UV attributes; matrix and survivor storage; material output; 32 native draws; and fixed camera and target. Each candidate completed all 24 trials and 11,520 retained rows with zero timed compute submissions.
+
+Both candidates passed full survivor and indirect-buffer readback, raw WGSL and runtime binding inspection, the all-address RGBA8 oracle, exact color/depth/object-ID parity, static-bundle and resource lifecycle checks, source provenance, artifact reconstruction, and telemetry coherence. The same GPU process set was present before and after each run. Measurement spent 374 of 377 and 375 of 378 telemetry samples in P1; median temperature was 49 C and 51 C, with maxima of 54 C and 56 C. Negative feature-minus-portable values favor indirect `firstInstance`.
+
+| Replication | 99% render delta | Feature wins | 20% render delta | Paired 99%-minus-20% | Condition-blind pooled drift | Preregistered result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| A | -0.345978 ms (-17.56%) | 12 / 12 | -0.060206 ms (-15.47%) | -0.292290 ms | +0.000007 ms (+0.001%) | Fail |
+| B | -0.337666 ms (-17.12%) | 12 / 12 | -0.055124 ms (-14.45%) | -0.295466 ms | +0.001189 ms (+0.126%) | Pass |
+
+Replication A passed the material-effect, direction, low-visibility, paired-dose, and drift gates. It failed the predeclared high-visibility nuisance-interaction bounds. Physical command placement differed by 0.119074 ms and 7.56% between strata, exceeding the strict 0.10 ms and 5% limits; visibility-order position differed by 5.99%, exceeding the percent limit. Both levels of every stratum still favored the feature lane: the physical-placement medians were -0.377092 ms and -0.258018 ms, and the visibility-order medians were -0.282196 ms and -0.377092 ms. Replication B kept every interaction within both bounds and passed all numerical gates.
+
+The required two-matrix confirmatory decision is therefore not met, and the failed first matrix is not replaced or reinterpreted. At the same time, the aggregate render-stage mechanism reproduced closely: both session medians were approximately -17%, and all 24 high-visibility repetition estimates favored the feature lane. This is evidence that the redundant vertex input/address dependency is material in the tested fixed-ownership Three.js path, but it is not yet evidence of a general WebGPU optimization or a deployable total-GPU win.
+
+The next decision experiment must retain the zero-`firstInstance` fallback and compare normal live compute-plus-render operation. It should require exact output and command parity and a reproduced total-GPU improvement of at least 0.10 ms and 5%, as fixed before these candidate measurements. A materially different GPU family remains necessary before generalizing beyond this device and driver.
+
 ## Evidence identifiers
 
 | Comparison | Replication | Run identifier |
@@ -103,6 +122,8 @@ The tightly interleaved render-only experiment therefore finds no material front
 | Coarse depth ordering | B | `depth-ordering-o65536-b32-2026-08-31T22-24-21.618Z` |
 | Frozen render-order crossover | A | `depth-ordering-render-only-o65536-b32-2026-09-01T02-24-19.996Z` |
 | Frozen render-order crossover | B | `depth-ordering-render-only-o65536-b32-2026-09-01T02-27-00.288Z` |
+| Indirect `firstInstance` crossover | A | `first-instance-render-only-o65536-b32-2026-09-01T05-42-36.298Z` |
+| Indirect `firstInstance` crossover | B | `first-instance-render-only-o65536-b32-2026-09-01T05-44-58.948Z` |
 
 Generated run directories remain ignored source artifacts. Each identifier above names a manifest-bound local directory containing frame-level CSV data, metadata, trial summaries, validation payloads, workload manifests, GPU telemetry, and SHA-256 commitments. The analyzer rejects incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts.
 
@@ -113,6 +134,7 @@ Generated run directories remain ignored source artifacts. Each identifier above
 - One retained mesh/render object removes a CPU submission cost that grows with bucket count.
 - The current-package comparison has a real crossover: fixed-slice wins through compute efficiency while its render-only path is slower.
 - The tested bucket-serial depth-ordering mechanism is not a total-GPU optimization, and the frozen crossover finds no material render-order benefit after controlling within-trial time and physical-buffer placement.
+- Indirect `firstInstance` addressing reproducibly removes approximately 17% of timestamped render-pass time in the tested high-visibility fixed-slice path, while the strict two-matrix confirmatory decision remains unmet because one matrix failed nuisance-interaction bounds.
 
 ## What remains open
 
@@ -121,5 +143,6 @@ Generated run directories remain ignored source artifacts. Each identifier above
 - Production assets, textures, dynamic cameras, moving objects, shadows, transparency, skinning, and morph targets are outside this result.
 - The benchmark does not measure presentation latency or queue overlap.
 - A different scene, material cost, resolution, depth distribution, or GPU may have a different render-order crossover; that would require a new preregistered experiment rather than extending this null result.
+- The indirect-`firstInstance` result is render-only. A live compute-plus-render experiment must establish a material total-GPU benefit while preserving the portable fallback before deployment.
 
-The frozen render-order crossover closes the ordering branch for the current fixture. Further optimization work should preserve the reproduced fixed-ownership compute savings and target a different measured bottleneck.
+The frozen render-order crossover closes the ordering branch for the current fixture. Further optimization work should preserve the reproduced fixed-ownership compute savings and test whether the indirect-`firstInstance` render reduction survives normal live culling as a total-GPU result.
