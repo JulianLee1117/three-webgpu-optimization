@@ -193,7 +193,7 @@ function verifyPairBundle(entries, packageManifest, {
   );
   if (ledger.seriesId !== receipt.seriesId
     || ledger.events?.length !== receipt.ledgerBinding.eventCount
-    || ledger.finalEventSha256 !== receipt.ledgerBinding.finalEventSha256
+    || ledger.events?.at(-1)?.eventSha256 !== receipt.ledgerBinding.finalEventSha256
     || registry.events?.length !== receipt.seriesRootRegistryBinding.eventCount
     || registry.finalEventSha256 !== receipt.seriesRootRegistryBinding.finalEventSha256) {
     reject('embedded registry or ledger hash chain differs from its receipt binding.');

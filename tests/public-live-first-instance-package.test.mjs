@@ -248,8 +248,7 @@ function verifierDependencies() {
     receiptValidator: (value) => value,
     ledgerParser: () => ({
       seriesId: SERIES_ID,
-      events: [{}],
-      finalEventSha256: LEDGER_FINAL,
+      events: [{ eventSha256: LEDGER_FINAL }],
     }),
     registryParser: () => ({
       events: [{}],
