@@ -496,13 +496,10 @@ export function buildFirstInstanceLiveStandaloneStrategy({
       shaderObservationSerial + 1,
     );
     const resourceIdentitiesAtStart = capturePrimedResourceIdentities();
-    const renderObject = resolveTimedRenderObject(
-      renderer,
-      scene,
-      camera,
-      lane.meshes[0],
-      timedRenderTarget,
-    );
+    // The production shader belongs to the render object recorded inside the
+    // bundle. A scene-level renderer._objects lookup can resolve a distinct
+    // RenderObject for the same mesh and material.
+    const renderObject = timedRenderResources.renderObject;
     const state = renderObject.getNodeBuilderState();
     if (renderObject !== timedBundle.renderObject
       || state !== timedRenderResources.state
