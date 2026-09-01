@@ -270,8 +270,12 @@ lane in each fresh browser/device session. Its excluded smoke runs both
 visibility trials in one portable and one feature session; the full candidate
 runs the frozen 96-session, 192-trial two-matrix plan. Candidate execution
 requires a clean worktree and the same NVIDIA telemetry availability described
-above. The runner prints the immutable run directory for independent
-verification:
+above. Each trial keeps its 320 warmup and 480 measured frames in one continuous
+timestamp-query interval, using 1,600 of each r185 pool's 2,048 queries. Each
+pool is resolved once in one coordinated step after all 800 frames. The
+independent verifier reconstructs both phase views and requires exact GPU-frame
+adjacency plus the unresolved and resolved pool states. The runner prints the
+immutable run directory for independent verification:
 
 ```sh
 npm run smoke:first-instance-standalone

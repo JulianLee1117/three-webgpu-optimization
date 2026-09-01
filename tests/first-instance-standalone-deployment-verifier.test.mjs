@@ -18,12 +18,15 @@ import {
   resolveStandaloneDeploymentDecision,
   verifyStandaloneAddressDigestCommitment,
   verifyStandaloneBrowserLifecycleChain,
+  verifyStandaloneContinuousTimestampResolutionForTest,
   verifyStandaloneEnvironmentObservations,
   verifyStandaloneLaneShaderNormalization,
   verifyStandaloneInteractiveChallengeForTest,
   verifyStandaloneRenderCommitmentForTest,
   verifyStandaloneSessionResourceIdentityRecords,
+  verifyStandaloneSessionTimestampContinuity,
   verifyStandaloneTimedSerialInterval,
+  verifyStandaloneTimestampPhaseBoundary,
   verifyStandaloneTimestampRecordForTest,
 } from '../analysis/verify-first-instance-standalone-deployment.mjs';
 import {
@@ -220,6 +223,303 @@ test('timed serial and strict timestamp UID helpers reject shifted or detached e
       },
     ),
     /strict timestamp UID grammar/,
+  );
+});
+
+test('timestamp phase boundary requires exact warmup/measurement adjacency', () => {
+  const warmup = { compute: [10, 11], render: [10, 11] };
+  assert.deepEqual(
+    verifyStandaloneTimestampPhaseBoundary(
+      warmup,
+      { compute: [12, 13], render: [12, 13] },
+    ).idleRafCount,
+    0,
+  );
+  assert.throws(
+    () => verifyStandaloneTimestampPhaseBoundary(
+      warmup,
+      { compute: [13, 14], render: [13, 14] },
+    ),
+    /not exactly adjacent to warmup/,
+  );
+  assert.throws(
+    () => verifyStandaloneTimestampPhaseBoundary(
+      warmup,
+      { compute: [11, 12], render: [11, 12] },
+    ),
+    /not exactly adjacent to warmup/,
+  );
+  assert.throws(
+    () => verifyStandaloneTimestampPhaseBoundary(
+      warmup,
+      { compute: [13, 14], render: [14, 15] },
+    ),
+    /compute\/render GPU-frame interval/,
+  );
+  assert.throws(
+    () => verifyStandaloneTimestampPhaseBoundary(
+      { compute: [10, 12], render: [10, 12] },
+      { compute: [13, 14], render: [13, 14] },
+    ),
+    /not consecutive/,
+  );
+});
+
+function continuousTimestampEvidence() {
+  const warmupFrames = Array.from({ length: 320 }, (_, index) => 10 + index);
+  const measurementFrames = Array.from({ length: 480 }, (_, index) => 330 + index);
+  const combinedFrames = [...warmupFrames, ...measurementFrames];
+  const uid = (type, frame) => `${type === 'compute' ? 'c' : 'r'}:1:${
+    type === 'compute' ? 2 : 0
+  }:f${frame}`;
+  const timedUids = Object.fromEntries(['render', 'compute'].map((type) => [
+    type,
+    combinedFrames.map((frame) => uid(type, frame)),
+  ]));
+  const primeUids = { render: ['r:2:0:f1'], compute: ['c:2:2:f1'] };
+  const pool = (type, {
+    frames,
+    timestampUids,
+    queryOffsetUids = [],
+    currentQueryIndex = 0,
+  }) => {
+    const base = type === 'render' ? 10 : 20;
+    return {
+      poolIdentity: base,
+      querySetIdentity: base + 1,
+      resolveBufferIdentity: base + 2,
+      resultBufferIdentity: base + 3,
+      maxQueries: 2_048,
+      currentQueryIndex,
+      queryOffsetCount: queryOffsetUids.length,
+      queryOffsetUids,
+      frameCount: frames.length,
+      frames,
+      timestampUidCount: timestampUids.length,
+      timestampUids: [...timestampUids].sort(),
+      pendingResolve: false,
+      isDisposed: false,
+      resultBufferMapState: 'unmapped',
+    };
+  };
+  const diagnostics = ({ tracking, stage }) => ({
+    schemaVersion: 1,
+    kind: 'three-r185-timestamp-pool-diagnostics',
+    backendTrackingEnabled: tracking,
+    ...Object.fromEntries(['render', 'compute'].map((type) => {
+      if (stage === 'start') return [type, pool(type, {
+        frames: [1], timestampUids: primeUids[type],
+      })];
+      if (stage === 'before') return [type, pool(type, {
+        frames: [1],
+        timestampUids: primeUids[type],
+        queryOffsetUids: timedUids[type],
+        currentQueryIndex: 1_600,
+      })];
+      return [type, pool(type, {
+        frames: combinedFrames,
+        timestampUids: [...primeUids[type], ...timedUids[type]],
+      })];
+    })),
+  });
+  const start = diagnostics({ tracking: false, stage: 'start' });
+  const before = diagnostics({ tracking: true, stage: 'before' });
+  const after = diagnostics({ tracking: true, stage: 'after' });
+  return {
+    topology: {
+      schemaVersion: 1,
+      kind: 'three-r185-timestamp-resolution-topology',
+      mode: 'single-post-measurement',
+      warmupBoundaryResolveBatchCount: 0,
+      postMeasurementResolveBatchCount: 1,
+      queriesPerTimestampUid: 2,
+      requiredQueriesPerType: 1_600,
+      resolvedFrameCountByType: { render: 800, compute: 800 },
+      firstGpuFrameId: 10,
+      lastGpuFrameId: 809,
+      intervalContiguous: true,
+      poolsAtStart: start,
+      poolsBeforePostMeasurementResolve: before,
+      poolsAfterPostMeasurementResolve: after,
+    },
+    completion: {
+      timestampPoolsAtTimingStart: start,
+      timestampPoolsAtTimingEnd: after,
+      timestampPhaseBoundaryExact: true,
+      timestampResolvedFrameIntervalExact: true,
+      timestampResolutionTopologyExact: true,
+    },
+    timestampEvidence: {
+      warmupFramesByType: { render: warmupFrames, compute: warmupFrames },
+      measurementFramesByType: { render: measurementFrames, compute: measurementFrames },
+      warmupUidsByType: {
+        render: timedUids.render.slice(0, 320),
+        compute: timedUids.compute.slice(0, 320),
+      },
+      measurementUidsByType: {
+        render: timedUids.render.slice(320),
+        compute: timedUids.compute.slice(320),
+      },
+    },
+  };
+}
+
+test('continuous timestamp resolution proves capacity, unresolved state, and all 800 frames', () => {
+  const valid = continuousTimestampEvidence();
+  assert.equal(verifyStandaloneContinuousTimestampResolutionForTest(valid), true);
+
+  const shortEnd = structuredClone(valid);
+  shortEnd.topology.poolsAfterPostMeasurementResolve.render.frameCount = 480;
+  shortEnd.completion.timestampPoolsAtTimingEnd.render.frameCount = 480;
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(shortEnd),
+    /invalid resolved frame IDs|query capacity or pool state|post-resolve cardinality/,
+  );
+
+  const lowCapacity = structuredClone(valid);
+  for (const snapshot of [
+    lowCapacity.topology.poolsAtStart,
+    lowCapacity.topology.poolsBeforePostMeasurementResolve,
+    lowCapacity.topology.poolsAfterPostMeasurementResolve,
+    lowCapacity.completion.timestampPoolsAtTimingStart,
+    lowCapacity.completion.timestampPoolsAtTimingEnd,
+  ]) snapshot.compute.maxQueries = 1_599;
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(lowCapacity),
+    /must be a safe integer|query capacity or pool state/,
+  );
+
+  const nonintegerCapacity = structuredClone(valid);
+  for (const snapshot of [
+    nonintegerCapacity.topology.poolsAtStart,
+    nonintegerCapacity.topology.poolsBeforePostMeasurementResolve,
+    nonintegerCapacity.topology.poolsAfterPostMeasurementResolve,
+    nonintegerCapacity.completion.timestampPoolsAtTimingStart,
+    nonintegerCapacity.completion.timestampPoolsAtTimingEnd,
+  ]) snapshot.render.maxQueries = 1_600.5;
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(nonintegerCapacity),
+    /must be a safe integer|query capacity or pool state/,
+  );
+
+  const earlyResolve = structuredClone(valid);
+  earlyResolve.topology.poolsBeforePostMeasurementResolve.compute.currentQueryIndex = 960;
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(earlyResolve),
+    /query capacity or pool state/,
+  );
+
+  const inconsistentLists = structuredClone(valid);
+  inconsistentLists.topology.poolsBeforePostMeasurementResolve.render.timestampUidCount = 2;
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(inconsistentLists),
+    /invalid resolved timestamp UIDs|query capacity or pool state/,
+  );
+
+  const duplicateLists = structuredClone(valid);
+  const duplicateUid = duplicateLists.topology.poolsAtStart.compute.timestampUids[0];
+  duplicateLists.topology.poolsAtStart.compute.timestampUids = [duplicateUid, duplicateUid];
+  duplicateLists.topology.poolsAtStart.compute.timestampUidCount = 2;
+  duplicateLists.topology.poolsBeforePostMeasurementResolve.compute.timestampUids = [
+    duplicateUid,
+    duplicateUid,
+  ];
+  duplicateLists.topology.poolsBeforePostMeasurementResolve.compute.timestampUidCount = 2;
+  duplicateLists.topology.poolsAfterPostMeasurementResolve.compute.timestampUids = [
+    duplicateUid,
+    ...duplicateLists.topology.poolsAfterPostMeasurementResolve.compute.timestampUids,
+  ].sort();
+  duplicateLists.topology.poolsAfterPostMeasurementResolve.compute.timestampUidCount = 802;
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(duplicateLists),
+    /invalid resolved timestamp UIDs|query capacity or pool state/,
+  );
+
+  const extraBatch = structuredClone(valid);
+  extraBatch.topology.postMeasurementResolveBatchCount = 2;
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(extraBatch),
+    /one continuous post-measurement resolution/,
+  );
+
+  const wrongDiagnosticMetadata = structuredClone(valid);
+  for (const diagnostics of new Set([
+    wrongDiagnosticMetadata.topology.poolsAtStart,
+    wrongDiagnosticMetadata.completion.timestampPoolsAtTimingStart,
+  ])) {
+    diagnostics.schemaVersion = 999;
+    diagnostics.kind = 'forged';
+  }
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(wrongDiagnosticMetadata),
+    /invalid diagnostic metadata/,
+  );
+
+  const forgedDiagnostics = structuredClone(valid);
+  for (const diagnostics of new Set([
+    forgedDiagnostics.topology.poolsAtStart,
+    forgedDiagnostics.topology.poolsBeforePostMeasurementResolve,
+    forgedDiagnostics.topology.poolsAfterPostMeasurementResolve,
+    forgedDiagnostics.completion.timestampPoolsAtTimingStart,
+    forgedDiagnostics.completion.timestampPoolsAtTimingEnd,
+  ])) {
+    diagnostics.unrecognizedProof = true;
+  }
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(forgedDiagnostics),
+    /unexpected schema/,
+  );
+
+  const identityFreeDiagnostics = structuredClone(valid);
+  for (const diagnostics of new Set([
+    identityFreeDiagnostics.topology.poolsAtStart,
+    identityFreeDiagnostics.topology.poolsBeforePostMeasurementResolve,
+    identityFreeDiagnostics.topology.poolsAfterPostMeasurementResolve,
+    identityFreeDiagnostics.completion.timestampPoolsAtTimingStart,
+    identityFreeDiagnostics.completion.timestampPoolsAtTimingEnd,
+  ])) {
+    for (const type of ['render', 'compute']) {
+      diagnostics[type].poolIdentity = null;
+      diagnostics[type].querySetIdentity = null;
+      diagnostics[type].resolveBufferIdentity = null;
+      diagnostics[type].resultBufferIdentity = null;
+    }
+  }
+  assert.throws(
+    () => verifyStandaloneContinuousTimestampResolutionForTest(identityFreeDiagnostics),
+    /must be a safe integer/,
+  );
+});
+
+test('reused session timestamp pools join the first resolved history to trial two', () => {
+  const first = continuousTimestampEvidence();
+  const secondStart = structuredClone(first.topology.poolsAfterPostMeasurementResolve);
+  secondStart.backendTrackingEnabled = false;
+  const records = [
+    {
+      sessionId: 'session-1',
+      visibilityOrderPosition: 0,
+      timestampPoolsAtStart: first.topology.poolsAtStart,
+      timestampPoolsAtEnd: first.topology.poolsAfterPostMeasurementResolve,
+    },
+    {
+      sessionId: 'session-1',
+      visibilityOrderPosition: 1,
+      timestampPoolsAtStart: secondStart,
+      timestampPoolsAtEnd: first.topology.poolsAfterPostMeasurementResolve,
+    },
+  ];
+  assert.deepEqual(verifyStandaloneSessionTimestampContinuity(records), {
+    sessionCount: 1,
+    transitionCount: 1,
+    withinSessionTimestampHistoryExact: true,
+  });
+  const detached = structuredClone(records);
+  detached[1].timestampPoolsAtStart.compute.timestampUids.pop();
+  detached[1].timestampPoolsAtStart.compute.timestampUidCount -= 1;
+  assert.throws(
+    () => verifyStandaloneSessionTimestampContinuity(detached),
+    /compute timestamp history transition/,
   );
 });
 

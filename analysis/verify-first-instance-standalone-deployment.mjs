@@ -19,10 +19,15 @@ import {
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MATRIX_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_BLOCKS,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_SESSION_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_SESSIONS_PER_MATRIX,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TRIAL_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TRIALS_PER_SESSION,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES,
   buildFirstInstanceStandaloneDeploymentPlan,
   validateFirstInstanceStandaloneDeploymentPlan,
@@ -487,6 +492,17 @@ function validateManifestEnvelope(manifest) {
     measuredFrames: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
     measuredBlockSize: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_BLOCK_SIZE,
     measuredBlockCount: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_BLOCKS,
+    timestampResolution: {
+      mode: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
+      warmupBoundaryResolveBatchCount:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
+      postMeasurementResolveBatchCount:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+      queriesPerTimestampUid:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
+      requiredQueriesPerType:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
+    },
   }, 'manifest fixed workload');
   requireSame(manifest.analysis, {
     invokedByCaptureRunner: false,
@@ -1517,7 +1533,17 @@ async function validateTrialArtifacts({
   requireCondition(resourceAudit.sessionCount === selection.sessions.length
     && resourceAudit.sessionNamespaceCount === selection.sessions.length,
   'trial records do not prove one unique namespace per selected session.');
-  return { results, usedNonces, resourceAudit };
+  const timestampContinuityAudit = verifyStandaloneSessionTimestampContinuity(
+    results.map((result) => ({
+      sessionId: result.sessionId,
+      visibilityOrderPosition: result.visibilityOrderPosition,
+      timestampPoolsAtStart: result.timestampPoolsAtStart,
+      timestampPoolsAtEnd: result.timestampPoolsAtEnd,
+    })),
+  );
+  requireCondition(timestampContinuityAudit.sessionCount === selection.sessions.length,
+    'trial timestamp histories do not cover every selected session.');
+  return { results, usedNonces, resourceAudit, timestampContinuityAudit };
 }
 
 function expectedIdentityWorkloads(trialResults) {
@@ -2798,6 +2824,47 @@ export function verifyStandaloneTimestampRecordForTest(value, expected) {
   return validateTimestampRecord(value, expected, 'timestamp record');
 }
 
+export function verifyStandaloneTimestampPhaseBoundary(
+  warmupFramesByType,
+  measurementFramesByType,
+  label = 'timestamp phase boundary',
+) {
+  const warmup = exactKeys(
+    warmupFramesByType,
+    ['compute', 'render'],
+    `${label}.warmup`,
+  );
+  const measurement = exactKeys(
+    measurementFramesByType,
+    ['compute', 'render'],
+    `${label}.measurement`,
+  );
+  for (const [phaseName, framesByType] of [
+    ['warmup', warmup],
+    ['measurement', measurement],
+  ]) {
+    for (const type of ['compute', 'render']) {
+      const frames = array(framesByType[type], `${label} ${phaseName} ${type} frames`);
+      requireCondition(frames.length > 0
+        && frames.every((frameId, index) => Number.isSafeInteger(frameId)
+          && frameId >= 0
+          && (index === 0 || frameId === frames[index - 1] + 1)),
+      `${label} ${phaseName} ${type} GPU-frame interval is not consecutive.`);
+    }
+    requireSame(framesByType.compute, framesByType.render,
+      `${label} ${phaseName} compute/render GPU-frame interval`);
+  }
+  const lastWarmupGpuFrameId = warmup.compute.at(-1);
+  const firstMeasurementGpuFrameId = measurement.compute[0];
+  requireCondition(firstMeasurementGpuFrameId === lastWarmupGpuFrameId + 1,
+    `${label} measurement GPU frame is not exactly adjacent to warmup.`);
+  return {
+    lastWarmupGpuFrameId,
+    firstMeasurementGpuFrameId,
+    idleRafCount: 0,
+  };
+}
+
 export function verifyStandaloneTimedSerialInterval(rows, timingStartSerials) {
   const records = array(rows, 'timed serial rows');
   requireCondition(records.length === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
@@ -3076,21 +3143,44 @@ function validateTimingRows(artifact, expectedTrial, baseResourceIdentity, summa
     phaseName: 'warmup',
     expectedCount: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES,
   }, `${label}.summary.timestampPhases.warmup`);
-  for (const type of ['compute', 'render']) {
-    const frames = warmupPools[type].frames;
-    requireCondition(frames.every((frameId, index) => Number.isSafeInteger(frameId)
-      && frameId >= 0
-      && (index === 0 || frameId === frames[index - 1] + 1))
-      && frames.at(-1) + 1 === measurementPools[type].frames[0],
-    `${label} ${type} warmup/measurement GPU-frame interval is not contiguous.`);
-    if (type === 'compute') {
-      requireCondition(warmupPools[type].uidRecords.every(
-        (entry) => entry.contextId === baseResourceIdentity.timestampContextId,
-      ), `${label} warmup compute timestamps use the wrong context.`);
-    }
-  }
+  verifyStandaloneTimestampPhaseBoundary(
+    {
+      compute: warmupPools.compute.frames,
+      render: warmupPools.render.frames,
+    },
+    {
+      compute: measurementPools.compute.frames,
+      render: measurementPools.render.frames,
+    },
+    label,
+  );
+  requireCondition(warmupPools.compute.uidRecords.every(
+    (entry) => entry.contextId === baseResourceIdentity.timestampContextId,
+  ), `${label} warmup compute timestamps use the wrong context.`);
   verifyStandaloneTimedSerialInterval(rows, timingStartSerials);
-  return { analysisRows, timingContext, timingStartSerials };
+  return {
+    analysisRows,
+    timingContext,
+    timingStartSerials,
+    timestampEvidence: {
+      warmupFramesByType: {
+        render: [...warmupPools.render.frames],
+        compute: [...warmupPools.compute.frames],
+      },
+      measurementFramesByType: {
+        render: [...measurementPools.render.frames],
+        compute: [...measurementPools.compute.frames],
+      },
+      warmupUidsByType: {
+        render: warmupPools.render.uidRecords.map(({ uid }) => uid),
+        compute: warmupPools.compute.uidRecords.map(({ uid }) => uid),
+      },
+      measurementUidsByType: {
+        render: measurementPools.render.uidRecords.map(({ uid }) => uid),
+        compute: measurementPools.compute.uidRecords.map(({ uid }) => uid),
+      },
+    },
+  };
 }
 
 function validateTimestampSummary(summary, expectedTrial, label) {
@@ -3160,6 +3250,33 @@ function validateTimestampSummary(summary, expectedTrial, label) {
     && summary.completionInvariant.computeCallsDuringTiming === timedFrameCount
     && summary.completionInvariant.renderCallsDuringTiming === timedFrameCount,
   `${label} completion counters do not prove exactly one compute/render call per timed frame.`);
+  const topology = summary.timestampResolutionTopology;
+  exactKeys(topology, [
+    'schemaVersion', 'kind', 'mode', 'warmupBoundaryResolveBatchCount',
+    'postMeasurementResolveBatchCount', 'queriesPerTimestampUid',
+    'requiredQueriesPerType', 'resolvedFrameCountByType', 'firstGpuFrameId',
+    'lastGpuFrameId', 'intervalContiguous', 'poolsAtStart',
+    'poolsBeforePostMeasurementResolve', 'poolsAfterPostMeasurementResolve',
+  ], `${label}.timestampResolutionTopology`);
+  exactKeys(topology.resolvedFrameCountByType, ['render', 'compute'],
+    `${label}.timestampResolutionTopology.resolvedFrameCountByType`);
+  requireCondition(topology.schemaVersion === 1
+    && topology.kind === 'three-r185-timestamp-resolution-topology'
+    && topology.mode === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE
+    && topology.warmupBoundaryResolveBatchCount
+      === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT
+    && topology.postMeasurementResolveBatchCount
+      === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT
+    && topology.queriesPerTimestampUid
+      === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID
+    && topology.requiredQueriesPerType
+      === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE
+    && topology.resolvedFrameCountByType.render === timedFrameCount
+    && topology.resolvedFrameCountByType.compute === timedFrameCount
+    && Number.isSafeInteger(topology.firstGpuFrameId)
+    && Number.isSafeInteger(topology.lastGpuFrameId)
+    && topology.intervalContiguous === true,
+  `${label} timestamp resolution topology is invalid.`);
   return summary.completionInvariant;
 }
 
@@ -3172,6 +3289,229 @@ function timestampPoolStaticIdentity(pool) {
     maxQueries: pool?.maxQueries ?? null,
     isDisposed: pool?.isDisposed ?? null,
   };
+}
+
+function arrayValuesAreUnique(values) {
+  return Array.isArray(values) && new Set(values).size === values.length;
+}
+
+const TIMESTAMP_POOL_DIAGNOSTIC_KEYS = Object.freeze([
+  'schemaVersion',
+  'kind',
+  'backendTrackingEnabled',
+  'render',
+  'compute',
+]);
+
+const TIMESTAMP_POOL_RECORD_KEYS = Object.freeze([
+  'poolIdentity',
+  'querySetIdentity',
+  'resolveBufferIdentity',
+  'resultBufferIdentity',
+  'maxQueries',
+  'currentQueryIndex',
+  'queryOffsetCount',
+  'queryOffsetUids',
+  'frameCount',
+  'frames',
+  'timestampUidCount',
+  'timestampUids',
+  'pendingResolve',
+  'isDisposed',
+  'resultBufferMapState',
+]);
+
+function validateTimestampPoolDiagnostics(
+  diagnostics,
+  label,
+  { allowNullPools = false } = {},
+) {
+  const value = exactKeys(diagnostics, TIMESTAMP_POOL_DIAGNOSTIC_KEYS, label);
+  requireCondition(value.schemaVersion === 1
+    && value.kind === 'three-r185-timestamp-pool-diagnostics'
+    && typeof value.backendTrackingEnabled === 'boolean',
+  `${label} has invalid diagnostic metadata.`);
+  for (const type of ['render', 'compute']) {
+    const poolLabel = `${label}.${type}`;
+    const pool = value[type];
+    if (pool === null && allowNullPools) continue;
+    exactKeys(pool, TIMESTAMP_POOL_RECORD_KEYS, poolLabel);
+    for (const field of [
+      'poolIdentity',
+      'querySetIdentity',
+      'resolveBufferIdentity',
+      'resultBufferIdentity',
+    ]) {
+      safeInteger(pool[field], `${poolLabel}.${field}`, { minimum: 1 });
+    }
+    safeInteger(pool.maxQueries, `${poolLabel}.maxQueries`, { minimum: 2 });
+    safeInteger(pool.currentQueryIndex, `${poolLabel}.currentQueryIndex`, {
+      maximum: pool.maxQueries,
+    });
+    safeInteger(pool.queryOffsetCount, `${poolLabel}.queryOffsetCount`);
+    safeInteger(pool.frameCount, `${poolLabel}.frameCount`);
+    safeInteger(pool.timestampUidCount, `${poolLabel}.timestampUidCount`);
+    const queryOffsetUids = array(pool.queryOffsetUids, `${poolLabel}.queryOffsetUids`);
+    const frames = array(pool.frames, `${poolLabel}.frames`);
+    const timestampUids = array(pool.timestampUids, `${poolLabel}.timestampUids`);
+    requireCondition(queryOffsetUids.length === pool.queryOffsetCount
+      && arrayValuesAreUnique(queryOffsetUids)
+      && queryOffsetUids.every(
+        (uid) => typeof uid === 'string' && uid.length > 0,
+      ),
+    `${poolLabel} has invalid pending timestamp UIDs.`);
+    requireCondition(frames.length === pool.frameCount
+      && arrayValuesAreUnique(frames)
+      && frames.every((frameId) => Number.isSafeInteger(frameId) && frameId >= 0),
+    `${poolLabel} has invalid resolved frame IDs.`);
+    requireCondition(timestampUids.length === pool.timestampUidCount
+      && arrayValuesAreUnique(timestampUids)
+      && timestampUids.every((uid) => typeof uid === 'string' && uid.length > 0)
+      && isDeepStrictEqual(timestampUids, [...timestampUids].sort()),
+    `${poolLabel} has invalid resolved timestamp UIDs.`);
+    requireCondition(typeof pool.pendingResolve === 'boolean'
+      && typeof pool.isDisposed === 'boolean'
+      && ['unmapped', 'pending', 'mapped'].includes(pool.resultBufferMapState),
+    `${poolLabel} has invalid resolve/map state.`);
+  }
+  return value;
+}
+
+export function verifyStandaloneContinuousTimestampResolutionForTest({
+  topology,
+  completion,
+  timestampEvidence,
+}, label = 'continuous timestamp resolution') {
+  exactKeys(topology, [
+    'schemaVersion', 'kind', 'mode', 'warmupBoundaryResolveBatchCount',
+    'postMeasurementResolveBatchCount', 'queriesPerTimestampUid',
+    'requiredQueriesPerType', 'resolvedFrameCountByType', 'firstGpuFrameId',
+    'lastGpuFrameId', 'intervalContiguous', 'poolsAtStart',
+    'poolsBeforePostMeasurementResolve', 'poolsAfterPostMeasurementResolve',
+  ], `${label}.topology`);
+  exactKeys(topology.resolvedFrameCountByType, ['render', 'compute'],
+    `${label}.topology.resolvedFrameCountByType`);
+  record(completion, `${label}.completion`);
+  record(timestampEvidence, `${label}.timestampEvidence`);
+  verifyStandaloneTimestampPhaseBoundary(
+    timestampEvidence.warmupFramesByType,
+    timestampEvidence.measurementFramesByType,
+    label,
+  );
+  const combinedFrames = [
+    ...timestampEvidence.warmupFramesByType.render,
+    ...timestampEvidence.measurementFramesByType.render,
+  ];
+  const timedFrameCount = FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+    + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES;
+  const requiredQueries = FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE;
+  requireCondition(combinedFrames.length === timedFrameCount
+    && topology.schemaVersion === 1
+    && topology.kind === 'three-r185-timestamp-resolution-topology'
+    && topology.mode === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE
+    && topology.warmupBoundaryResolveBatchCount
+      === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT
+    && topology.postMeasurementResolveBatchCount
+      === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT
+    && topology.queriesPerTimestampUid
+      === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID
+    && topology.requiredQueriesPerType === requiredQueries
+    && topology.resolvedFrameCountByType?.render === timedFrameCount
+    && topology.resolvedFrameCountByType?.compute === timedFrameCount
+    && topology.firstGpuFrameId === combinedFrames[0]
+    && topology.lastGpuFrameId === combinedFrames.at(-1)
+    && topology.intervalContiguous === true,
+  `${label} topology does not prove one continuous post-measurement resolution.`);
+  requireSame(topology.poolsAtStart, completion.timestampPoolsAtTimingStart,
+    `${label} start/completion timestamp pools`);
+  requireSame(topology.poolsAfterPostMeasurementResolve, completion.timestampPoolsAtTimingEnd,
+    `${label} resolved/completion timestamp pools`);
+  const startDiagnostics = validateTimestampPoolDiagnostics(
+    topology.poolsAtStart,
+    `${label}.topology.poolsAtStart`,
+  );
+  const beforeDiagnostics = validateTimestampPoolDiagnostics(
+    topology.poolsBeforePostMeasurementResolve,
+    `${label}.topology.poolsBeforePostMeasurementResolve`,
+  );
+  const afterDiagnostics = validateTimestampPoolDiagnostics(
+    topology.poolsAfterPostMeasurementResolve,
+    `${label}.topology.poolsAfterPostMeasurementResolve`,
+  );
+  requireCondition(startDiagnostics?.backendTrackingEnabled === false
+    && beforeDiagnostics?.backendTrackingEnabled === true
+    && afterDiagnostics?.backendTrackingEnabled === true,
+  `${label} timestamp tracking transitions are invalid.`);
+  for (const type of ['render', 'compute']) {
+    const start = startDiagnostics[type];
+    const before = beforeDiagnostics[type];
+    const after = afterDiagnostics[type];
+    const expectedUids = [
+      ...timestampEvidence.warmupUidsByType[type],
+      ...timestampEvidence.measurementUidsByType[type],
+    ];
+    requireSame(timestampPoolStaticIdentity(before), timestampPoolStaticIdentity(start),
+      `${label} ${type} start/pre-resolve static pool identity`);
+    requireSame(timestampPoolStaticIdentity(after), timestampPoolStaticIdentity(start),
+      `${label} ${type} start/post-resolve static pool identity`);
+    requireCondition(Number.isInteger(start?.maxQueries)
+      && start.maxQueries >= requiredQueries
+      && start.currentQueryIndex === 0
+      && start.queryOffsetCount === 0
+      && start.queryOffsetUids?.length === start.queryOffsetCount
+      && arrayValuesAreUnique(start.queryOffsetUids)
+      && start.frames?.length === start.frameCount
+      && arrayValuesAreUnique(start.frames)
+      && start.timestampUids?.length === start.timestampUidCount
+      && arrayValuesAreUnique(start.timestampUids)
+      && start.pendingResolve === false
+      && start.isDisposed === false
+      && start.resultBufferMapState === 'unmapped'
+      && before?.currentQueryIndex === requiredQueries
+      && before.queryOffsetCount === timedFrameCount
+      && before.queryOffsetUids?.length === before.queryOffsetCount
+      && arrayValuesAreUnique(before.queryOffsetUids)
+      && before.frames?.length === before.frameCount
+      && arrayValuesAreUnique(before.frames)
+      && before.timestampUids?.length === before.timestampUidCount
+      && arrayValuesAreUnique(before.timestampUids)
+      && before.pendingResolve === false
+      && before.isDisposed === false
+      && before.resultBufferMapState === 'unmapped'
+      && after?.currentQueryIndex === 0
+      && after.queryOffsetCount === 0
+      && after.queryOffsetUids?.length === after.queryOffsetCount
+      && arrayValuesAreUnique(after.queryOffsetUids)
+      && after.frames?.length === after.frameCount
+      && arrayValuesAreUnique(after.frames)
+      && after.timestampUids?.length === after.timestampUidCount
+      && arrayValuesAreUnique(after.timestampUids)
+      && after.pendingResolve === false
+      && after.isDisposed === false
+      && after.resultBufferMapState === 'unmapped',
+    `${label} ${type} query capacity or pool state is invalid.`);
+    requireSame(before.queryOffsetUids, expectedUids,
+      `${label} ${type} pending timestamp UID interval`);
+    requireCondition(before.timestampUidCount === start.timestampUidCount
+      && before.frameCount === start.frameCount,
+    `${label} ${type} pool was resolved before measurement ended.`);
+    requireSame(before.timestampUids, start.timestampUids,
+      `${label} ${type} pre-resolve timestamp history`);
+    requireSame(before.frames, start.frames,
+      `${label} ${type} pre-resolve frame history`);
+    requireCondition(after.frameCount === timedFrameCount
+      && after.timestampUidCount === start.timestampUidCount + timedFrameCount,
+    `${label} ${type} post-resolve cardinality is invalid.`);
+    requireSame(after.frames, combinedFrames,
+      `${label} ${type} resolved GPU-frame interval`);
+    requireSame(after.timestampUids, [...start.timestampUids, ...expectedUids].sort(),
+      `${label} ${type} resolved timestamp UID set`);
+  }
+  requireCondition(completion.timestampPhaseBoundaryExact === true
+    && completion.timestampResolvedFrameIntervalExact === true
+    && completion.timestampResolutionTopologyExact === true,
+  `${label} completion invariant did not bind the continuous interval.`);
+  return true;
 }
 
 function validatePinnedViewportState(state, textureUuid, label) {
@@ -3204,6 +3544,8 @@ function validateTimedBodyCommitments({
   configured,
   baseResourceIdentity,
   shaderResourceIdentity,
+  timestampResolutionTopology,
+  timestampEvidence,
   label,
 }) {
   record(timingContext, `${label}.timingContext`);
@@ -3303,9 +3645,22 @@ function validateTimedBodyCommitments({
   `${label} pipeline/program caches changed during timing.`);
   requireSame(completion.cacheAtTimingEnd?.memory, memoryAtStart,
     `${label} renderer memory timing start/end`);
+  verifyStandaloneContinuousTimestampResolutionForTest({
+    topology: timestampResolutionTopology,
+    completion,
+    timestampEvidence,
+  }, `${label}.timestampResolution`);
+  const combinedTimestampFrames = [
+    ...timestampEvidence.warmupFramesByType.render,
+    ...timestampEvidence.measurementFramesByType.render,
+  ];
+  const preprimePools = configured.timestampPoolPreprime.after;
   for (const type of ['render', 'compute']) {
     const start = completion.timestampPoolsAtTimingStart?.[type];
     const end = completion.timestampPoolsAtTimingEnd?.[type];
+    requireSame(timestampPoolStaticIdentity(preprimePools[type]),
+      timestampPoolStaticIdentity(start),
+      `${label} ${type} pre-prime/timing-start timestamp-pool identity`);
     requireSame(timestampPoolStaticIdentity(end), timestampPoolStaticIdentity(start),
       `${label} ${type} timestamp-pool static identity`);
     requireSame(timestampPoolStaticIdentity(start), poolStaticAtStart[type],
@@ -3315,7 +3670,11 @@ function validateTimedBodyCommitments({
       && end.timestampUidCount === start.timestampUidCount
         + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
         + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES
-      && end.frameCount === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES
+      && start.maxQueries >= (FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+        + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES) * 2
+      && end.frameCount === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+        + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES
+      && isDeepStrictEqual(end.frames, combinedTimestampFrames)
       && end.currentQueryIndex === 0
       && end.queryOffsetCount === 0
       && end.pendingResolve === false
@@ -3368,11 +3727,50 @@ function validateConfigured(configured, expectedSession, expectedTrial, label) {
   `${label} selected configuration differs from the frozen session.`);
   requireCondition(configured.shaderEvidence === null,
     `${label} compiled a shader before the first runner challenge.`);
-  requireCondition(configured.timestampPoolPreprime?.schemaVersion === 1
-    && configured.timestampPoolPreprime?.kind === 'three-r185-timestamp-pool-preprime'
-    && configured.timestampPoolPreprime?.addedTimestampUidCount?.render === 1
-    && configured.timestampPoolPreprime?.addedTimestampUidCount?.compute === 1,
+  const timestampPreprime = exactKeys(configured.timestampPoolPreprime, [
+    'schemaVersion', 'kind', 'before', 'after', 'addedTimestampUidCount',
+  ], `${label}.timestampPoolPreprime`);
+  const preprimeBefore = validateTimestampPoolDiagnostics(
+    timestampPreprime.before,
+    `${label}.timestampPoolPreprime.before`,
+    { allowNullPools: true },
+  );
+  const preprimeAfter = validateTimestampPoolDiagnostics(
+    timestampPreprime.after,
+    `${label}.timestampPoolPreprime.after`,
+  );
+  const configuredTimestampPools = validateTimestampPoolDiagnostics(
+    configured.timestampPoolDiagnostics,
+    `${label}.timestampPoolDiagnostics`,
+  );
+  exactKeys(timestampPreprime.addedTimestampUidCount, ['render', 'compute'],
+    `${label}.timestampPoolPreprime.addedTimestampUidCount`);
+  requireCondition(timestampPreprime.schemaVersion === 1
+    && timestampPreprime.kind === 'three-r185-timestamp-pool-preprime'
+    && timestampPreprime.addedTimestampUidCount.render === 1
+    && timestampPreprime.addedTimestampUidCount.compute === 1
+    && preprimeBefore.backendTrackingEnabled === false
+    && preprimeAfter.backendTrackingEnabled === false
+    && configuredTimestampPools.backendTrackingEnabled === false,
   `${label} timestamp pools were not exactly pre-primed.`);
+  requireSame(configuredTimestampPools, preprimeAfter,
+    `${label} configured/pre-prime timestamp pools`);
+  for (const type of ['render', 'compute']) {
+    const before = preprimeBefore[type];
+    const after = preprimeAfter[type];
+    requireCondition(after.currentQueryIndex === 0
+      && after.queryOffsetCount === 0
+      && after.frameCount === 1
+      && after.timestampUidCount === (before?.timestampUidCount ?? 0) + 1
+      && after.pendingResolve === false
+      && after.isDisposed === false
+      && after.resultBufferMapState === 'unmapped',
+    `${label} ${type} timestamp pool lacks one clean resolved prime UID.`);
+    if (before !== null) {
+      requireSame(timestampPoolStaticIdentity(after), timestampPoolStaticIdentity(before),
+        `${label} ${type} pre-prime pool identity`);
+    }
+  }
   requireCondition(configured.strategyDiagnostics?.kind
     === 'first-instance-live-standalone-deployment'
     && configured.strategyDiagnostics?.laneCommandBufferCount === 1
@@ -3460,6 +3858,17 @@ function validateProtocol(protocol, expectedTrial, label) {
     measuredFrames: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
     measuredBlockSize: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_BLOCK_SIZE,
     measuredBlockCount: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_BLOCKS,
+    timestampResolution: {
+      mode: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
+      warmupBoundaryResolveBatchCount:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
+      postMeasurementResolveBatchCount:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+      queriesPerTimestampUid:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
+      requiredQueriesPerType:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
+    },
     selectedLaneOnly: true,
     absentLaneConstructionAllowed: false,
     visibilityExposure: expectedTrial.visibilityExposure,
@@ -3680,6 +4089,8 @@ async function validateTrialArtifact({
     configured: artifact.configured,
     baseResourceIdentity,
     shaderResourceIdentity: semantics.primedResourceIdentities,
+    timestampResolutionTopology: artifact.timing.summary.timestampResolutionTopology,
+    timestampEvidence: timingRows.timestampEvidence,
     label: `${label}.timedBody`,
   });
   return {
@@ -3690,6 +4101,11 @@ async function validateTrialArtifact({
     laneId: expectedTrial.assignedLaneId,
     visibilityFraction: expectedTrial.visibilityFraction,
     visibilityExposure: expectedTrial.visibilityExposure,
+    visibilityOrderPosition: expectedTrial.visibilityOrderPosition,
+    timestampPoolsAtStart:
+      artifact.timing.summary.timestampResolutionTopology.poolsAtStart,
+    timestampPoolsAtEnd:
+      artifact.timing.summary.timestampResolutionTopology.poolsAfterPostMeasurementResolve,
     resourceIdentity: baseResourceIdentity,
     workload: preflight.workload,
     output: outputSemanticIdentity(preflight.output),
@@ -3732,6 +4148,51 @@ export function verifyStandaloneSessionResourceIdentityRecords(records) {
     sessionCount: bySession.size,
     sessionNamespaceCount: namespaces.size,
     withinSessionResourceIdentityExact: true,
+  };
+}
+
+/**
+ * The two visibility trials in a session reuse one browser, renderer, and pair
+ * of timestamp pools. The first resolved history must therefore become the
+ * second trial's exact clean starting history without crossing a process.
+ */
+export function verifyStandaloneSessionTimestampContinuity(records) {
+  const bySession = new Map();
+  for (const recordValue of array(records, 'session timestamp records')) {
+    const item = record(recordValue, 'session timestamp record');
+    nonemptyString(item.sessionId, 'session timestamp record.sessionId');
+    requireCondition(item.visibilityOrderPosition === 0
+      || item.visibilityOrderPosition === 1,
+    `session ${item.sessionId} has an invalid visibility-order position.`);
+    record(item.timestampPoolsAtStart,
+      `session ${item.sessionId} timestampPoolsAtStart`);
+    record(item.timestampPoolsAtEnd,
+      `session ${item.sessionId} timestampPoolsAtEnd`);
+    const session = bySession.get(item.sessionId) ?? [];
+    session.push(item);
+    bySession.set(item.sessionId, session);
+  }
+  for (const [sessionId, entries] of bySession) {
+    entries.sort((left, right) => (
+      left.visibilityOrderPosition - right.visibilityOrderPosition
+    ));
+    requireCondition(entries.length === 2
+      && entries[0].visibilityOrderPosition === 0
+      && entries[1].visibilityOrderPosition === 1,
+    `session ${sessionId} does not contain its exact two-trial sequence.`);
+    const [first, second] = entries;
+    requireCondition(first.timestampPoolsAtEnd.backendTrackingEnabled === true
+      && second.timestampPoolsAtStart.backendTrackingEnabled === false,
+    `session ${sessionId} timestamp tracking did not reset between trials.`);
+    for (const type of ['render', 'compute']) {
+      requireSame(first.timestampPoolsAtEnd[type], second.timestampPoolsAtStart[type],
+        `session ${sessionId} ${type} timestamp history transition`);
+    }
+  }
+  return {
+    sessionCount: bySession.size,
+    transitionCount: bySession.size,
+    withinSessionTimestampHistoryExact: true,
   };
 }
 
@@ -3946,6 +4407,7 @@ export async function verifyFirstInstanceStandaloneDeploymentRunDirectory(
       shaderObservationCount: usedNonces.size,
       lifecycleValidation,
       resourceAudit: trialValidation.resourceAudit,
+      timestampContinuityAudit: trialValidation.timestampContinuityAudit,
       shaderSemantics,
       workloadAndOutput,
       viteRuntime,
@@ -3989,6 +4451,7 @@ export async function verifyFirstInstanceStandaloneDeploymentRunDirectory(
     shaderObservationCount: usedNonces.size,
     lifecycleValidation,
     resourceAudit: trialValidation.resourceAudit,
+    timestampContinuityAudit: trialValidation.timestampContinuityAudit,
     shaderSemantics,
     workloadAndOutput,
     globalIdentity,

@@ -106,9 +106,10 @@ never pooled to rescue a failed matrix.
 
 ## Timed body and trial estimator
 
-Each visibility trial performs exactly 320 warmup frames followed by 480
-retained measured frames. Measurement is partitioned into 60 consecutive
-eight-frame blocks. Every frame performs only:
+Each visibility trial performs one uninterrupted 800-frame timestamp interval:
+exactly 320 warmup frames immediately followed by 480 retained measured
+frames. Measurement is partitioned into 60 consecutive eight-frame blocks.
+Every frame performs only:
 
 ```text
 update the fixed frustum state
@@ -118,10 +119,18 @@ render the selected pre-recorded bundle once
 
 Warmup and measurement forbid an opposite-lane action, resource reconstruction,
 readback, diagnostic render, extra dispatch, or benchmark-authored storage or
-indirect-buffer write. Timestamp resolution and correctness readback occur only
-at declared untimed boundaries. Every compute and render duration must be
-strictly positive, join its exact frame and submitted resource identities, and
-come from a timestamp pool whose observed quantum is at most 1,000 ns.
+indirect-buffer write. In particular, no timestamp resolve, query-set copy, or
+buffer map may occur between warmup and measurement. Each render and compute
+pool adds exactly 800 pending UID offsets for the trial, consuming 1,600 of the
+2,048 available r185 queries. Each pool is resolved once in one coordinated
+step only after the 480th measured frame; the continuous result is then
+partitioned into the 320-frame warmup and 480-frame measurement views. The
+retained evidence binds clean pool state before timing, 1,600 pending queries
+and 800 unresolved UIDs immediately before that step, and one clean resolved
+800-frame batch afterward. Correctness readback remains outside the timed
+interval. Every compute and render duration must be strictly positive, join its
+exact frame and submitted resource identities, and come from a timestamp pool
+whose observed quantum is at most 1,000 ns in each partition.
 
 For session `s`, visibility `v`, and metric `m`, the absolute session response is:
 

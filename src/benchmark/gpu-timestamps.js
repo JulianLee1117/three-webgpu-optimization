@@ -363,6 +363,113 @@ function resolutionForRecords(records) {
   };
 }
 
+function requireContiguousTimestampFrames(frames, label) {
+  if (!Array.isArray(frames) || frames.length === 0) {
+    throw new TypeError(`${label} must be a nonempty Array.`);
+  }
+  const seen = new Set();
+  for (let index = 0; index < frames.length; index += 1) {
+    const frame = frames[index];
+    if (!Number.isSafeInteger(frame) || frame < 0) {
+      throw new RangeError(`${label} contains an invalid GPU frame ID.`);
+    }
+    if (seen.has(frame)) {
+      throw new Error(`${label} contains duplicate GPU frame ${frame}.`);
+    }
+    if (index > 0 && frame !== frames[index - 1] + 1) {
+      throw new Error(`${label} is not one consecutive GPU-frame interval.`);
+    }
+    seen.add(frame);
+  }
+  return [...frames];
+}
+
+function sameFrames(left, right) {
+  return left.length === right.length
+    && left.every((frame, index) => frame === right[index]);
+}
+
+function resolvedTimestampMapView(maps, frames) {
+  const includeCompute = maps.includedTypes.includes('compute');
+  const view = createTimestampMaps(includeCompute, maps.strictUidGrammar);
+  const frameSet = new Set(frames);
+  for (const type of maps.includedTypes) {
+    const records = maps.uidRecords[type].filter((record) => frameSet.has(record.frameId));
+    view.frames[type] = [...frames];
+    view.uidRecords[type] = records.map((record) => ({ ...record }));
+    for (const frame of frames) {
+      view[type].set(frame, 0);
+      view.uidCounts[type].set(frame, 0);
+      view.uidsByFrame[type].set(frame, []);
+    }
+    for (const record of records) {
+      if (!view.uidsByFrame[type].has(record.frameId)) {
+        throw new Error(`${type} timestamp record belongs to an undeclared GPU frame.`);
+      }
+      view.uidDurations[type].set(record.uid, record.durationMs);
+      view.uidsByFrame[type].get(record.frameId).push(record.uid);
+      view[type].set(record.frameId, view[type].get(record.frameId) + record.durationMs);
+      view.uidCounts[type].set(
+        record.frameId,
+        view.uidCounts[type].get(record.frameId) + 1,
+      );
+    }
+    view.resolutions[type] = resolutionForRecords(view.uidRecords[type]);
+  }
+  return view;
+}
+
+/**
+ * Splits one continuously resolved timestamp interval into phase-scoped views.
+ * The raw pool frames must match the complete requested interval exactly, so a
+ * missing, duplicated, reordered, or extra frame fails before attribution.
+ */
+export function partitionResolvedTimestampMaps(maps, {
+  warmupFrames,
+  measurementFrames,
+}) {
+  if (maps === null || typeof maps !== 'object' || Array.isArray(maps)
+    || maps.kind !== 'three-r185-resolved-timestamp-maps'
+    || !Array.isArray(maps.includedTypes)
+    || typeof maps.strictUidGrammar !== 'boolean') {
+    throw new TypeError('Resolved timestamp maps are invalid.');
+  }
+  const includedTypes = [...maps.includedTypes];
+  if (includedTypes.length === 0
+    || new Set(includedTypes).size !== includedTypes.length
+    || includedTypes.some((type) => !TIMESTAMP_TYPES.includes(type))) {
+    throw new Error('Resolved timestamp maps contain invalid included types.');
+  }
+  const warmup = requireContiguousTimestampFrames(warmupFrames, 'warmupFrames');
+  const measurement = requireContiguousTimestampFrames(
+    measurementFrames,
+    'measurementFrames',
+  );
+  const combined = requireContiguousTimestampFrames(
+    [...warmup, ...measurement],
+    'combined timestamp phase frames',
+  );
+  for (const type of includedTypes) {
+    if (!Array.isArray(maps.frames?.[type])
+      || !sameFrames(maps.frames[type], combined)) {
+      throw new Error(
+        `${type} resolved timestamp frames differ from the complete requested interval.`,
+      );
+    }
+    if (!Array.isArray(maps.uidRecords?.[type])) {
+      throw new TypeError(`${type} resolved timestamp UID records must be an Array.`);
+    }
+    const combinedSet = new Set(combined);
+    if (maps.uidRecords[type].some((record) => !combinedSet.has(record?.frameId))) {
+      throw new Error(`${type} resolved timestamp records escape the requested interval.`);
+    }
+  }
+  return Object.freeze({
+    warmup: resolvedTimestampMapView(maps, warmup),
+    measurement: resolvedTimestampMapView(maps, measurement),
+  });
+}
+
 export async function resolveTimestampMaps(renderer, {
   includeCompute,
   collect,

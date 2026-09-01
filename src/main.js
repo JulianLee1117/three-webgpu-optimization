@@ -58,6 +58,15 @@ import {
   parseFirstInstanceStandaloneBoot,
 } from './benchmark/first-instance-standalone-boot.js';
 import {
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES,
+} from './benchmark/first-instance-standalone-deployment-plan.js';
+import {
   buildFixedSlicePerBucketStrategy,
   buildFixedSliceStrategy,
   buildIndirectFirstInstanceStrategy,
@@ -599,8 +608,8 @@ function validateTrialCompletion(context) {
   const diagnostics = strategy?.diagnostics?.() ?? null;
   const lifecycleDiagnostics = strategy?.lifecycleDiagnostics?.() ?? null;
   if (context.modeId === FIRST_INSTANCE_LIVE_STANDALONE_MODE) {
-    const timedFrameCount = FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES
-      + FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES;
+    const timedFrameCount = FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+      + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES;
     const strategyComputeCallsDuringTiming = (lifecycleDiagnostics?.computeCallSerial ?? -1)
       - context.strategyComputeCallSerialAtTimingStart;
     const renderCallsDuringTiming = renderer.info.render.calls
@@ -642,6 +651,29 @@ function validateTrialCompletion(context) {
     const timestampPoolsStaticExact = timestampPoolStaticAtTimingStart !== null
       && JSON.stringify(timestampPoolStaticAtTimingEnd)
         === JSON.stringify(timestampPoolStaticAtTimingStart);
+    const timestampFramesByType = Object.fromEntries(['render', 'compute'].map((type) => [
+      type,
+      [
+        ...(trial.timestampPhases?.warmup?.pools?.[type]?.frames ?? []),
+        ...(trial.timestampPhases?.measurement?.pools?.[type]?.frames ?? []),
+      ],
+    ]));
+    const timestampPhaseBoundaryExact = ['render', 'compute'].every((type) => {
+      const warmup = trial.timestampPhases?.warmup?.pools?.[type]?.frames;
+      const measurement = trial.timestampPhases?.measurement?.pools?.[type]?.frames;
+      return warmup?.length === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+        && measurement?.length === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES
+        && measurement[0] === warmup.at(-1) + 1;
+    });
+    const timestampResolvedFrameIntervalExact = timestampPhaseBoundaryExact
+      && JSON.stringify(timestampFramesByType.render)
+        === JSON.stringify(timestampFramesByType.compute)
+      && timestampFramesByType.render.length === timedFrameCount
+      && timestampFramesByType.render.every(
+        (frameId, index, frames) => Number.isSafeInteger(frameId)
+          && frameId >= 0
+          && (index === 0 || frameId === frames[index - 1] + 1),
+      );
     const timestampPoolsResolvedCleanly = ['render', 'compute'].every((type) => {
       const before = firstInstanceLiveTimestampPoolsAtTimingStart?.[type];
       const after = timestampPoolsAtTimingEnd?.[type];
@@ -652,9 +684,33 @@ function validateTrialCompletion(context) {
         && after.pendingResolve === false
         && after.isDisposed === false
         && after.resultBufferMapState === 'unmapped'
-        && after.frameCount === FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES
+        && after.frameCount === timedFrameCount
+        && JSON.stringify(after.frames) === JSON.stringify(timestampFramesByType[type])
         && after.timestampUidCount === before.timestampUidCount + timedFrameCount;
     });
+    const timestampResolutionTopology = trial.timestampResolutionTopology;
+    const timestampResolutionTopologyExact = timestampResolutionTopology?.schemaVersion === 1
+      && timestampResolutionTopology?.kind
+        === 'three-r185-timestamp-resolution-topology'
+      && timestampResolutionTopology.mode
+        === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE
+      && timestampResolutionTopology.warmupBoundaryResolveBatchCount
+        === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT
+      && timestampResolutionTopology.postMeasurementResolveBatchCount
+        === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT
+      && timestampResolutionTopology.queriesPerTimestampUid
+        === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID
+      && timestampResolutionTopology.requiredQueriesPerType
+        === FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE
+      && timestampResolutionTopology.resolvedFrameCountByType?.render === timedFrameCount
+      && timestampResolutionTopology.resolvedFrameCountByType?.compute === timedFrameCount
+      && timestampResolutionTopology.firstGpuFrameId === timestampFramesByType.render[0]
+      && timestampResolutionTopology.lastGpuFrameId === timestampFramesByType.render.at(-1)
+      && timestampResolutionTopology.intervalContiguous === true
+      && JSON.stringify(timestampResolutionTopology.poolsAtStart)
+        === JSON.stringify(firstInstanceLiveTimestampPoolsAtTimingStart)
+      && JSON.stringify(timestampResolutionTopology.poolsAfterPostMeasurementResolve)
+        === JSON.stringify(timestampPoolsAtTimingEnd);
     const timestampPreprimeExact = firstInstanceLiveTimestampPreprime?.schemaVersion === 1
       && firstInstanceLiveTimestampPreprime?.kind === 'three-r185-timestamp-pool-preprime'
       && firstInstanceLiveTimestampPreprime?.addedTimestampUidCount?.render === 1
@@ -694,7 +750,10 @@ function validateTrialCompletion(context) {
       && computeCallsDuringTiming === timedFrameCount
       && timestampPreprimeExact
       && timestampPoolsStaticExact
+      && timestampPhaseBoundaryExact
+      && timestampResolvedFrameIntervalExact
       && timestampPoolsResolvedCleanly
+      && timestampResolutionTopologyExact
       && cacheAtTimingEnd.available === true
       && cacheAtTimingEnd.totalPipelineCacheEntries
         === context.totalPipelineCacheEntriesAtTimingStart
@@ -734,7 +793,10 @@ function validateTrialCompletion(context) {
       timestampPoolsAtTimingStart: firstInstanceLiveTimestampPoolsAtTimingStart,
       timestampPoolsAtTimingEnd,
       timestampPoolsStaticExact,
+      timestampPhaseBoundaryExact,
+      timestampResolvedFrameIntervalExact,
       timestampPoolsResolvedCleanly,
+      timestampResolutionTopologyExact,
       timestampPreprimeExact,
       viewportStateExact,
       viewportStateAtTimingEnd,
@@ -2727,6 +2789,9 @@ async function startTrial(extraContext = {}, shaderObservationRequest = null) {
     const timingPools = firstInstanceLiveTimestampPoolsAtTimingStart;
     const preprimeCommitment = timestampPoolStaticCommitment(preprimeAfter);
     const timingCommitment = timestampPoolStaticCommitment(timingPools);
+    const requiredTimestampQueries = liveFirstInstanceStandalone
+      ? FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE
+      : FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES * 2;
     const poolsClean = ['render', 'compute'].every((type) => {
       const pool = timingPools?.[type];
       return pool
@@ -2735,7 +2800,7 @@ async function startTrial(extraContext = {}, shaderObservationRequest = null) {
         && pool.pendingResolve === false
         && pool.isDisposed === false
         && pool.resultBufferMapState === 'unmapped'
-        && pool.maxQueries >= FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES * 2;
+        && pool.maxQueries >= requiredTimestampQueries;
     });
     if (firstInstanceLiveTimestampPreprime?.kind !== 'three-r185-timestamp-pool-preprime'
       || firstInstanceLiveTimestampPreprime.addedTimestampUidCount?.render !== 1
@@ -3003,8 +3068,15 @@ async function startTrial(extraContext = {}, shaderObservationRequest = null) {
         }
         : liveFirstInstanceTimed
           ? {
-            warmupFrames: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
-            measuredFrames: FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+            warmupFrames: liveFirstInstanceStandalone
+              ? FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+              : FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
+            measuredFrames: liveFirstInstanceStandalone
+              ? FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES
+              : FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+            ...(liveFirstInstanceStandalone
+              ? { deferWarmupTimestampResolution: true }
+              : {}),
           }
         : undefined,
   );

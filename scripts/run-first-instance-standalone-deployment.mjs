@@ -25,10 +25,15 @@ import {
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MATRIX_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_BLOCKS,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_SESSION_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_SESSIONS_PER_MATRIX,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TRIAL_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TRIALS_PER_SESSION,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES,
   buildFirstInstanceStandaloneDeploymentPlan,
   validateFirstInstanceStandaloneDeploymentPlan,
@@ -272,6 +277,155 @@ function parseCanonicalArray(value, label, reasons) {
   }
 }
 
+function consecutiveGpuFrames(frames) {
+  return Array.isArray(frames)
+    && frames.length > 0
+    && frames.every((frameId, index) => Number.isSafeInteger(frameId)
+      && frameId >= 0
+      && (index === 0 || frameId === frames[index - 1] + 1));
+}
+
+function arrayValuesAreUnique(values) {
+  return Array.isArray(values) && new Set(values).size === values.length;
+}
+
+function timestampPoolStaticIdentity(pool) {
+  return {
+    poolIdentity: pool?.poolIdentity ?? null,
+    querySetIdentity: pool?.querySetIdentity ?? null,
+    resolveBufferIdentity: pool?.resolveBufferIdentity ?? null,
+    resultBufferIdentity: pool?.resultBufferIdentity ?? null,
+    maxQueries: pool?.maxQueries ?? null,
+    isDisposed: pool?.isDisposed ?? null,
+  };
+}
+
+function validateStandaloneContinuousTimestampEvidence(rows, summary, reasons) {
+  const warmup = summary?.timestampPhases?.warmup?.pools;
+  const measurement = summary?.timestampPhases?.measurement?.pools;
+  const framesByType = {};
+  for (const type of ['render', 'compute']) {
+    const warmupFrames = warmup?.[type]?.frames;
+    const measurementFrames = measurement?.[type]?.frames;
+    if (!consecutiveGpuFrames(warmupFrames)
+      || !consecutiveGpuFrames(measurementFrames)
+      || measurementFrames[0] !== warmupFrames.at(-1) + 1) {
+      reasons.push(`${type} timestamp phases are not one continuous GPU-frame interval`);
+      continue;
+    }
+    framesByType[type] = [...warmupFrames, ...measurementFrames];
+  }
+  if (!sameJson(warmup?.render?.frames, warmup?.compute?.frames)
+    || !sameJson(measurement?.render?.frames, measurement?.compute?.frames)) {
+    reasons.push('compute/render timestamp phase frames differ');
+  }
+  const combinedFrames = framesByType.render ?? [];
+  if (combinedFrames.length !== FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+      + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES
+    || !sameJson(combinedFrames, framesByType.compute)
+    || !sameJson(measurement?.render?.frames, rows.map((row) => row?.gpuFrameId))) {
+    reasons.push('timestamp phases do not bind the exact retained timed interval');
+  }
+
+  const topology = summary?.timestampResolutionTopology;
+  const totalFrames = FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+    + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES;
+  const requiredQueries = FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE;
+  if (topology?.schemaVersion !== 1
+    || topology?.kind !== 'three-r185-timestamp-resolution-topology'
+    || topology?.mode !== FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE
+    || topology?.warmupBoundaryResolveBatchCount
+      !== FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT
+    || topology?.postMeasurementResolveBatchCount
+      !== FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT
+    || topology?.queriesPerTimestampUid
+      !== FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID
+    || topology?.requiredQueriesPerType !== requiredQueries
+    || topology?.resolvedFrameCountByType?.render !== totalFrames
+    || topology?.resolvedFrameCountByType?.compute !== totalFrames
+    || topology?.firstGpuFrameId !== combinedFrames[0]
+    || topology?.lastGpuFrameId !== combinedFrames.at(-1)
+    || topology?.intervalContiguous !== true) {
+    reasons.push('timestamp resolution topology is not one post-measurement batch');
+    return;
+  }
+
+  const completion = summary?.completionInvariant;
+  const startDiagnostics = topology.poolsAtStart;
+  const beforeDiagnostics = topology.poolsBeforePostMeasurementResolve;
+  const afterDiagnostics = topology.poolsAfterPostMeasurementResolve;
+  if (!sameJson(startDiagnostics, completion?.timestampPoolsAtTimingStart)
+    || !sameJson(afterDiagnostics, completion?.timestampPoolsAtTimingEnd)
+    || startDiagnostics?.backendTrackingEnabled !== false
+    || beforeDiagnostics?.backendTrackingEnabled !== true
+    || afterDiagnostics?.backendTrackingEnabled !== true) {
+    reasons.push('timestamp resolution topology is detached from completion pool evidence');
+    return;
+  }
+  for (const type of ['render', 'compute']) {
+    const start = startDiagnostics[type];
+    const before = beforeDiagnostics[type];
+    const after = afterDiagnostics[type];
+    const expectedUids = [
+      ...(warmup?.[type]?.uidRecords ?? []),
+      ...(measurement?.[type]?.uidRecords ?? []),
+    ].map((record) => record?.uid);
+    if (!start || !before || !after
+      || !Number.isInteger(start.maxQueries)
+      || start.maxQueries < requiredQueries
+      || start.currentQueryIndex !== 0
+      || start.queryOffsetCount !== 0
+      || start.queryOffsetUids?.length !== start.queryOffsetCount
+      || !arrayValuesAreUnique(start.queryOffsetUids)
+      || start.frames?.length !== start.frameCount
+      || !arrayValuesAreUnique(start.frames)
+      || start.timestampUids?.length !== start.timestampUidCount
+      || !arrayValuesAreUnique(start.timestampUids)
+      || start.pendingResolve !== false
+      || start.isDisposed !== false
+      || start.resultBufferMapState !== 'unmapped'
+      || !sameJson(timestampPoolStaticIdentity(before), timestampPoolStaticIdentity(start))
+      || before.currentQueryIndex !== requiredQueries
+      || before.queryOffsetCount !== totalFrames
+      || before.queryOffsetUids?.length !== before.queryOffsetCount
+      || !arrayValuesAreUnique(before.queryOffsetUids)
+      || !arrayValuesAreUnique(expectedUids)
+      || !sameJson(before.queryOffsetUids, expectedUids)
+      || before.timestampUidCount !== start.timestampUidCount
+      || !sameJson(before.timestampUids, start.timestampUids)
+      || before.frameCount !== start.frameCount
+      || before.frames?.length !== before.frameCount
+      || !arrayValuesAreUnique(before.frames)
+      || !sameJson(before.frames, start.frames)
+      || before.pendingResolve !== false
+      || before.isDisposed !== false
+      || before.resultBufferMapState !== 'unmapped'
+      || !sameJson(timestampPoolStaticIdentity(after), timestampPoolStaticIdentity(start))
+      || after.currentQueryIndex !== 0
+      || after.queryOffsetCount !== 0
+      || after.queryOffsetUids?.length !== after.queryOffsetCount
+      || !arrayValuesAreUnique(after.queryOffsetUids)
+      || after.pendingResolve !== false
+      || after.isDisposed !== false
+      || after.resultBufferMapState !== 'unmapped'
+      || after.frameCount !== totalFrames
+      || after.frames?.length !== after.frameCount
+      || !arrayValuesAreUnique(after.frames)
+      || !sameJson(after.frames, combinedFrames)
+      || after.timestampUidCount !== start.timestampUidCount + totalFrames
+      || after.timestampUids?.length !== after.timestampUidCount
+      || !arrayValuesAreUnique(after.timestampUids)
+      || !sameJson(after.timestampUids, [...start.timestampUids, ...expectedUids].sort())) {
+      reasons.push(`${type} timestamp pool does not prove one unresolved 800-frame interval`);
+    }
+  }
+  if (completion?.timestampPhaseBoundaryExact !== true
+    || completion?.timestampResolvedFrameIntervalExact !== true
+    || completion?.timestampResolutionTopologyExact !== true) {
+    reasons.push('completion invariant does not bind the continuous timestamp interval');
+  }
+}
+
 /**
  * Runner-local fail-closed timing validation. Cross-session shader and output
  * comparison intentionally belongs to the independent verifier.
@@ -418,6 +572,7 @@ export function validateStandaloneTimingRows(rows, canonicalTrial, summary = nul
         }
       }
     }
+    validateStandaloneContinuousTimestampEvidence(rows, summary, reasons);
   }
   return Object.freeze({
     schemaVersion: 1,
@@ -521,6 +676,64 @@ export function validateStandaloneBrowserLifecycleChain(records, {
     kind: 'first-instance-standalone-browser-lifecycle-chain-validation',
     pass: reasons.length === 0,
     reasons: Object.freeze(reasons),
+  });
+}
+
+/**
+ * Runner-local continuity validation for the two trials that reuse one browser
+ * session. The resolved history from trial one must be the exact clean pool
+ * history observed at trial two's start; only backend tracking changes state.
+ */
+export function validateStandaloneSessionTimestampContinuity(records) {
+  const reasons = [];
+  if (!Array.isArray(records) || records.length !== 2) {
+    return Object.freeze({
+      schemaVersion: 1,
+      kind: 'first-instance-standalone-runner-session-timestamp-continuity-validation',
+      pass: false,
+      reasons: Object.freeze(['session does not contain its exact two-trial sequence']),
+    });
+  }
+  const [first, second] = records;
+  if (typeof first?.sessionId !== 'string'
+    || first.sessionId.length === 0
+    || second?.sessionId !== first.sessionId
+    || first?.visibilityOrderPosition !== 0
+    || second?.visibilityOrderPosition !== 1) {
+    reasons.push('session does not contain its exact ordered two-trial sequence');
+  }
+  const firstEnd = first?.timestampPoolsAtEnd;
+  const secondStart = second?.timestampPoolsAtStart;
+  if (firstEnd?.schemaVersion !== 1
+    || firstEnd?.kind !== 'three-r185-timestamp-pool-diagnostics'
+    || secondStart?.schemaVersion !== 1
+    || secondStart?.kind !== firstEnd.kind
+    || firstEnd?.backendTrackingEnabled !== true
+    || secondStart?.backendTrackingEnabled !== false) {
+    reasons.push('timestamp tracking did not reset true-to-false between trials');
+  }
+  for (const type of ['render', 'compute']) {
+    const resolved = firstEnd?.[type];
+    const inherited = secondStart?.[type];
+    if (!sameJson(resolved, inherited)) {
+      reasons.push(`${type} timestamp history transition is not exact`);
+      continue;
+    }
+    if (inherited?.currentQueryIndex !== 0
+      || inherited?.queryOffsetCount !== 0
+      || !Array.isArray(inherited?.queryOffsetUids)
+      || inherited.queryOffsetUids.length !== 0
+      || inherited?.pendingResolve !== false
+      || inherited?.isDisposed !== false
+      || inherited?.resultBufferMapState !== 'unmapped') {
+      reasons.push(`${type} timestamp history did not enter trial two cleanly`);
+    }
+  }
+  return Object.freeze({
+    schemaVersion: 1,
+    kind: 'first-instance-standalone-runner-session-timestamp-continuity-validation',
+    pass: reasons.length === 0,
+    reasons: Object.freeze([...new Set(reasons)]),
   });
 }
 
@@ -1365,6 +1578,7 @@ async function runStandaloneTrial({
   browserRecord,
   executionIdentity,
   artifactStore,
+  sessionTimestampRecords,
 }) {
   const label = `standalone plan ${canonicalTrial.planIndex} (${canonicalTrial.trialId})`;
   const firstCaptureOrdinal = canonicalTrial.visibilityOrderPosition * 6 + 1;
@@ -1434,6 +1648,16 @@ async function runStandaloneTrial({
   );
   requireCondition(runnerValidation.pass === true,
     `${label} runner timing validation failed`, runnerValidation);
+  sessionTimestampRecords.push(Object.freeze({
+    sessionId: canonicalTrial.sessionId,
+    visibilityOrderPosition: canonicalTrial.visibilityOrderPosition,
+    timestampPoolsAtStart: clone(
+      timing.summary.timestampResolutionTopology.poolsAtStart,
+    ),
+    timestampPoolsAtEnd: clone(
+      timing.summary.timestampResolutionTopology.poolsAfterPostMeasurementResolve,
+    ),
+  }));
 
   const postflight = await withDeadline(
     captureEvidencePoint(page, shaderObservationChallenges.slice(4, 6)),
@@ -1485,6 +1709,17 @@ async function runStandaloneTrial({
     measuredFrames: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
     measuredBlockSize: STANDALONE_BLOCK_SIZE,
     measuredBlockCount: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_BLOCKS,
+    timestampResolution: {
+      mode: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
+      warmupBoundaryResolveBatchCount:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
+      postMeasurementResolveBatchCount:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+      queriesPerTimestampUid:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
+      requiredQueriesPerType:
+        FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
+    },
     selectedLaneOnly: true,
     absentLaneConstructionAllowed: false,
     visibilityExposure: canonicalTrial.visibilityExposure,
@@ -2004,6 +2239,7 @@ export async function runFirstInstanceStandaloneDeployment({
 
         let visibilitySwitch = null;
         const sessionTrialArtifacts = [];
+        const sessionTimestampRecords = [];
         for (let trialExecutionIndex = 0;
           trialExecutionIndex < canonicalTrials.length;
           trialExecutionIndex += 1) {
@@ -2056,12 +2292,19 @@ export async function runFirstInstanceStandaloneDeployment({
             browserRecord: sessionState.record,
             executionIdentity,
             artifactStore,
+            sessionTimestampRecords,
           });
           sessionTrialArtifacts.push(trialArtifact);
           matrixTrialArtifacts.push(trialArtifact);
           completedTrialArtifacts.push(trialArtifact);
           process.stdout.write(`  saved ${trialArtifact.artifact.path}\n`);
         }
+
+        const timestampContinuityValidation =
+          validateStandaloneSessionTimestampContinuity(sessionTimestampRecords);
+        requireCondition(timestampContinuityValidation.pass === true,
+          `${canonicalSession.sessionId} timestamp history continuity failed`,
+          timestampContinuityValidation);
 
         const sessionEnd = await withDeadline(page.evaluate(async () => ({
           selectedConfig: window.__WEBGPU_BENCH__.selectedConfig(),
@@ -2422,6 +2665,17 @@ export async function runFirstInstanceStandaloneDeployment({
         measuredFrames: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
         measuredBlockSize: STANDALONE_BLOCK_SIZE,
         measuredBlockCount: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_BLOCKS,
+        timestampResolution: {
+          mode: FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
+          warmupBoundaryResolveBatchCount:
+            FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
+          postMeasurementResolveBatchCount:
+            FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+          queriesPerTimestampUid:
+            FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
+          requiredQueriesPerType:
+            FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
+        },
       },
       analysis: {
         invokedByCaptureRunner: false,

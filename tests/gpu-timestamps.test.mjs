@@ -1,12 +1,106 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  partitionResolvedTimestampMaps,
   preprimeTimestampPools,
   registerComputeTimestampGroup,
   resolveTimestampMaps,
   timestampPoolDiagnostics,
   timestampResolution,
 } from '../src/benchmark/gpu-timestamps.js';
+
+async function continuousTimestampMaps() {
+  const frames = [10, 11, 12, 13];
+  const renderer = {
+    backend: {
+      trackTimestamp: true,
+      timestampQueryPool: {
+        render: {
+          frames,
+          timestamps: new Map(frames.map((frame, index) => [
+            `r:1:1:f${frame}`,
+            index < 2 ? 0.0004 : 0.0005,
+          ])),
+        },
+        compute: {
+          frames,
+          timestamps: new Map(frames.map((frame, index) => [
+            `c:1:2:f${frame}`,
+            index < 2 ? 0.0006 : 0.0007,
+          ])),
+        },
+      },
+    },
+    async resolveTimestampsAsync() {},
+  };
+  return resolveTimestampMaps(renderer, {
+    includeCompute: true,
+    collect: true,
+    strictUidGrammar: true,
+  });
+}
+
+test('one continuous timestamp resolve partitions into independent phase maps', async () => {
+  const maps = await continuousTimestampMaps();
+  const partitioned = partitionResolvedTimestampMaps(maps, {
+    warmupFrames: [10, 11],
+    measurementFrames: [12, 13],
+  });
+
+  assert.deepEqual(partitioned.warmup.frames.render, [10, 11]);
+  assert.deepEqual(partitioned.measurement.frames.compute, [12, 13]);
+  assert.deepEqual(partitioned.warmup.uidsByFrame.compute.get(10), ['c:1:2:f10']);
+  assert.equal(partitioned.measurement.render.get(12), 0.0005);
+  assert.deepEqual(partitioned.warmup.resolutions.render, {
+    quantumNs: 400,
+    classification: 'fine',
+    recordCount: 2,
+    positiveDurationCount: 2,
+    nonpositiveDurationCount: 0,
+  });
+  assert.deepEqual(partitioned.measurement.resolutions.render, {
+    quantumNs: 500,
+    classification: 'fine',
+    recordCount: 2,
+    positiveDurationCount: 2,
+    nonpositiveDurationCount: 0,
+  });
+});
+
+test('continuous timestamp partition rejects phase and raw interval drift', async () => {
+  const maps = await continuousTimestampMaps();
+  for (const phases of [
+    { warmupFrames: [10, 12], measurementFrames: [13] },
+    { warmupFrames: [10, 11], measurementFrames: [11, 12] },
+    { warmupFrames: [11, 10], measurementFrames: [12, 13] },
+    { warmupFrames: [10], measurementFrames: [12, 13] },
+  ]) {
+    assert.throws(
+      () => partitionResolvedTimestampMaps(maps, phases),
+      /consecutive GPU-frame interval|duplicate GPU frame|complete requested interval/,
+    );
+  }
+
+  const reordered = await continuousTimestampMaps();
+  reordered.frames.render = [10, 12, 11, 13];
+  assert.throws(
+    () => partitionResolvedTimestampMaps(reordered, {
+      warmupFrames: [10, 11],
+      measurementFrames: [12, 13],
+    }),
+    /render resolved timestamp frames differ/,
+  );
+
+  const extra = await continuousTimestampMaps();
+  extra.frames.compute = [9, 10, 11, 12, 13];
+  assert.throws(
+    () => partitionResolvedTimestampMaps(extra, {
+      warmupFrames: [10, 11],
+      measurementFrames: [12, 13],
+    }),
+    /compute resolved timestamp frames differ/,
+  );
+});
 
 test('timestamp maps retain summed durations and count UIDs per frame', async () => {
   const resolvedTypes = [];

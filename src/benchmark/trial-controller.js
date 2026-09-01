@@ -1,6 +1,8 @@
 import {
+  partitionResolvedTimestampMaps,
   resolveTimestampMaps,
   setTimestampTracking,
+  timestampPoolDiagnostics,
   timestampResolution,
   timestampSupport,
 } from './gpu-timestamps.js';
@@ -20,6 +22,144 @@ function requirePositiveFrameCount(value, label) {
 
 const TIMESTAMP_TYPES = Object.freeze(['render', 'compute']);
 const MAX_TIMESTAMP_QUANTUM_NS = 1_000;
+const TIMESTAMP_QUERIES_PER_UID = 2;
+
+function sameJson(left, right) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function arrayValuesAreUnique(values) {
+  return Array.isArray(values) && new Set(values).size === values.length;
+}
+
+function timestampPoolStaticIdentity(pool) {
+  return {
+    poolIdentity: pool?.poolIdentity ?? null,
+    querySetIdentity: pool?.querySetIdentity ?? null,
+    resolveBufferIdentity: pool?.resolveBufferIdentity ?? null,
+    resultBufferIdentity: pool?.resultBufferIdentity ?? null,
+    maxQueries: pool?.maxQueries ?? null,
+    isDisposed: pool?.isDisposed ?? null,
+  };
+}
+
+function validateContinuousTimestampStart(diagnostics, requiredQueries, requiredTypes) {
+  if (diagnostics?.backendTrackingEnabled !== false) {
+    throw new Error('Continuous timestamp timing must start with tracking disabled.');
+  }
+  for (const type of requiredTypes) {
+    const pool = diagnostics?.[type];
+    if (!pool
+      || pool.currentQueryIndex !== 0
+      || pool.queryOffsetCount !== 0
+      || !Array.isArray(pool.queryOffsetUids)
+      || pool.queryOffsetUids.length !== pool.queryOffsetCount
+      || !arrayValuesAreUnique(pool.queryOffsetUids)
+      || pool.pendingResolve !== false
+      || pool.isDisposed !== false
+      || pool.resultBufferMapState !== 'unmapped'
+      || !Number.isInteger(pool.maxQueries)
+      || pool.maxQueries < requiredQueries
+      || !Array.isArray(pool.frames)
+      || pool.frames.length !== pool.frameCount
+      || !arrayValuesAreUnique(pool.frames)
+      || !Number.isInteger(pool.timestampUidCount)
+      || !Array.isArray(pool.timestampUids)
+      || pool.timestampUids.length !== pool.timestampUidCount
+      || !arrayValuesAreUnique(pool.timestampUids)) {
+      throw new Error(
+        `${type} timestamp pool cannot retain the continuous timed interval.`,
+      );
+    }
+  }
+}
+
+function continuousTimestampUidsMatchRows(rows, type, uids) {
+  if (!Array.isArray(uids) || uids.length !== rows.length) return false;
+  const prefix = type === 'compute' ? 'c' : 'r';
+  return rows.every((row, index) => {
+    const callIndex = type === 'compute'
+      ? row.computeFrameCallIndex
+      : row.renderFrameCallIndex;
+    const match = /^(c|r):([1-9]\d*):(0|[1-9]\d*):f(0|[1-9]\d*)$/.exec(uids[index]);
+    const uidCallIndex = Number(match?.[2]);
+    const uidContextId = Number(match?.[3]);
+    const uidFrameId = Number(match?.[4]);
+    if (!Number.isSafeInteger(row.gpuFrameId) || row.gpuFrameId < 0
+      || !Number.isSafeInteger(callIndex) || callIndex <= 0
+      || match?.[1] !== prefix
+      || !Number.isSafeInteger(uidCallIndex) || uidCallIndex !== callIndex
+      || !Number.isSafeInteger(uidContextId) || uidContextId < 0
+      || !Number.isSafeInteger(uidFrameId) || uidFrameId !== row.gpuFrameId
+      || (type === 'compute' && uidContextId !== row.computeTimestampContextId)) {
+      return false;
+    }
+    return true;
+  });
+}
+
+function validateContinuousTimestampPreResolve({
+  start,
+  beforeResolve,
+  rows,
+  requiredQueries,
+  requiredTypes,
+}) {
+  if (beforeResolve?.backendTrackingEnabled !== true) {
+    throw new Error('Continuous timestamp tracking stopped before final resolution.');
+  }
+  for (const type of requiredTypes) {
+    const initial = start[type];
+    const before = beforeResolve?.[type];
+    if (!before
+      || !sameJson(timestampPoolStaticIdentity(before), timestampPoolStaticIdentity(initial))
+      || before.currentQueryIndex !== requiredQueries
+      || before.queryOffsetCount !== rows.length
+      || !continuousTimestampUidsMatchRows(rows, type, before.queryOffsetUids)
+      || before.pendingResolve !== false
+      || before.resultBufferMapState !== 'unmapped'
+      || before.timestampUidCount !== initial.timestampUidCount
+      || !sameJson(before.timestampUids, initial.timestampUids)
+      || before.frameCount !== initial.frameCount
+      || !sameJson(before.frames, initial.frames)) {
+      throw new Error(
+        `${type} timestamp pool does not prove one unresolved continuous timed interval.`,
+      );
+    }
+  }
+}
+
+function validateContinuousTimestampPostResolve({
+  start,
+  afterResolve,
+  frames,
+  requiredTypes,
+}) {
+  for (const type of requiredTypes) {
+    const initial = start[type];
+    const after = afterResolve?.[type];
+    if (!after
+      || !sameJson(timestampPoolStaticIdentity(after), timestampPoolStaticIdentity(initial))
+      || after.currentQueryIndex !== 0
+      || after.queryOffsetCount !== 0
+      || !Array.isArray(after.queryOffsetUids)
+      || after.queryOffsetUids.length !== after.queryOffsetCount
+      || !arrayValuesAreUnique(after.queryOffsetUids)
+      || after.pendingResolve !== false
+      || after.resultBufferMapState !== 'unmapped'
+      || after.frameCount !== frames.length
+      || !sameJson(after.frames, frames)
+      || !arrayValuesAreUnique(after.frames)
+      || after.timestampUidCount !== initial.timestampUidCount + frames.length
+      || !Array.isArray(after.timestampUids)
+      || after.timestampUids.length !== after.timestampUidCount
+      || !arrayValuesAreUnique(after.timestampUids)) {
+      throw new Error(
+        `${type} timestamp pool did not resolve the complete continuous timed interval.`,
+      );
+    }
+  }
+}
 
 function createTimestampPhaseResults() {
   return {
@@ -148,6 +288,9 @@ export class TrialController {
     this.context = null;
     this.error = null;
     this.timestampPhases = createTimestampPhaseResults();
+    this.timestampResolutionTopology = null;
+    this.continuousTimestampPoolsAtStart = null;
+    this.deferWarmupTimestampResolution = false;
     this._warmupRows = [];
   }
 
@@ -188,23 +331,48 @@ export class TrialController {
   async start(context, {
     warmupFrames = this.defaultWarmupFrames,
     measuredFrames = this.defaultMeasuredFrames,
+    deferWarmupTimestampResolution = false,
   } = {}) {
     if (!['idle', 'complete', 'error'].includes(this.phase)) throw new Error('A trial is already active.');
     this.warmupFrames = requirePositiveFrameCount(warmupFrames, 'warmupFrames');
     this.measuredFrames = requirePositiveFrameCount(measuredFrames, 'measuredFrames');
+    if (typeof deferWarmupTimestampResolution !== 'boolean') {
+      throw new TypeError('deferWarmupTimestampResolution must be a boolean.');
+    }
+    this.deferWarmupTimestampResolution = deferWarmupTimestampResolution;
     this.phase = 'resolving-start';
     this.error = null;
     this.context = context;
     this.rows = [];
     this.timestampPhases = createTimestampPhaseResults();
+    this.timestampResolutionTopology = null;
+    this.continuousTimestampPoolsAtStart = null;
     this._warmupRows = [];
     try {
-      setTimestampTracking(this.renderer, true);
-      await resolveTimestampMaps(this.renderer, {
-        includeCompute: true,
-        collect: false,
-        strictUidGrammar: this.context.strictTimestampUidAttribution === true,
-      });
+      if (this.deferWarmupTimestampResolution) {
+        if (this.context.usesCompute !== true
+          || this.context.strictTimestampUidAttribution !== true
+          || this.context.expectedRenderTimestampUidCount !== 1
+          || this.context.expectedComputeTimestampUidCount !== 1) {
+          throw new Error(
+            'Continuous timestamp timing requires one strictly attributed render and compute UID per frame.',
+          );
+        }
+        const requiredQueries = (this.warmupFrames + this.measuredFrames)
+          * TIMESTAMP_QUERIES_PER_UID;
+        const requiredTypes = this.context.usesCompute ? TIMESTAMP_TYPES : ['render'];
+        const diagnostics = timestampPoolDiagnostics(this.renderer);
+        validateContinuousTimestampStart(diagnostics, requiredQueries, requiredTypes);
+        this.continuousTimestampPoolsAtStart = diagnostics;
+        setTimestampTracking(this.renderer, true);
+      } else {
+        setTimestampTracking(this.renderer, true);
+        await resolveTimestampMaps(this.renderer, {
+          includeCompute: true,
+          collect: false,
+          strictUidGrammar: this.context.strictTimestampUidAttribution === true,
+        });
+      }
     } catch (error) {
       this.fail(error);
       return;
@@ -234,6 +402,12 @@ export class TrialController {
     this.remaining -= 1;
     if (this.remaining > 0) return;
     if (this.phase === 'warmup') {
+      if (this.deferWarmupTimestampResolution) {
+        this.phase = 'measure';
+        this.remaining = this.measuredFrames;
+        this.onStatus?.(`Measuring ${this.measuredFrames} frames.`);
+        return;
+      }
       this.phase = 'resolving-warmup';
       void this.finishWarmup().catch((error) => this.fail(error));
     } else {
@@ -260,11 +434,77 @@ export class TrialController {
   }
 
   async finishMeasurement() {
-    const maps = await resolveTimestampMaps(this.renderer, {
+    let poolsBeforePostMeasurementResolve = null;
+    const continuousRows = this.deferWarmupTimestampResolution
+      ? [...this._warmupRows, ...this.rows]
+      : null;
+    const continuousFrames = continuousRows?.map((row) => row.gpuFrameId) ?? null;
+    const requiredTypes = this.context.usesCompute ? TIMESTAMP_TYPES : ['render'];
+    const requiredQueries = this.deferWarmupTimestampResolution
+      ? continuousRows.length * TIMESTAMP_QUERIES_PER_UID
+      : null;
+    if (this.deferWarmupTimestampResolution) {
+      poolsBeforePostMeasurementResolve = timestampPoolDiagnostics(this.renderer);
+      validateContinuousTimestampPreResolve({
+        start: this.continuousTimestampPoolsAtStart,
+        beforeResolve: poolsBeforePostMeasurementResolve,
+        rows: continuousRows,
+        requiredQueries,
+        requiredTypes,
+      });
+    }
+    const resolvedMaps = await resolveTimestampMaps(this.renderer, {
       includeCompute: this.context.usesCompute,
       collect: true,
       strictUidGrammar: this.context.strictTimestampUidAttribution === true,
     });
+    const poolsAfterPostMeasurementResolve = this.deferWarmupTimestampResolution
+      ? timestampPoolDiagnostics(this.renderer)
+      : null;
+    if (this.deferWarmupTimestampResolution) {
+      validateContinuousTimestampPostResolve({
+        start: this.continuousTimestampPoolsAtStart,
+        afterResolve: poolsAfterPostMeasurementResolve,
+        frames: continuousFrames,
+        requiredTypes,
+      });
+    }
+    let maps = resolvedMaps;
+    if (this.deferWarmupTimestampResolution) {
+      const warmupFrames = this._warmupRows.map((row) => row.gpuFrameId);
+      const measurementFrames = this.rows.map((row) => row.gpuFrameId);
+      const partitioned = partitionResolvedTimestampMaps(resolvedMaps, {
+        warmupFrames,
+        measurementFrames,
+      });
+      this.timestampPhases.warmup = serializeTimestampPhase('warmup', partitioned.warmup);
+      this._warmupRows = Object.freeze(
+        joinTimestampRows(this._warmupRows, partitioned.warmup, this.context)
+          .map((row) => Object.freeze(row)),
+      );
+      maps = partitioned.measurement;
+      const combinedFrames = [...warmupFrames, ...measurementFrames];
+      this.timestampResolutionTopology = Object.freeze({
+        schemaVersion: 1,
+        kind: 'three-r185-timestamp-resolution-topology',
+        mode: 'single-post-measurement',
+        warmupBoundaryResolveBatchCount: 0,
+        postMeasurementResolveBatchCount: 1,
+        queriesPerTimestampUid: TIMESTAMP_QUERIES_PER_UID,
+        requiredQueriesPerType: requiredQueries,
+        resolvedFrameCountByType: Object.freeze(Object.fromEntries(
+          resolvedMaps.includedTypes.map((type) => [type, resolvedMaps.frames[type].length]),
+        )),
+        firstGpuFrameId: combinedFrames[0],
+        lastGpuFrameId: combinedFrames.at(-1),
+        intervalContiguous: combinedFrames.every(
+          (frameId, index) => index === 0 || frameId === combinedFrames[index - 1] + 1,
+        ),
+        poolsAtStart: this.continuousTimestampPoolsAtStart,
+        poolsBeforePostMeasurementResolve,
+        poolsAfterPostMeasurementResolve,
+      });
+    }
     this.timestampPhases.measurement = serializeTimestampPhase('measurement', maps);
     const joined = joinTimestampRows(this.rows, maps, this.context);
     const missingRenderFrames = joined.filter((row) => row.gpuRenderMs === null).length;
@@ -389,6 +629,7 @@ export class TrialController {
       warmupTimestampFrameCountValid,
       measurementTimestampFrameCountValid,
       timestampPhases: this.timestampPhases,
+      timestampResolutionTopology: this.timestampResolutionTopology,
       ...resolution,
       cpuSubmitP50Ms: percentile(joined.map((row) => row.cpuSubmitTotalMs), 0.5),
       cpuSubmitP95Ms: percentile(joined.map((row) => row.cpuSubmitTotalMs), 0.95),

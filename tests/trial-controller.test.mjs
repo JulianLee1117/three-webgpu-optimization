@@ -15,17 +15,37 @@ function fakeRenderer() {
     backend: {
       trackTimestamp: false,
       timestampQueryPool: {
-        render: { frames: [], timestamps: new Map() },
-        compute: { frames: [], timestamps: new Map() },
+        render: {
+          frames: [],
+          timestamps: new Map(),
+          maxQueries: 2_048,
+          currentQueryIndex: 0,
+          queryOffsets: new Map(),
+          pendingResolve: false,
+          isDisposed: false,
+          resultBuffer: { mapState: 'unmapped' },
+        },
+        compute: {
+          frames: [],
+          timestamps: new Map(),
+          maxQueries: 2_048,
+          currentQueryIndex: 0,
+          queryOffsets: new Map(),
+          pendingResolve: false,
+          isDisposed: false,
+          resultBuffer: { mapState: 'unmapped' },
+        },
       },
     },
     rejection: null,
     manualResolve: false,
     legacyComputeUids: false,
     resolveCounts: { render: 0, compute: 0 },
+    resolveInvocations: { render: 0, compute: 0 },
     durationOverrides: { render: new Map(), compute: new Map() },
     async resolveTimestampsAsync(type) {
       if (this.rejection !== null) throw this.rejection;
+      this.resolveInvocations[type] += 1;
       if (this.manualResolve) return;
       const frame = this.resolveCounts[type];
       this.resolveCounts[type] += 1;
@@ -43,6 +63,246 @@ function fakeRenderer() {
   };
   return renderer;
 }
+
+test('deferred warmup resolution preserves one continuous timed interval', async () => {
+  const renderer = fakeRenderer();
+  for (const type of ['render', 'compute']) {
+    renderer.backend.timestampQueryPool[type].maxQueries = 2_048;
+  }
+  const completed = deferred();
+  const controller = new TrialController(renderer, {
+    warmupFrames: 2,
+    measuredFrames: 2,
+    onComplete: (result) => completed.resolve(result),
+  });
+  await controller.start(
+    {
+      usesCompute: true,
+      strictTimestampUidAttribution: true,
+      expectedComputeTimestampUidCount: 1,
+      expectedRenderTimestampUidCount: 1,
+    },
+    { deferWarmupTimestampResolution: true },
+  );
+  assert.deepEqual(renderer.resolveInvocations, { render: 0, compute: 0 });
+
+  const timedRow = (gpuFrameId, measured = false) => ({
+    gpuFrameId,
+    computeFrameCallIndex: 1,
+    renderFrameCallIndex: 1,
+    computeTimestampContextId: 2,
+    ...(measured ? { cpuSubmitTotalMs: 0.2 } : {}),
+  });
+  controller.recordFrame(timedRow(10));
+  controller.recordFrame(timedRow(11));
+  assert.equal(controller.phase, 'measure');
+  assert.equal(controller.resolving, false);
+  assert.deepEqual(renderer.resolveInvocations, { render: 0, compute: 0 });
+
+  const frames = [10, 11, 12, 13];
+  for (const type of ['render', 'compute']) {
+    const pool = renderer.backend.timestampQueryPool[type];
+    const prefix = type === 'render' ? 'r' : 'c';
+    const contextId = type === 'render' ? 7 : 2;
+    pool.currentQueryIndex = frames.length * 2;
+    pool.queryOffsets = new Map(frames.map((frame) => [
+      `${prefix}:1:${contextId}:f${frame}`, 0,
+    ]));
+  }
+  renderer.resolveTimestampsAsync = async function resolveTimestampsAsync(type) {
+    this.resolveInvocations[type] += 1;
+    const pool = this.backend.timestampQueryPool[type];
+    const prefix = type === 'render' ? 'r' : 'c';
+    const contextId = type === 'render' ? 7 : 2;
+    pool.frames = frames;
+    pool.timestamps = new Map(frames.map((frame) => [
+      `${prefix}:1:${contextId}:f${frame}`,
+      type === 'render' ? 0.0005 : 0.0004,
+    ]));
+    pool.currentQueryIndex = 0;
+    pool.queryOffsets.clear();
+  };
+  controller.recordFrame(timedRow(12, true));
+  controller.recordFrame(timedRow(13, true));
+  const result = await completed.promise;
+
+  assert.deepEqual(renderer.resolveInvocations, { render: 1, compute: 1 });
+  assert.deepEqual(result.timestampPhases.warmup.pools.compute.frames, [10, 11]);
+  assert.deepEqual(result.timestampPhases.measurement.pools.render.frames, [12, 13]);
+  assert.deepEqual(result.summary.timestampResolutionTopology, {
+    schemaVersion: 1,
+    kind: 'three-r185-timestamp-resolution-topology',
+    mode: 'single-post-measurement',
+    warmupBoundaryResolveBatchCount: 0,
+    postMeasurementResolveBatchCount: 1,
+    queriesPerTimestampUid: 2,
+    requiredQueriesPerType: 8,
+    resolvedFrameCountByType: { render: 4, compute: 4 },
+    firstGpuFrameId: 10,
+    lastGpuFrameId: 13,
+    intervalContiguous: true,
+    poolsAtStart: result.summary.timestampResolutionTopology.poolsAtStart,
+    poolsBeforePostMeasurementResolve:
+      result.summary.timestampResolutionTopology.poolsBeforePostMeasurementResolve,
+    poolsAfterPostMeasurementResolve:
+      result.summary.timestampResolutionTopology.poolsAfterPostMeasurementResolve,
+  });
+  assert.equal(result.summary.accepted, true);
+});
+
+test('deferred warmup resolution fails closed on insufficient pool capacity', async () => {
+  const renderer = fakeRenderer();
+  renderer.backend.timestampQueryPool.render.maxQueries = 7;
+  renderer.backend.timestampQueryPool.compute.maxQueries = 8;
+  const controller = new TrialController(renderer, {
+    warmupFrames: 2,
+    measuredFrames: 2,
+  });
+  await controller.start(
+    {
+      usesCompute: true,
+      strictTimestampUidAttribution: true,
+      expectedComputeTimestampUidCount: 1,
+      expectedRenderTimestampUidCount: 1,
+    },
+    { deferWarmupTimestampResolution: true },
+  );
+  assert.equal(controller.phase, 'error');
+  assert.match(controller.error.message, /render timestamp pool cannot retain/);
+  assert.equal(renderer.backend.trackTimestamp, false);
+});
+
+test('continuous timestamp policy is per-start and defaults back to phase resolution', async () => {
+  const renderer = fakeRenderer();
+  const controller = new TrialController(renderer, {
+    warmupFrames: 1,
+    measuredFrames: 1,
+  });
+  const exactContext = {
+    usesCompute: true,
+    strictTimestampUidAttribution: true,
+    expectedComputeTimestampUidCount: 1,
+    expectedRenderTimestampUidCount: 1,
+  };
+  await controller.start(exactContext, { deferWarmupTimestampResolution: true });
+  assert.equal(controller.deferWarmupTimestampResolution, true);
+  assert.deepEqual(renderer.resolveInvocations, { render: 0, compute: 0 });
+  controller.fail(new Error('end continuous policy trial'));
+
+  await controller.start(exactContext);
+  assert.equal(controller.deferWarmupTimestampResolution, false);
+  assert.deepEqual(renderer.resolveInvocations, { render: 1, compute: 1 });
+  controller.recordFrame({ gpuFrameId: 1 });
+  while (controller.phase !== 'measure') await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.deepEqual(renderer.resolveInvocations, { render: 2, compute: 2 });
+});
+
+test('continuous timestamp policy preserves cumulative history across two reused trials', async () => {
+  const renderer = fakeRenderer();
+  const controller = new TrialController(renderer, {
+    warmupFrames: 2,
+    measuredFrames: 2,
+  });
+  const context = {
+    usesCompute: true,
+    strictTimestampUidAttribution: true,
+    expectedComputeTimestampUidCount: 1,
+    expectedRenderTimestampUidCount: 1,
+  };
+
+  const run = async (frames, renderContextId) => {
+    let resolveCompletion;
+    let rejectCompletion;
+    const completion = new Promise((resolve, reject) => {
+      resolveCompletion = resolve;
+      rejectCompletion = reject;
+    });
+    controller.onComplete = resolveCompletion;
+    controller.onError = rejectCompletion;
+    await controller.start(context, { deferWarmupTimestampResolution: true });
+    const row = (gpuFrameId, measured = false) => ({
+      gpuFrameId,
+      computeFrameCallIndex: 1,
+      renderFrameCallIndex: 1,
+      computeTimestampContextId: 2,
+      ...(measured ? { cpuSubmitTotalMs: 0.2 } : {}),
+    });
+    controller.recordFrame(row(frames[0]));
+    controller.recordFrame(row(frames[1]));
+    controller.recordFrame(row(frames[2], true));
+
+    for (const type of ['render', 'compute']) {
+      const pool = renderer.backend.timestampQueryPool[type];
+      const prefix = type === 'render' ? 'r' : 'c';
+      const contextId = type === 'render' ? renderContextId : 2;
+      pool.currentQueryIndex = frames.length * 2;
+      pool.queryOffsets = new Map(frames.map((frame) => [
+        `${prefix}:1:${contextId}:f${frame}`, 0,
+      ]));
+    }
+    renderer.resolveTimestampsAsync = async function resolveTimestampsAsync(type) {
+      this.resolveInvocations[type] += 1;
+      const pool = this.backend.timestampQueryPool[type];
+      const prefix = type === 'render' ? 'r' : 'c';
+      const contextId = type === 'render' ? renderContextId : 2;
+      pool.frames = [...frames];
+      for (const frame of frames) {
+        pool.timestamps.set(
+          `${prefix}:1:${contextId}:f${frame}`,
+          type === 'render' ? 0.0005 : 0.0004,
+        );
+      }
+      pool.currentQueryIndex = 0;
+      pool.queryOffsets.clear();
+    };
+    controller.recordFrame(row(frames[3], true));
+    return completion;
+  };
+
+  const firstFrames = [10, 11, 12, 13];
+  const secondFrames = [20, 21, 22, 23];
+  const first = await run(firstFrames, 7);
+  const second = await run(secondFrames, 8);
+  for (const type of ['render', 'compute']) {
+    assert.equal(first.summary.timestampResolutionTopology.poolsAtStart[type]
+      .timestampUidCount, 0);
+    assert.equal(first.summary.timestampResolutionTopology
+      .poolsAfterPostMeasurementResolve[type].timestampUidCount, 4);
+    assert.equal(second.summary.timestampResolutionTopology.poolsAtStart[type]
+      .timestampUidCount, 4);
+    assert.deepEqual(second.summary.timestampResolutionTopology.poolsAtStart[type].frames,
+      firstFrames);
+    assert.deepEqual(second.summary.timestampResolutionTopology
+      .poolsBeforePostMeasurementResolve[type].frames, firstFrames);
+    assert.deepEqual(second.summary.timestampResolutionTopology
+      .poolsBeforePostMeasurementResolve[type].timestampUids,
+    second.summary.timestampResolutionTopology.poolsAtStart[type].timestampUids);
+    assert.equal(second.summary.timestampResolutionTopology
+      .poolsAfterPostMeasurementResolve[type].timestampUidCount, 8);
+    assert.deepEqual(second.summary.timestampResolutionTopology
+      .poolsAfterPostMeasurementResolve[type].frames, secondFrames);
+  }
+  assert.deepEqual(second.timestampPhases.warmup.pools.render.frames, [20, 21]);
+  assert.deepEqual(second.timestampPhases.measurement.pools.compute.frames, [22, 23]);
+  assert.equal(second.summary.accepted, true);
+});
+
+test('invalid continuous timestamp policy fails before tracking starts', async () => {
+  const renderer = fakeRenderer();
+  const controller = new TrialController(renderer, {
+    warmupFrames: 1,
+    measuredFrames: 1,
+  });
+  await assert.rejects(
+    controller.start(
+      { usesCompute: true },
+      { deferWarmupTimestampResolution: 'yes' },
+    ),
+    /deferWarmupTimestampResolution must be a boolean/,
+  );
+  assert.equal(controller.phase, 'idle');
+  assert.equal(renderer.backend.trackTimestamp, false);
+});
 
 async function startedController(overrides = {}) {
   const renderer = fakeRenderer();

@@ -10,6 +10,7 @@ import {
   selectStandaloneDeploymentExecution,
   standaloneFullEnvironmentGatesPassed,
   validateStandaloneBrowserLifecycleChain,
+  validateStandaloneSessionTimestampContinuity,
   validateStandaloneTimingRows,
 } from '../scripts/run-first-instance-standalone-deployment.mjs';
 import {
@@ -21,19 +22,110 @@ const PLAN_SHA256 = 'a'.repeat(64);
 const plan = buildFirstInstanceStandaloneDeploymentPlan({ runId: RUN_ID });
 const canonicalTrial = plan.trials[0];
 
-function timestampPhase(frameCount) {
+function timestampUid(type, frame) {
+  const prefix = type === 'compute' ? 'c' : 'r';
+  const contextId = type === 'compute' ? 2 : 0;
+  return `${prefix}:1:${contextId}:f${frame}`;
+}
+
+function timestampPhase(startFrame, frameCount) {
+  const frames = Array.from({ length: frameCount }, (_, index) => startFrame + index);
   const pool = (type) => ({
     included: true,
-    frames: Array.from({ length: frameCount }, (_, index) => index),
-    uidRecords: Array.from({ length: frameCount }, (_, index) => ({
-      uid: `${type}:${index}`,
-    })),
+    frames: [...frames],
+    uidRecords: frames.map((frame) => ({ uid: timestampUid(type, frame) })),
     resolution: { quantumNs: 1 },
   });
   return { pools: { compute: pool('compute'), render: pool('render') } };
 }
 
+function timestampPool(type, {
+  frames,
+  timestampUids,
+  queryOffsetUids = [],
+  currentQueryIndex = 0,
+}) {
+  const identityBase = type === 'render' ? 10 : 20;
+  return {
+    poolIdentity: identityBase,
+    querySetIdentity: identityBase + 1,
+    resolveBufferIdentity: identityBase + 2,
+    resultBufferIdentity: identityBase + 3,
+    maxQueries: 2_048,
+    currentQueryIndex,
+    queryOffsetCount: queryOffsetUids.length,
+    queryOffsetUids,
+    frameCount: frames.length,
+    frames,
+    timestampUidCount: timestampUids.length,
+    timestampUids: [...timestampUids].sort(),
+    pendingResolve: false,
+    isDisposed: false,
+    resultBufferMapState: 'unmapped',
+  };
+}
+
+function timestampDiagnostics({
+  tracking,
+  frames,
+  timestampUidsByType,
+  queryOffsetUidsByType = { render: [], compute: [] },
+  currentQueryIndex = 0,
+}) {
+  return {
+    schemaVersion: 1,
+    kind: 'three-r185-timestamp-pool-diagnostics',
+    backendTrackingEnabled: tracking,
+    render: timestampPool('render', {
+      frames,
+      timestampUids: timestampUidsByType.render,
+      queryOffsetUids: queryOffsetUidsByType.render,
+      currentQueryIndex,
+    }),
+    compute: timestampPool('compute', {
+      frames,
+      timestampUids: timestampUidsByType.compute,
+      queryOffsetUids: queryOffsetUidsByType.compute,
+      currentQueryIndex,
+    }),
+  };
+}
+
 function acceptedSummary() {
+  const warmup = timestampPhase(10, 320);
+  const measurement = timestampPhase(330, 480);
+  const allFrames = [...warmup.pools.render.frames, ...measurement.pools.render.frames];
+  const timedUids = Object.fromEntries(['render', 'compute'].map((type) => [
+    type,
+    [
+      ...warmup.pools[type].uidRecords,
+      ...measurement.pools[type].uidRecords,
+    ].map(({ uid }) => uid),
+  ]));
+  const primedUids = {
+    render: ['r:2:0:f1'],
+    compute: ['c:2:2:f1'],
+  };
+  const startPools = timestampDiagnostics({
+    tracking: false,
+    frames: [1],
+    timestampUidsByType: primedUids,
+  });
+  const beforePools = timestampDiagnostics({
+    tracking: true,
+    frames: [1],
+    timestampUidsByType: primedUids,
+    queryOffsetUidsByType: timedUids,
+    currentQueryIndex: 1_600,
+  });
+  const afterPools = timestampDiagnostics({
+    tracking: true,
+    frames: allFrames,
+    timestampUidsByType: {
+      render: [...primedUids.render, ...timedUids.render],
+      compute: [...primedUids.compute, ...timedUids.compute],
+    },
+  });
   return {
     rowCount: 480,
     warmupRowCount: 320,
@@ -53,7 +145,14 @@ function acceptedSummary() {
     expectedComputeTimestampUidCount: 1,
     timestampAvailable: true,
     accepted: true,
-    completionInvariant: { pass: true },
+    completionInvariant: {
+      pass: true,
+      timestampPoolsAtTimingStart: startPools,
+      timestampPoolsAtTimingEnd: afterPools,
+      timestampPhaseBoundaryExact: true,
+      timestampResolvedFrameIntervalExact: true,
+      timestampResolutionTopologyExact: true,
+    },
     renderTimestampPoolQualityValid: true,
     computeTimestampPoolQualityValid: true,
     warmupRenderTimestampPoolQualityValid: true,
@@ -62,8 +161,24 @@ function acceptedSummary() {
     measurementTimestampFrameCountValid: true,
     quantumNs: 1,
     timestampPhases: {
-      warmup: timestampPhase(320),
-      measurement: timestampPhase(480),
+      warmup,
+      measurement,
+    },
+    timestampResolutionTopology: {
+      schemaVersion: 1,
+      kind: 'three-r185-timestamp-resolution-topology',
+      mode: 'single-post-measurement',
+      warmupBoundaryResolveBatchCount: 0,
+      postMeasurementResolveBatchCount: 1,
+      queriesPerTimestampUid: 2,
+      requiredQueriesPerType: 1_600,
+      resolvedFrameCountByType: { render: 800, compute: 800 },
+      firstGpuFrameId: 10,
+      lastGpuFrameId: 809,
+      intervalContiguous: true,
+      poolsAtStart: startPools,
+      poolsBeforePostMeasurementResolve: beforePools,
+      poolsAfterPostMeasurementResolve: afterPools,
     },
   };
 }
@@ -72,14 +187,16 @@ function acceptedRows(trial = canonicalTrial) {
   const cpuComputeSubmitMs = 0.1;
   const cpuRenderSubmitMs = 0.2;
   return Array.from({ length: 480 }, (_, index) => {
-    const computeUid = `c:1:0:f${index + 1}`;
-    const renderUid = `r:1:0:f${index + 1}`;
+    const gpuFrameId = 330 + index;
+    const computeUid = timestampUid('compute', gpuFrameId);
+    const renderUid = timestampUid('render', gpuFrameId);
     return {
       ...trial,
       runId: RUN_ID,
       harnessContextSchemaVersion: 2,
       frameIndex: index,
       phaseFrameIndex: index,
+      gpuFrameId,
       measuredBlockIndex: Math.floor(index / 8),
       withinBlockPosition: index % 8,
       laneId: trial.assignedLaneId,
@@ -245,6 +362,121 @@ test('timing-row validation accepts the frozen 480-row shape and fails closed on
   assert.ok(invalidTimestamp.reasons.some(
     (reason) => reason.includes('timestamp attribution is invalid'),
   ));
+
+  const boundaryGap = acceptedSummary();
+  for (const type of ['render', 'compute']) {
+    boundaryGap.timestampPhases.measurement.pools[type].frames =
+      boundaryGap.timestampPhases.measurement.pools[type].frames.map((frame) => frame + 1);
+  }
+  const invalidBoundary = validateStandaloneTimingRows(rows, canonicalTrial, boundaryGap);
+  assert.equal(invalidBoundary.pass, false);
+  assert.ok(invalidBoundary.reasons.some((reason) => reason.includes('continuous GPU-frame')));
+
+  const divergentTypes = acceptedSummary();
+  divergentTypes.timestampPhases.measurement.pools.compute.frames[0] += 1;
+  const invalidTypes = validateStandaloneTimingRows(rows, canonicalTrial, divergentTypes);
+  assert.equal(invalidTypes.pass, false);
+  assert.ok(invalidTypes.reasons.some((reason) => reason.includes('compute/render')));
+
+  const wrongTopology = acceptedSummary();
+  wrongTopology.timestampResolutionTopology.postMeasurementResolveBatchCount = 2;
+  const invalidTopology = validateStandaloneTimingRows(rows, canonicalTrial, wrongTopology);
+  assert.equal(invalidTopology.pass, false);
+  assert.ok(invalidTopology.reasons.some((reason) => reason.includes('one post-measurement')));
+
+  const insufficientCapacity = acceptedSummary();
+  insufficientCapacity.timestampResolutionTopology.poolsAtStart.render.maxQueries = 1_599;
+  insufficientCapacity.completionInvariant.timestampPoolsAtTimingStart.render.maxQueries = 1_599;
+  const invalidCapacity = validateStandaloneTimingRows(
+    rows,
+    canonicalTrial,
+    insufficientCapacity,
+  );
+  assert.equal(invalidCapacity.pass, false);
+  assert.ok(invalidCapacity.reasons.some((reason) => reason.includes('render timestamp pool')));
+
+  const missingCapacity = acceptedSummary();
+  delete missingCapacity.timestampResolutionTopology.poolsAtStart.render.maxQueries;
+  const invalidMissingCapacity = validateStandaloneTimingRows(
+    rows,
+    canonicalTrial,
+    missingCapacity,
+  );
+  assert.equal(invalidMissingCapacity.pass, false);
+  assert.ok(invalidMissingCapacity.reasons.some(
+    (reason) => reason.includes('render timestamp pool'),
+  ));
+
+  const detachedResolvedUid = acceptedSummary();
+  detachedResolvedUid.timestampResolutionTopology
+    .poolsAfterPostMeasurementResolve.compute.timestampUids[0] = 'detached';
+  const invalidResolvedUid = validateStandaloneTimingRows(
+    rows,
+    canonicalTrial,
+    detachedResolvedUid,
+  );
+  assert.equal(invalidResolvedUid.pass, false);
+  assert.ok(invalidResolvedUid.reasons.some(
+    (reason) => reason.includes('compute timestamp pool'),
+  ));
+});
+
+test('reused session timestamp pools join trial one to a clean trial-two start', () => {
+  const firstSummary = acceptedSummary();
+  const secondStart = structuredClone(
+    firstSummary.timestampResolutionTopology.poolsAfterPostMeasurementResolve,
+  );
+  secondStart.backendTrackingEnabled = false;
+  const records = [
+    {
+      sessionId: 'session-1',
+      visibilityOrderPosition: 0,
+      timestampPoolsAtStart: firstSummary.timestampResolutionTopology.poolsAtStart,
+      timestampPoolsAtEnd:
+        firstSummary.timestampResolutionTopology.poolsAfterPostMeasurementResolve,
+    },
+    {
+      sessionId: 'session-1',
+      visibilityOrderPosition: 1,
+      timestampPoolsAtStart: secondStart,
+      timestampPoolsAtEnd:
+        firstSummary.timestampResolutionTopology.poolsAfterPostMeasurementResolve,
+    },
+  ];
+  assert.deepEqual(validateStandaloneSessionTimestampContinuity(records), {
+    schemaVersion: 1,
+    kind: 'first-instance-standalone-runner-session-timestamp-continuity-validation',
+    pass: true,
+    reasons: [],
+  });
+
+  const detached = structuredClone(records);
+  detached[1].timestampPoolsAtStart.compute.timestampUids.pop();
+  detached[1].timestampPoolsAtStart.compute.timestampUidCount -= 1;
+  const invalidHistory = validateStandaloneSessionTimestampContinuity(detached);
+  assert.equal(invalidHistory.pass, false);
+  assert.ok(invalidHistory.reasons.some(
+    (reason) => reason.includes('compute timestamp history transition'),
+  ));
+
+  const trackingStillEnabled = structuredClone(records);
+  trackingStillEnabled[1].timestampPoolsAtStart.backendTrackingEnabled = true;
+  const invalidTracking = validateStandaloneSessionTimestampContinuity(trackingStillEnabled);
+  assert.equal(invalidTracking.pass, false);
+  assert.ok(invalidTracking.reasons.some(
+    (reason) => reason.includes('tracking did not reset'),
+  ));
+
+  const dirtyButEqual = structuredClone(records);
+  dirtyButEqual[0].timestampPoolsAtEnd.render.currentQueryIndex = 2;
+  dirtyButEqual[1].timestampPoolsAtStart.render.currentQueryIndex = 2;
+  const invalidCleanState = validateStandaloneSessionTimestampContinuity(dirtyButEqual);
+  assert.equal(invalidCleanState.pass, false);
+  assert.ok(invalidCleanState.reasons.some(
+    (reason) => reason.includes('render timestamp history did not enter trial two cleanly'),
+  ));
+
+  assert.equal(validateStandaloneSessionTimestampContinuity(records.slice(0, 1)).pass, false);
 });
 
 test('browser lifecycle validation requires fresh profiles and every two-second gap', () => {

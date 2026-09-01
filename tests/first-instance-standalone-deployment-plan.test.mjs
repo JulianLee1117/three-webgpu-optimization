@@ -9,14 +9,19 @@ import {
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MATRIX_QUARTET_CODES,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_BLOCKS,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUARTETS_PER_MATRIX,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_SESSION_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_SESSIONS_PER_MATRIX,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_THRESHOLDS,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TRIAL_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TRIALS_PER_MATRIX,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_VISIBILITY_LEVELS,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_VISIBILITY_MASKS,
+  FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
   FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES,
   buildFirstInstanceStandaloneDeploymentPlan,
   validateFirstInstanceStandaloneDeploymentPlan,
@@ -43,6 +48,24 @@ test('standalone deployment constants freeze the exact two-matrix design', () =>
   assert.equal(FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES, 480);
   assert.equal(FIRST_INSTANCE_STANDALONE_DEPLOYMENT_BLOCK_SIZE, 8);
   assert.equal(FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_BLOCKS, 60);
+  assert.equal(FIRST_INSTANCE_STANDALONE_DEPLOYMENT_TIMESTAMP_RESOLUTION_MODE,
+    'single-post-measurement');
+  assert.equal(
+    FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_BOUNDARY_RESOLVE_BATCH_COUNT,
+    0,
+  );
+  assert.equal(
+    FIRST_INSTANCE_STANDALONE_DEPLOYMENT_POST_MEASUREMENT_RESOLVE_BATCH_COUNT,
+    1,
+  );
+  assert.equal(FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID, 2);
+  assert.equal(FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE, 1_600);
+  assert.equal(
+    FIRST_INSTANCE_STANDALONE_DEPLOYMENT_REQUIRED_QUERIES_PER_TYPE,
+    (FIRST_INSTANCE_STANDALONE_DEPLOYMENT_WARMUP_FRAMES
+      + FIRST_INSTANCE_STANDALONE_DEPLOYMENT_MEASURED_FRAMES)
+      * FIRST_INSTANCE_STANDALONE_DEPLOYMENT_QUERIES_PER_TIMESTAMP_UID,
+  );
   assert.deepEqual(FIRST_INSTANCE_STANDALONE_DEPLOYMENT_VISIBILITY_LEVELS, [0.99, 0.2]);
   assert.deepEqual(FIRST_INSTANCE_STANDALONE_DEPLOYMENT_LANE_ORDERS, {
     A: ['portable', 'feature', 'feature', 'portable'],
@@ -98,6 +121,25 @@ test('matrix two uses the exact reverse quartet ordering of matrix one', () => {
   const plan = buildFirstInstanceStandaloneDeploymentPlan({ runId: RUN_ID });
   assert.deepEqual(plan.matrices[0].quartetCodes, expectedMatrixOne);
   assert.deepEqual(plan.matrices[1].quartetCodes, [...expectedMatrixOne].reverse());
+});
+
+test('plan timing freezes the single post-measurement timestamp resolution contract', () => {
+  const plan = buildFirstInstanceStandaloneDeploymentPlan({ runId: RUN_ID });
+  assert.deepEqual(plan.timing, {
+    warmupFrames: 320,
+    measuredFrames: 480,
+    measuredBlockSize: 8,
+    measuredBlockCount: 60,
+    timestampResolution: {
+      mode: 'single-post-measurement',
+      warmupBoundaryResolveBatchCount: 0,
+      postMeasurementResolveBatchCount: 1,
+      queriesPerTimestampUid: 2,
+      requiredQueriesPerType: 1_600,
+    },
+  });
+  assert.equal(Object.isFrozen(plan.timing), true);
+  assert.equal(Object.isFrozen(plan.timing.timestampResolution), true);
 });
 
 test('every matrix has exact quartet, lane, visibility, session, and trial balance', () => {
@@ -212,6 +254,16 @@ test('plan construction is deterministic, deeply immutable, and rejects invalid 
   assert.throws(
     () => validateFirstInstanceStandaloneDeploymentPlan(extraField, { runId: RUN_ID }),
     /differs at plan\.trials\[0\] keys/,
+  );
+
+  const changedTimestampResolution = structuredClone(first);
+  changedTimestampResolution.timing.timestampResolution.requiredQueriesPerType = 960;
+  assert.throws(
+    () => validateFirstInstanceStandaloneDeploymentPlan(
+      changedTimestampResolution,
+      { runId: RUN_ID },
+    ),
+    /differs at plan\.timing\.timestampResolution\.requiredQueriesPerType/,
   );
   assert.throws(
     () => validateFirstInstanceStandaloneDeploymentPlan(first, { runId: 'different-run' }),
