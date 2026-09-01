@@ -124,7 +124,9 @@ Candidate timing is refused unless untimed preflight proves:
   sources must differ because Three.js r185 assigns a distinct generated symbol
   to each lane-local command buffer, then become byte-identical after replacing
   only the variable and struct identifiers resolved from the `indirectCommands`
-  storage-binding coordinate with fixed canonical identifiers;
+  storage-binding coordinate with fixed canonical identifiers; no access,
+  coordinate, payload type, field, literal, statement, comment, whitespace, or
+  unrelated identifier may change;
 - workgroup sizes, dispatch dimensions, storage-binding types and coordinates,
   and uniform layouts are identical; for the fixed workload, the default
   64-thread workgroup produces one reset workgroup and 1,024 cull workgroups;
@@ -369,10 +371,12 @@ development or smoke timing is excluded from candidate evidence.
 
 Before candidate timing, implementation validation established that the two
 required lane-local command buffers receive distinct generated `NodeBuffer_N`
-symbols in Three.js r185 WGSL. The compute-source gate was therefore amended to
-the coordinate-resolved, single-identifier normalization specified above. This
-pre-candidate amendment changes no workload, timing endpoint, schedule,
-threshold, or decision rule; raw sources remain mandatory evidence.
+symbols and derived struct symbols in Three.js r185 WGSL. The compute-source
+gate in protocol commit `129972e` was therefore clarified, before any candidate
+matrix, as the coordinate-resolved, single-binding/two-identifier alpha-renaming
+specified above. This pre-candidate amendment changes no workload, timing
+endpoint, schedule, threshold, or decision rule; raw sources remain mandatory
+evidence.
 
 Exactly two full candidate matrices are run in separate browser/device sessions
 from that same frozen commit. Matrix two is run even if matrix one fails. A
