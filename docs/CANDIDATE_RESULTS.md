@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-These results are candidate evidence from one machine. They establish a reproducible result for the tested RTX 5070 Ti / D3D12 configuration; they do not establish a general WebGPU result.
+These results are candidate evidence from one machine and are governed by experiment-specific decision rules. Some comparisons below meet their declared single-device replication rules; the indirect-`firstInstance` crossover does not. None establishes a general WebGPU result.
 
 The fixed-ownership ecosystem runs used source commit `abbc5629cb5ce44bafd2ad0ced91fbbb07d6e8f2`, Three.js 0.185.1, Chrome 151.0.7922.174, a 1280 x 720 WebGPU viewport, 16,384 static objects, and 32 indexed geometry buckets. The fixtures contain positions, normals, UVs, full static TRS matrices, and matched `MeshStandardNodeMaterial` parameters. They are controlled procedural assets rather than production content.
 
@@ -97,7 +97,7 @@ The indirect-addressing crossover used source commit `cd461b58a9bd84a46904fa6104
 
 The portable lane retained a per-vertex uint bucket base and zero `firstInstance`. The feature lane removed that vertex input and addition and placed the exact bucket-slice base in the fifth word of each indexed indirect command. Both lanes shared the common index, position, normal, and UV attributes; matrix and survivor storage; material output; 32 native draws; and fixed camera and target. Each candidate completed all 24 trials and 11,520 retained rows with zero timed compute submissions.
 
-Both candidates passed full survivor and indirect-buffer readback, raw WGSL and runtime binding inspection, the all-address RGBA8 oracle, exact color/depth/object-ID parity, static-bundle and resource lifecycle checks, source provenance, artifact reconstruction, and telemetry coherence. The same GPU process set was present before and after each run. Measurement spent 374 of 377 and 375 of 378 telemetry samples in P1; median temperature was 49 C and 51 C, with maxima of 54 C and 56 C. Negative feature-minus-portable values favor indirect `firstInstance`.
+Both candidates passed full survivor and indirect-buffer readback, raw WGSL and runtime binding inspection, the all-address RGBA8 oracle, exact color/depth/object-ID parity, static-bundle and resource lifecycle checks, source provenance, artifact reconstruction, and telemetry coherence. The same GPU process set was present before and after each run. Across the complete runs, telemetry recorded P1 for 374 of 377 and 375 of 378 samples; median temperature was 49 C and 51 C, with maxima of 54 C and 56 C. Negative feature-minus-portable values favor indirect `firstInstance`.
 
 | Replication | 99% render delta | Feature wins | 20% render delta | Paired 99%-minus-20% | Condition-blind pooled drift | Preregistered result |
 | --- | ---: | ---: | ---: | ---: | ---: | --- |
@@ -106,7 +106,7 @@ Both candidates passed full survivor and indirect-buffer readback, raw WGSL and 
 
 Replication A passed the material-effect, direction, low-visibility, paired-dose, and drift gates. It failed the predeclared high-visibility nuisance-interaction bounds. Physical command placement differed by 0.119074 ms and 7.56% between strata, exceeding the strict 0.10 ms and 5% limits; visibility-order position differed by 5.99%, exceeding the percent limit. Both levels of every stratum still favored the feature lane: the physical-placement medians were -0.377092 ms and -0.258018 ms, and the visibility-order medians were -0.282196 ms and -0.377092 ms. Replication B kept every interaction within both bounds and passed all numerical gates.
 
-The required two-matrix confirmatory decision is therefore not met, and the failed first matrix is not replaced or reinterpreted. At the same time, the aggregate render-stage mechanism reproduced closely: both session medians were approximately -17%, and all 24 high-visibility repetition estimates favored the feature lane. This is evidence that the redundant vertex input/address dependency is material in the tested fixed-ownership Three.js path, but it is not yet evidence of a general WebGPU optimization or a deployable total-GPU win.
+The required two-matrix confirmatory decision is therefore not met, and the failed first matrix is not replaced or reinterpreted. At the same time, the aggregate high-visibility direction and magnitude recurred closely: both session medians were approximately -17%, and all 24 high-visibility repetition estimates favored the feature lane. This is a material-sized same-device render-stage signal for the tested address-path contrast, but the protocol does not confirm a stable first-device result, a general WebGPU optimization, or a deployable total-GPU win.
 
 The next decision experiment must retain the zero-`firstInstance` fallback and compare normal live compute-plus-render operation. It should require exact output and command parity and a reproduced total-GPU improvement of at least 0.10 ms and 5%, as fixed before these candidate measurements. A materially different GPU family remains necessary before generalizing beyond this device and driver.
 
@@ -125,7 +125,7 @@ The next decision experiment must retain the zero-`firstInstance` fallback and c
 | Indirect `firstInstance` crossover | A | `first-instance-render-only-o65536-b32-2026-09-01T05-42-36.298Z` |
 | Indirect `firstInstance` crossover | B | `first-instance-render-only-o65536-b32-2026-09-01T05-44-58.948Z` |
 
-Generated run directories remain ignored source artifacts. Each identifier above names a manifest-bound local directory containing frame-level CSV data, metadata, trial summaries, validation payloads, workload manifests, GPU telemetry, and SHA-256 commitments. The analyzer rejects incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts.
+Generated run directories remain ignored source artifacts and are not part of the tracked repository. Each identifier above names a manifest-bound local directory containing frame-level CSV data, metadata, trial summaries, validation payloads, workload manifests, GPU telemetry, and SHA-256 commitments. The analyzer rejects incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts; this establishes internal artifact consistency, not independent authenticity.
 
 ## What the evidence establishes
 
@@ -134,7 +134,7 @@ Generated run directories remain ignored source artifacts. Each identifier above
 - One retained mesh/render object removes a CPU submission cost that grows with bucket count.
 - The current-package comparison has a real crossover: fixed-slice wins through compute efficiency while its render-only path is slower.
 - The tested bucket-serial depth-ordering mechanism is not a total-GPU optimization, and the frozen crossover finds no material render-order benefit after controlling within-trial time and physical-buffer placement.
-- Indirect `firstInstance` addressing reproducibly removes approximately 17% of timestamped render-pass time in the tested high-visibility fixed-slice path, while the strict two-matrix confirmatory decision remains unmet because one matrix failed nuisance-interaction bounds.
+- Two same-device matrices observed approximately 17% lower timestamped render-pass time with indirect `firstInstance` addressing in the tested high-visibility fixed-slice path, but this remains an unconfirmed signal because one matrix failed nuisance-interaction bounds and the required two-matrix decision was not met.
 
 ## What remains open
 
