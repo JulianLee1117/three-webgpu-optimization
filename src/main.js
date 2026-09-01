@@ -2063,8 +2063,10 @@ async function runFirstInstanceLiveForcedFeatureOffGate({
       },
       construction,
       commands,
-      correctness: validation.correctness,
-      address: validation.address,
+      // Commit the validation that owns the persisted raw snapshot. A second
+      // compute submission can legally change atomic survivor append order.
+      correctness: output.snapshotValidation.correctness,
+      address: output.snapshotValidation.address,
       shaderEvidence: validation.shaderEvidence,
       output,
       disposal,
