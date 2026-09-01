@@ -74,7 +74,22 @@ The replications therefore do not establish a stable render-ordering benefit. Th
 
 The deterministic fourth kernel deliberately assigns one scatter owner per bucket so independently generated front-to-back and reverse survivor sequences can be proven identical. That diagnostic design costs approximately 0.84-0.86 ms of compute per frame, compared with approximately 0.004 ms for atomic fixed-slice, and makes the complete ordered mechanism materially slower. It is an attribution instrument, not a deployable optimization.
 
-The active follow-up removes compaction from the causal contrast: it generates and validates frozen front-to-back and reverse survivor lists before timing, then alternates the two render orders within complementary eight-frame blocks. It retains the same bundle, draw, material, geometry, exact-output, and object-ID gates. A scalable parallel scan or radix compaction path is warranted only if that render-only signal is stable. The design is fixed in the [Frozen render-order crossover protocol](FROZEN_DEPTH_CROSSOVER_PROTOCOL.md).
+The follow-up below removes compaction from the causal contrast: it generates and validates frozen front-to-back and reverse survivor lists before timing, then alternates the two render orders within complementary eight-frame blocks. It retains the same bundle, draw, material, geometry, exact-output, and object-ID gates. The design was fixed before measurement in the [Frozen render-order crossover protocol](FROZEN_DEPTH_CROSSOVER_PROTOCOL.md).
+
+## Frozen render-order crossover result
+
+The frozen crossover used source commit `deda556564e5f60ab6d461e68ad38a9d9a88fa1b`, the same RTX 5070 Ti / D3D12 system and browser, 65,536 objects, 32 buckets, 99% visibility, and the same high- and low-overlap layouts. Front-to-back and reverse survivor sequences occupied the two halves of one immutable storage buffer. Both lanes shared the matrix buffer, geometry, indirect commands, material, mesh, pipeline, static bundle, and 32 native draws; a base-offset uniform was the only timed lane difference. No compute submission occurred during warmup or measurement.
+
+Each candidate completed all 24 trials and 11,520 measured render rows. Both passed the full frozen-buffer readback, selector-address challenge, indirect-command, exact color/depth/object-ID, timestamp-identity, static-resource, lifecycle, reversed-depth, source-provenance, and artifact-integrity gates. GPU telemetry contained no malformed samples or material gaps, retained the same process set before and after each run, sustained the performance clock state during measurement, and showed no thermal-throttling pattern. Negative values below favor front-to-back.
+
+| Replication | High-overlap render: front-to-back minus reverse | Front-to-back wins | Low-overlap control | Paired high-minus-low effect | Condition-blind pooled drift | Preregistered result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| A | +0.000886 ms (+0.0486%) | 5 / 12 | -0.003126 ms (-0.1529%) | +0.001570 ms (+0.0760%) | -0.006626 ms (-0.3534%) | Fail |
+| B | +0.001014 ms (+0.0500%) | 5 / 12 | -0.002614 ms (-0.1295%) | +0.006910 ms (+0.3068%) | -0.002090 ms (-0.1014%) | Fail |
+
+Both replications passed the low-overlap equivalence and drift gates. Both failed the material high-overlap threshold, the 10-of-12 direction rule, the requirement for a negative high-overlap median in every counterbalanced stratum, and the paired high-minus-low threshold. The high-overlap point estimates were approximately one microsecond and had the opposite sign from the proposed benefit.
+
+The tightly interleaved render-only experiment therefore finds no material front-to-back benefit for this frozen opaque workload. The coarse candidate's apparent -10.6% result does not survive removal of between-trial temporal and ordering effects. On this evidence, a scalable GPU scan, radix, or prefix-compaction pipeline for coarse depth ordering is not warranted. This conclusion is specific to the tested scene and does not weaken the independently reproduced fixed-ownership compaction result.
 
 ## Evidence identifiers
 
@@ -86,6 +101,8 @@ The active follow-up removes compaction from the causal contrast: it generates a
 | Three Blocks 0.11 coalesced diagnostic | B | `ecosystem-o16384-b32-2026-08-31T20-13-07.746Z` |
 | Coarse depth ordering | A | `depth-ordering-o65536-b32-2026-08-31T22-21-43.907Z` |
 | Coarse depth ordering | B | `depth-ordering-o65536-b32-2026-08-31T22-24-21.618Z` |
+| Frozen render-order crossover | A | `depth-ordering-render-only-o65536-b32-2026-09-01T02-24-19.996Z` |
+| Frozen render-order crossover | B | `depth-ordering-render-only-o65536-b32-2026-09-01T02-27-00.288Z` |
 
 Generated run directories remain ignored source artifacts. Each identifier above names a manifest-bound local directory containing frame-level CSV data, metadata, trial summaries, validation payloads, workload manifests, GPU telemetry, and SHA-256 commitments. The analyzer rejects incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts.
 
@@ -95,7 +112,7 @@ Generated run directories remain ignored source artifacts. Each identifier above
 - The two-dispatch fixed-slice compute stage is reproducibly cheaper than both the published nine-dispatch historical heterogeneous path and the 128-dispatch current-package diagnostic.
 - One retained mesh/render object removes a CPU submission cost that grows with bucket count.
 - The current-package comparison has a real crossover: fixed-slice wins through compute efficiency while its render-only path is slower.
-- The tested bucket-serial depth-ordering mechanism is not a total-GPU optimization, and its render-only contrast was not stable enough to support an ordering claim.
+- The tested bucket-serial depth-ordering mechanism is not a total-GPU optimization, and the frozen crossover finds no material render-order benefit after controlling within-trial time and physical-buffer placement.
 
 ## What remains open
 
@@ -103,6 +120,6 @@ Generated run directories remain ignored source artifacts. Each identifier above
 - The current-package result is a diagnostic comparison, not stock public-API timing.
 - Production assets, textures, dynamic cameras, moving objects, shadows, transparency, skinning, and morph targets are outside this result.
 - The benchmark does not measure presentation latency or queue overlap.
-- Whether coarse front-to-back traversal improves render-only time after within-trial temporal drift is controlled.
+- A different scene, material cost, resolution, depth distribution, or GPU may have a different render-order crossover; that would require a new preregistered experiment rather than extending this null result.
 
-The frozen render-order crossover isolates the last point with prevalidated survivor buffers and tightly interleaved measurements. Only a stable render benefit would justify implementing and timing a scalable GPU ordering pipeline.
+The frozen render-order crossover closes the ordering branch for the current fixture. Further optimization work should preserve the reproduced fixed-ownership compute savings and target a different measured bottleneck.
