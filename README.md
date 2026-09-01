@@ -207,7 +207,13 @@ device, an exact normalized match between its name and the WebGPU adapter
 description, a working `nvidia-smi` executable, and complete 250 ms telemetry. Set
 `BENCHMARK_NVIDIA_SMI_PATH` if the executable is not on `PATH`. This requirement
 applies to candidate evidence; ordinary development matrices remain portable
-to other WebGPU implementations with explicitly unavailable telemetry.
+to other WebGPU implementations with explicitly unavailable telemetry. The
+long-lived telemetry loop reconstructs each one-row-per-GPU sample cycle by
+GPU-identity recurrence, so buffered stdout delivery is not misclassified as a
+duplicate device; every reconstructed cycle must retain the same exact device
+set, each index and UUID must map to one full identity tuple, the sole coverage
+identity must equal the sole summary identity, and all arrival-time liveness
+bounds still apply.
 
 ```powershell
 npm run smoke:first-instance-live

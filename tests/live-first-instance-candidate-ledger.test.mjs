@@ -219,10 +219,14 @@ function metadata({
     driver: 'fixture-driver',
     isFallbackAdapter: false,
   };
+  const telemetryGpu = {
+    gpuIndex: 0,
+    gpuName: 'NVIDIA RTX fixture',
+    gpuUuid: 'GPU-fixture',
+  };
   const gpuTelemetry = {
-    summary: {
-      gpus: [{ gpuIndex: 0, gpuName: 'NVIDIA RTX fixture', gpuUuid: 'GPU-fixture' }],
-    },
+    summary: { gpus: [{ ...telemetryGpu }] },
+    coverageAudit: { gpuIdentities: [{ ...telemetryGpu }] },
   };
   const adapterTelemetryAssociation =
     evaluateLiveFirstInstanceAdapterTelemetryAssociation({

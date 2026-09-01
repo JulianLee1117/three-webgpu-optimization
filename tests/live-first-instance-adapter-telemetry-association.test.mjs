@@ -11,14 +11,18 @@ const ADAPTER = Object.freeze({
   description: 'NVIDIA GeForce RTX 5070 Ti',
 });
 
-function telemetry(gpus) {
-  return { summary: { gpus } };
+function telemetry(gpus, coverageGpus = gpus) {
+  return {
+    summary: { gpus },
+    coverageAudit: { gpuIdentities: coverageGpus },
+  };
 }
 
 function gpu(overrides = {}) {
   return {
     gpuIndex: 0,
     gpuName: 'NVIDIA GeForce RTX 5070 Ti',
+    gpuUuid: 'GPU-a',
     ...overrides,
   };
 }
@@ -71,9 +75,9 @@ test('one NVIDIA page adapter binds exactly to one normalized telemetry GPU iden
     adapterIdentitySha256:
       '0372c5201b64aa196c5c21044b2b367fb7e61c4ffcc9ff0cd31cffb44b91dab0',
     telemetryIdentitySha256:
-      '6b089d62a5160a6512665d30a03e35fbcc1717d3991a7fd917cd87fe4dae0e76',
+      '83a7b371eeecfb6ae3a9fd3c12c03d82d2220bab2c5ce60717e6a98425856970',
     associationSha256:
-      '83ac9d0a4d5fdbd18028d3af785a2614938a7210ca77b9434d2c89e1959c7734',
+      '78559259332c47ac7a741dba7a7574b28970e5dfb322fd4f90f890b8a115d22a',
   });
 });
 
@@ -89,7 +93,10 @@ for (const fixture of [
       telemetryReport: telemetry(fixture.gpus),
     });
     assert.equal(association.pass, false);
-    assert.deepEqual(association.failureCodes, ['telemetry-gpu-count-not-one']);
+    assert.deepEqual(association.failureCodes, [
+      'telemetry-gpu-count-not-one',
+      'telemetry-coverage-gpu-count-not-one',
+    ]);
     assert.equal(association.telemetryGpuCount, Array.isArray(fixture.gpus)
       ? fixture.gpus.length
       : null);
@@ -97,6 +104,42 @@ for (const fixture of [
     assert.equal(association.normalizedTelemetryGpuName, null);
   });
 }
+
+test('association requires an exact sole coverage-to-summary GPU identity join', () => {
+  const missingCoverage = evaluateLiveFirstInstanceAdapterTelemetryAssociation({
+    adapterInfo: ADAPTER,
+    telemetryReport: telemetry([gpu()], null),
+  });
+  assert.equal(missingCoverage.pass, false);
+  assert.ok(missingCoverage.failureCodes.includes(
+    'telemetry-coverage-gpu-count-not-one',
+  ));
+
+  for (const [name, coverageGpu] of [
+    ['index', gpu({ gpuIndex: 1 })],
+    ['name', gpu({ gpuName: 'NVIDIA GeForce RTX 5070' })],
+    ['UUID', gpu({ gpuUuid: 'GPU-b' })],
+  ]) {
+    const mismatch = evaluateLiveFirstInstanceAdapterTelemetryAssociation({
+      adapterInfo: ADAPTER,
+      telemetryReport: telemetry([gpu()], [coverageGpu]),
+    });
+    assert.equal(mismatch.pass, false, name);
+    assert.ok(
+      mismatch.failureCodes.includes('telemetry-summary-coverage-identity-mismatch'),
+      name,
+    );
+  }
+
+  const invalidCoverage = evaluateLiveFirstInstanceAdapterTelemetryAssociation({
+    adapterInfo: ADAPTER,
+    telemetryReport: telemetry([gpu()], [gpu({ gpuUuid: '' })]),
+  });
+  assert.equal(invalidCoverage.pass, false);
+  assert.ok(invalidCoverage.failureCodes.includes(
+    'telemetry-coverage-gpu-identity-invalid',
+  ));
+});
 
 for (const fixture of [
   {
@@ -147,7 +190,10 @@ test('association rejects an invalid sole telemetry GPU identity without fuzzy f
     telemetryReport: telemetry([gpu({ gpuIndex: -1 })]),
   });
   assert.equal(invalidIndex.pass, false);
-  assert.deepEqual(invalidIndex.failureCodes, ['telemetry-gpu-index-invalid']);
+  assert.deepEqual(invalidIndex.failureCodes, [
+    'telemetry-gpu-index-invalid',
+    'telemetry-coverage-gpu-identity-invalid',
+  ]);
 
   const invalidName = evaluateLiveFirstInstanceAdapterTelemetryAssociation({
     adapterInfo: ADAPTER,
@@ -155,4 +201,14 @@ test('association rejects an invalid sole telemetry GPU identity without fuzzy f
   });
   assert.equal(invalidName.pass, false);
   assert.deepEqual(invalidName.failureCodes, ['telemetry-gpu-name-invalid']);
+
+  const invalidUuid = evaluateLiveFirstInstanceAdapterTelemetryAssociation({
+    adapterInfo: ADAPTER,
+    telemetryReport: telemetry([gpu({ gpuUuid: '' })]),
+  });
+  assert.equal(invalidUuid.pass, false);
+  assert.ok(invalidUuid.failureCodes.includes('telemetry-gpu-uuid-invalid'));
+  assert.ok(invalidUuid.failureCodes.includes(
+    'telemetry-coverage-gpu-identity-invalid',
+  ));
 });

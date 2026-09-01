@@ -326,7 +326,14 @@ export function createNvidiaTelemetryCoverageAudit(rows, {
 
   const cycles = [];
   let currentCycle = [];
+  let currentCycleIdentityKeys = new Set();
   let precedingElapsedMs = null;
+  const finishCurrentCycle = () => {
+    if (currentCycle.length === 0) return;
+    cycles.push(currentCycle);
+    currentCycle = [];
+    currentCycleIdentityKeys = new Set();
+  };
   for (const entry of orderedRows) {
     const elapsedMs = entry.row.runElapsedMs;
     if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
@@ -341,19 +348,28 @@ export function createNvidiaTelemetryCoverageAudit(rows, {
         'a GPU sample falls outside the recorded collector active bounds',
       );
     }
-    if (currentCycle.length > 0
-      && elapsedMs - precedingElapsedMs > sampleGroupingGapMs) {
-      cycles.push(currentCycle);
-      currentCycle = [];
-    }
+    const identity = telemetryGpuIdentity(entry.row);
+    const key = identity === null ? null : identityKey(identity);
+    const timingGapStartsCycle = currentCycle.length > 0
+      && elapsedMs - precedingElapsedMs > sampleGroupingGapMs;
+    // A loop iteration emits each GPU identity once, but separate iterations
+    // can be drained from stdout together after the Node event loop was busy.
+    const identityRecurrenceStartsCycle = currentCycle.length > 0
+      && key !== null
+      && currentCycleIdentityKeys.has(key);
+    if (timingGapStartsCycle || identityRecurrenceStartsCycle) finishCurrentCycle();
     currentCycle.push(entry.row);
+    if (key !== null) currentCycleIdentityKeys.add(key);
     precedingElapsedMs = elapsedMs;
   }
-  if (currentCycle.length > 0) cycles.push(currentCycle);
+  finishCurrentCycle();
 
   const cycleIdentityKeys = [];
   const identityByKey = new Map();
+  const identityKeyByIndex = new Map();
+  const identityKeyByUuid = new Map();
   let identitiesValid = true;
+  let identityMappingsValid = true;
   let duplicateIdentityInCycle = false;
   for (const cycle of cycles) {
     const keys = [];
@@ -364,6 +380,14 @@ export function createNvidiaTelemetryCoverageAudit(rows, {
         continue;
       }
       const key = identityKey(identity);
+      const existingIndexKey = identityKeyByIndex.get(identity.gpuIndex);
+      const existingUuidKey = identityKeyByUuid.get(identity.gpuUuid);
+      if ((existingIndexKey !== undefined && existingIndexKey !== key)
+        || (existingUuidKey !== undefined && existingUuidKey !== key)) {
+        identityMappingsValid = false;
+      }
+      identityKeyByIndex.set(identity.gpuIndex, key);
+      identityKeyByUuid.set(identity.gpuUuid, key);
       identityByKey.set(key, identity);
       keys.push(key);
     }
@@ -377,8 +401,15 @@ export function createNvidiaTelemetryCoverageAudit(rows, {
       'a GPU sample lacks a concrete index, name, or UUID identity',
     );
   }
+  if (!identityMappingsValid) {
+    addFailure(
+      'telemetry-gpu-identity-mapping-inconsistent',
+      'a GPU index or UUID maps to more than one complete identity tuple',
+    );
+  }
   const expectedIdentityKeys = cycleIdentityKeys[0] ?? [];
   const constantGpuIdentitySet = identitiesValid
+    && identityMappingsValid
     && !duplicateIdentityInCycle
     && expectedIdentityKeys.length > 0
     && cycleIdentityKeys.every((keys) => sameSortedStrings(keys, expectedIdentityKeys));

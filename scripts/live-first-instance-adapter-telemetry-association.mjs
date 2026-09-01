@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 export const LIVE_FIRST_INSTANCE_ADAPTER_TELEMETRY_ASSOCIATION_KIND =
   'first-instance-live-adapter-telemetry-association';
 export const LIVE_FIRST_INSTANCE_ADAPTER_TELEMETRY_ASSOCIATION_POLICY_ID =
-  'nvidia-single-telemetry-gpu-exact-ascii-name-v1';
+  'nvidia-single-telemetry-gpu-exact-ascii-name-v2';
 
 const NORMALIZATION_POLICY =
   'ascii-htab-printable-trim-collapse-space-ascii-lowercase-exact-v1';
@@ -38,6 +38,24 @@ export function evaluateLiveFirstInstanceAdapterTelemetryAssociation({
   const telemetryGpus = telemetryReport?.summary?.gpus;
   const telemetryGpuCount = Array.isArray(telemetryGpus) ? telemetryGpus.length : null;
   const soleTelemetryGpu = telemetryGpuCount === 1 ? telemetryGpus[0] : null;
+  const coverageGpus = telemetryReport?.coverageAudit?.gpuIdentities;
+  const coverageGpuCount = Array.isArray(coverageGpus) ? coverageGpus.length : null;
+  const soleCoverageGpu = coverageGpuCount === 1 ? coverageGpus[0] : null;
+  const telemetryGpuUuidValid = typeof soleTelemetryGpu?.gpuUuid === 'string'
+    && soleTelemetryGpu.gpuUuid.trim() !== '';
+  const coverageGpuIdentityValid = Number.isSafeInteger(soleCoverageGpu?.gpuIndex)
+    && soleCoverageGpu.gpuIndex >= 0
+    && typeof soleCoverageGpu?.gpuName === 'string'
+    && soleCoverageGpu.gpuName.trim() !== ''
+    && typeof soleCoverageGpu?.gpuUuid === 'string'
+    && soleCoverageGpu.gpuUuid.trim() !== '';
+  const coverageSummaryIdentityExact = telemetryGpuCount === 1
+    && coverageGpuCount === 1
+    && telemetryGpuUuidValid
+    && coverageGpuIdentityValid
+    && soleCoverageGpu?.gpuIndex === soleTelemetryGpu?.gpuIndex
+    && soleCoverageGpu?.gpuName === soleTelemetryGpu?.gpuName
+    && soleCoverageGpu?.gpuUuid === soleTelemetryGpu?.gpuUuid;
   const telemetryGpuIndex = Number.isSafeInteger(soleTelemetryGpu?.gpuIndex)
     && soleTelemetryGpu.gpuIndex >= 0
     ? soleTelemetryGpu.gpuIndex
@@ -91,6 +109,30 @@ export function evaluateLiveFirstInstanceAdapterTelemetryAssociation({
         reason: 'normalized page adapter description differs from the sole telemetry GPU name',
       });
     }
+    if (!telemetryGpuUuidValid) {
+      failures.push({
+        code: 'telemetry-gpu-uuid-invalid',
+        reason: 'sole telemetry GPU UUID must be non-empty text',
+      });
+    }
+  }
+  if (coverageGpuCount !== 1) {
+    failures.push({
+      code: 'telemetry-coverage-gpu-count-not-one',
+      reason: 'telemetry coverage must contain exactly one GPU identity',
+    });
+  } else if (!coverageGpuIdentityValid) {
+    failures.push({
+      code: 'telemetry-coverage-gpu-identity-invalid',
+      reason: 'sole telemetry coverage GPU identity tuple is invalid',
+    });
+  } else if (telemetryGpuCount === 1
+    && telemetryGpuUuidValid
+    && !coverageSummaryIdentityExact) {
+    failures.push({
+      code: 'telemetry-summary-coverage-identity-mismatch',
+      reason: 'sole telemetry summary and coverage GPU identity tuples differ',
+    });
   }
 
   const adapterIdentitySha256 = sha256Json({
@@ -101,6 +143,8 @@ export function evaluateLiveFirstInstanceAdapterTelemetryAssociation({
     gpuCount: telemetryGpuCount,
     gpuIndex: telemetryGpuIndex,
     normalizedGpuName: normalizedTelemetryGpuName,
+    coverageGpuCount,
+    coverageSummaryIdentityExact,
   });
   const associationSha256 = sha256Json({
     policyId: LIVE_FIRST_INSTANCE_ADAPTER_TELEMETRY_ASSOCIATION_POLICY_ID,

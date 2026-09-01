@@ -210,6 +210,134 @@ test('telemetry coverage requires a constant GPU identity set per sampling cycle
   assert.ok(audit.failureCodes.includes('telemetry-gpu-identity-set-changed'));
 });
 
+test('telemetry coverage treats buffered one-GPU identity recurrence as a new cycle', () => {
+  const audit = createNvidiaTelemetryCoverageAudit([
+    coverageRow(100),
+    coverageRow(100.01),
+    coverageRow(100.02),
+  ], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 200,
+  });
+  assert.equal(audit.pass, true);
+  assert.equal(audit.sampleCycleCount, 3);
+  assert.equal(audit.constantGpuIdentitySet, true);
+  assert.deepEqual(audit.failureCodes, []);
+});
+
+test('telemetry coverage reconstructs buffered multi-GPU cycles by identity recurrence', () => {
+  const gpuA = { gpuIndex: 0, gpuName: 'GPU A', gpuUuid: 'GPU-a' };
+  const gpuB = { gpuIndex: 1, gpuName: 'GPU B', gpuUuid: 'GPU-b' };
+  for (const [name, identities] of [
+    ['stable order', [gpuA, gpuB, gpuA, gpuB]],
+    ['reordered next cycle', [gpuA, gpuB, gpuB, gpuA]],
+  ]) {
+    const audit = createNvidiaTelemetryCoverageAudit(
+      identities.map((identity, index) => coverageRow(100 + index * 0.01, identity)),
+      {
+        collectorStartedRunElapsedMs: 0,
+        collectorStopRequestedRunElapsedMs: 200,
+      },
+    );
+    assert.equal(audit.pass, true, name);
+    assert.equal(audit.sampleCycleCount, 2, name);
+    assert.equal(audit.constantGpuIdentitySet, true, name);
+  }
+});
+
+test('telemetry coverage rejects a buffered cycle missing a GPU identity', () => {
+  const gpuA = { gpuIndex: 0, gpuName: 'GPU A', gpuUuid: 'GPU-a' };
+  const gpuB = { gpuIndex: 1, gpuName: 'GPU B', gpuUuid: 'GPU-b' };
+  const audit = createNvidiaTelemetryCoverageAudit([
+    coverageRow(100, gpuA),
+    coverageRow(100.01, gpuB),
+    coverageRow(100.02, gpuA),
+  ], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 200,
+  });
+  assert.equal(audit.pass, false);
+  assert.equal(audit.sampleCycleCount, 2);
+  assert.equal(audit.constantGpuIdentitySet, false);
+  assert.ok(audit.failureCodes.includes('telemetry-gpu-identity-set-changed'));
+});
+
+test('telemetry coverage rejects a buffered cycle with a changed GPU identity', () => {
+  const gpuA = { gpuIndex: 0, gpuName: 'GPU A', gpuUuid: 'GPU-a' };
+  const gpuB = { gpuIndex: 1, gpuName: 'GPU B', gpuUuid: 'GPU-b' };
+  const changedGpuB = { gpuIndex: 1, gpuName: 'GPU B', gpuUuid: 'GPU-b-replaced' };
+  const audit = createNvidiaTelemetryCoverageAudit([
+    coverageRow(100, gpuA),
+    coverageRow(100.01, gpuB),
+    coverageRow(100.02, gpuA),
+    coverageRow(100.03, changedGpuB),
+  ], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 200,
+  });
+  assert.equal(audit.pass, false);
+  assert.equal(audit.sampleCycleCount, 2);
+  assert.equal(audit.constantGpuIdentitySet, false);
+  assert.ok(audit.failureCodes.includes('telemetry-gpu-identity-set-changed'));
+});
+
+test('telemetry coverage rejects inconsistent UUID and index identity mappings', () => {
+  const gpuA = { gpuIndex: 0, gpuName: 'GPU A', gpuUuid: 'GPU-shared' };
+  const sameUuidDifferentTuple = {
+    gpuIndex: 1,
+    gpuName: 'GPU B',
+    gpuUuid: 'GPU-shared',
+  };
+  const sameIndexDifferentTuple = {
+    gpuIndex: 0,
+    gpuName: 'GPU A',
+    gpuUuid: 'GPU-replaced',
+  };
+  for (const [name, gpuB] of [
+    ['shared UUID', sameUuidDifferentTuple],
+    ['shared index', sameIndexDifferentTuple],
+  ]) {
+    const audit = createNvidiaTelemetryCoverageAudit(
+      [gpuA, gpuB, gpuA, gpuB].map(
+        (identity, index) => coverageRow(100 + index * 0.01, identity),
+      ),
+      {
+        collectorStartedRunElapsedMs: 0,
+        collectorStopRequestedRunElapsedMs: 200,
+      },
+    );
+    assert.equal(audit.pass, false, name);
+    assert.equal(audit.constantGpuIdentitySet, false, name);
+    assert.ok(
+      audit.failureCodes.includes('telemetry-gpu-identity-mapping-inconsistent'),
+      name,
+    );
+  }
+});
+
+test('telemetry coverage fails closed for invalid identities and no samples', () => {
+  const invalid = createNvidiaTelemetryCoverageAudit([
+    coverageRow(100),
+    coverageRow(100.01, { gpuName: null }),
+    coverageRow(100.02),
+  ], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 200,
+  });
+  assert.equal(invalid.pass, false);
+  assert.ok(invalid.failureCodes.includes('telemetry-gpu-identity-invalid'));
+  assert.ok(invalid.failureCodes.includes('telemetry-gpu-identity-set-changed'));
+
+  const empty = createNvidiaTelemetryCoverageAudit([], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 200,
+  });
+  assert.equal(empty.pass, false);
+  assert.equal(empty.sampleCycleCount, 0);
+  assert.ok(empty.failureCodes.includes('telemetry-no-samples'));
+  assert.ok(empty.failureCodes.includes('telemetry-gpu-identity-set-changed'));
+});
+
 test('telemetry coverage does not gate observed performance or power-state values', () => {
   const audit = createNvidiaTelemetryCoverageAudit([
     coverageRow(100, { pstate: 'P8', gpuUtilizationPercent: 0 }),

@@ -154,7 +154,10 @@ function publicIdentity(source) {
   const adapterTelemetryAssociation =
     evaluateLiveFirstInstanceAdapterTelemetryAssociation({
       adapterInfo: adapterAndDriver,
-      telemetryReport: { summary: { gpus: physicalGpuSet } },
+      telemetryReport: {
+        summary: { gpus: physicalGpuSet },
+        coverageAudit: { gpuIdentities: physicalGpuSet },
+      },
     });
   return {
     source,

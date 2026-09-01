@@ -439,6 +439,18 @@ gate. The collector records its active start and stop-request monotonic times.
 For every observed GPU, the first-sample delay, maximum internal sample gap,
 and final-sample staleness must each be no greater than eight requested
 intervals (2,000 ms). The same GPU identity set must cover that active window.
+The long-lived `nvidia-smi` loop emits one row per physical GPU without an
+explicit cycle separator. Coverage therefore closes the current cycle before
+adding a valid index/name/UUID identity already present in that cycle; this
+preserves iteration boundaries when separate 250 ms samples are buffered and
+delivered to Node together. An arrival gap greater than half the requested
+interval also closes a cycle. Every reconstructed cycle must contain the same
+nonempty identity set; each GPU index and UUID must map to exactly one complete
+index/name/UUID tuple over the whole stream. Invalid or inconsistent identities
+still fail closed. Candidate association independently requires exactly one
+coverage identity and one summary identity, exact tuple equality between them,
+and the normalized adapter-name match described above. The raw arrival times
+retain all liveness checks above.
 The post-hoc verifier reconstructs those facts from `gpu-telemetry.csv`; it
 never rejects temperature, utilization, clocks, power state, memory, or power.
 

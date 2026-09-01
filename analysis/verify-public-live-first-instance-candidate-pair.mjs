@@ -246,7 +246,10 @@ function requirePublicIdentityAdapterTelemetryAssociation(identity, label) {
   );
   const reconstructed = evaluateLiveFirstInstanceAdapterTelemetryAssociation({
     adapterInfo,
-    telemetryReport: { summary: { gpus: telemetryGpus } },
+    telemetryReport: {
+      summary: { gpus: telemetryGpus },
+      coverageAudit: { gpuIdentities: telemetryGpus },
+    },
   });
   if (reconstructed.pass !== true || !sameCanonical(retained, reconstructed)) {
     reject(

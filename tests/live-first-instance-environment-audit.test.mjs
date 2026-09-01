@@ -36,11 +36,17 @@ function availableTelemetryReport() {
       gpus: [{
         gpuIndex: 0,
         gpuName: 'NVIDIA GeForce RTX 5070 Ti',
+        gpuUuid: 'GPU-a',
       }],
     },
     coverageAudit: {
       pass: true,
       reasons: [],
+      gpuIdentities: [{
+        gpuIndex: 0,
+        gpuName: 'NVIDIA GeForce RTX 5070 Ti',
+        gpuUuid: 'GPU-a',
+      }],
     },
   };
 }
