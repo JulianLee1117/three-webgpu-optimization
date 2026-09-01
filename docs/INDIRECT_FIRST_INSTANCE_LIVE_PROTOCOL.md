@@ -120,8 +120,11 @@ all timed frame bodies.
 
 Candidate timing is refused unless untimed preflight proves:
 
-- raw reset WGSL is identical between lanes and raw cull WGSL is identical
-  between lanes;
+- raw reset and cull WGSL are retained for both lanes; for each phase, the raw
+  sources must differ because Three.js r185 assigns a distinct generated symbol
+  to each lane-local command buffer, then become byte-identical after replacing
+  only the variable and struct identifiers resolved from the `indirectCommands`
+  storage-binding coordinate with fixed canonical identifiers;
 - workgroup sizes, dispatch dimensions, storage-binding types and coordinates,
   and uniform layouts are identical; for the fixed workload, the default
   64-thread workgroup produces one reset workgroup and 1,024 cull workgroups;
@@ -363,6 +366,13 @@ device/browser loss follows the matrix-level transient rule below.
 The protocol is committed before candidate timing. The implementation and all
 correctness checks are then frozen in a separate clean source commit. Any
 development or smoke timing is excluded from candidate evidence.
+
+Before candidate timing, implementation validation established that the two
+required lane-local command buffers receive distinct generated `NodeBuffer_N`
+symbols in Three.js r185 WGSL. The compute-source gate was therefore amended to
+the coordinate-resolved, single-identifier normalization specified above. This
+pre-candidate amendment changes no workload, timing endpoint, schedule,
+threshold, or decision rule; raw sources remain mandatory evidence.
 
 Exactly two full candidate matrices are run in separate browser/device sessions
 from that same frozen commit. Matrix two is run even if matrix one fails. A
