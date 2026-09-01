@@ -99,12 +99,20 @@ Two coarse depth-ordering candidates each completed all 36 trials and passed the
 
 Two subsequent frozen render-order candidates removed compaction from timing and alternated front-to-back and reverse inside balanced eight-frame blocks. Both accepted all 24 trials and passed exact evidence, low-overlap equivalence, telemetry, and drift gates. Their high-overlap front-to-back-minus-reverse estimates were +0.000886 ms and +0.001014 ms, with only 5 of 12 front-to-back wins in each run. The controlled result therefore finds no material render-order benefit for this workload and does not justify a scalable sorting pipeline. Exact completed comparisons and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
 
-Two indirect-`firstInstance` render-only candidates then accepted all 24 trials and 11,520 rows from the same frozen commit. Their 99%-visibility feature-minus-portable estimates were -0.346 ms (-17.56%) and -0.338 ms (-17.12%), with all 12 repetition estimates negative in each run. The first matrix failed two preregistered nuisance-factor gates even though both levels of every stratum favored the feature lane; the second passed every numerical gate. The aggregate high-visibility direction and magnitude recurred across both sessions, but the required two-matrix confirmatory decision was not met. A normal live compute-plus-render evaluation is required before treating the feature lane as a deployable total-GPU optimization. Exact outcomes and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
+Two indirect-`firstInstance` render-only candidates then accepted all 24 trials and 11,520 rows from the same frozen commit. Their 99%-visibility feature-minus-portable estimates were -0.346 ms (-17.56%) and -0.338 ms (-17.12%), with all 12 repetition estimates negative in each run. The first matrix failed two preregistered nuisance-factor gates even though both levels of every stratum favored the feature lane; the second passed every numerical gate. The aggregate high-visibility direction and magnitude recurred across both sessions, but the required two-matrix confirmatory decision was not met. A normal live compute-plus-render evaluation is required before treating the feature lane as a deployable timestamped GPU-pass optimization. Exact outcomes and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
 
-The live compute-plus-render implementation, strict post-hoc verifier, and
-deterministic public-evidence sanitizer are complete. Candidate outcomes are
-reported only after two full matrices from one clean frozen implementation
-commit.
+The subsequent live compute-plus-render pair also completed two valid 24-trial
+matrices from one frozen commit. At 99% visibility, the feature-minus-portable
+timestamped GPU-pass deltas were -0.249 ms (-11.50%) and -0.257 ms (-12.49%),
+with all 12 repetition estimates negative in each matrix. At 20% visibility,
+the corresponding deltas were -0.043 ms (-10.88%) and -0.045 ms (-11.50%).
+Matrix 2 passed every gate;
+Matrix 1 failed only the preregistered lane-physical-order interaction bound,
+despite both order strata favoring the feature lane. The required two-matrix
+confirmation was therefore not met. This is a reproduced material signal on
+the tested device, not a confirmed deployable or cross-device optimization.
+The retained private pair, deterministic sanitized bundles, public receipt, and
+lossless public package all pass their respective integrity verifiers.
 
 The core techniques, including GPU frustum culling, survivor compaction, indirect drawing, and retained command submission, are established prior art. The research question is whether a narrower Three.js integration or fixed-ownership specialization produces a material, reproducible difference.
 

@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-These results are candidate evidence from one machine and are governed by experiment-specific decision rules. Some comparisons below meet their declared single-device replication rules; the indirect-`firstInstance` crossover does not. None establishes a general WebGPU result.
+These results are candidate evidence from one machine and are governed by experiment-specific decision rules. Some comparisons below meet their declared single-device replication rules; neither indirect-`firstInstance` study meets its two-matrix confirmation rule. None establishes a general WebGPU result.
 
 The fixed-ownership ecosystem runs used source commit `abbc5629cb5ce44bafd2ad0ced91fbbb07d6e8f2`, Three.js 0.185.1, Chrome 151.0.7922.174, a 1280 x 720 WebGPU viewport, 16,384 static objects, and 32 indexed geometry buckets. The fixtures contain positions, normals, UVs, full static TRS matrices, and matched `MeshStandardNodeMaterial` parameters. They are controlled procedural assets rather than production content.
 
@@ -106,9 +106,26 @@ Both candidates passed full survivor and indirect-buffer readback, raw WGSL and 
 
 Replication A passed the material-effect, direction, low-visibility, paired-dose, and drift gates. It failed the predeclared high-visibility nuisance-interaction bounds. Physical command placement differed by 0.119074 ms and 7.56% between strata, exceeding the strict 0.10 ms and 5% limits; visibility-order position differed by 5.99%, exceeding the percent limit. Both levels of every stratum still favored the feature lane: the physical-placement medians were -0.377092 ms and -0.258018 ms, and the visibility-order medians were -0.282196 ms and -0.377092 ms. Replication B kept every interaction within both bounds and passed all numerical gates.
 
-The required two-matrix confirmatory decision is therefore not met, and the failed first matrix is not replaced or reinterpreted. At the same time, the aggregate high-visibility direction and magnitude recurred closely: both session medians were approximately -17%, and all 24 high-visibility repetition estimates favored the feature lane. This is a material-sized same-device render-stage signal for the tested address-path contrast, but the protocol does not confirm a stable first-device result, a general WebGPU optimization, or a deployable total-GPU win.
+The required two-matrix confirmatory decision is therefore not met, and the failed first matrix is not replaced or reinterpreted. At the same time, the aggregate high-visibility direction and magnitude recurred closely: both session medians were approximately -17%, and all 24 high-visibility repetition estimates favored the feature lane. This is a material-sized same-device render-stage signal for the tested address-path contrast, but the protocol does not confirm a stable first-device result, a general WebGPU optimization, or a deployable timestamped GPU-pass win.
 
-The next decision experiment must retain the zero-`firstInstance` fallback and compare normal live compute-plus-render operation. It should require exact output and command parity and a reproduced total-GPU improvement of at least 0.10 ms and 5%, as fixed before these candidate measurements. A materially different GPU family remains necessary before generalizing beyond this device and driver.
+The next decision experiment retained the zero-`firstInstance` fallback and compared normal live compute-plus-render operation. It required exact output and command parity and a reproduced timestamped GPU-pass improvement of at least 0.10 ms and 5%, as fixed before these candidate measurements. Its outcome follows.
+
+## Live indirect `firstInstance` compute-plus-render result
+
+The live crossover used source commit `aa577d7c3725469ed04005b236009e81a4a764d9`, annotated anchor tag `first-instance-live-candidate-7b343849f9dc3e8a`, and study key `7b343849f9dc3e8adcf13722eac937df06ce9841bfd9f532446d1e9f9f77aab4`. It used Three.js 0.185.1, Chrome 151.0.7922.174, the same RTX 5070 Ti / D3D12 system, 65,536 objects, 32 indexed geometry buckets, 99% and 20% visibility cells, a 1280 x 720 timed target inside a 1280 x 900 browser viewport, and reversed depth.
+
+The portable and feature lanes retained the render-only study's exact addressing contrast while running the normal culling compute and render phases. Each matrix completed all 24 trials and retained 11,520 measured rows. Both passed exact survivor, indirect-command, shader, runtime-binding, timestamp-identity, color/depth/object-ID, resource-lifecycle, source-provenance, artifact, process-identity, telemetry-coverage, and adapter-to-GPU association checks. There were no retries or invalid attempts. Negative feature-minus-portable values favor indirect `firstInstance`.
+
+| Matrix | 99% timestamped GPU-pass delta | 99% render delta | Feature wins | 20% timestamped GPU-pass delta | Lane-physical-order interaction | Preregistered result |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| A | -0.248552 ms (-11.50%) | -0.248516 ms (-11.52%) | 12 / 12 | -0.042942 ms (-10.88%) | +0.141034 ms (+8.004 percentage points) | Fail |
+| B | -0.257194 ms (-12.49%) | -0.257112 ms (-12.52%) | 12 / 12 | -0.045258 ms (-11.50%) | -0.060440 ms (-2.026 percentage points) | Pass |
+
+Matrix A passed the aggregate material-effect, direction, render, low-visibility, paired-dose, carryover, drift, and three of four high-visibility nuisance-factor gates. It failed only the lane-physical-order interaction bound: the two order-stratum medians were -0.305812 ms (-16.04%) and -0.164778 ms (-8.03%), so both levels favored the feature lane but their separation exceeded the predeclared 0.10 ms and 5 percentage-point limits. Matrix B reversed the interaction direction and kept it within both limits. Construction order, first compute use, and render-pipeline priming are bundled in this factor, so the evidence does not attribute the session-dependent interaction to one cause.
+
+The timestamped GPU-pass effect was almost entirely render time; the high-visibility compute deltas were -0.000028 ms in Matrix A and +0.000002 ms in Matrix B. The aggregate direction and magnitude therefore reproduce the earlier addressing-path signal under normal culling, but the strict conjunctive pair decision remains `confirmation-not-met`: both matrices were required to pass independently. The failed first matrix is retained and is not replaced or reinterpreted. This is strong same-device evidence of a material render-driven effect, not confirmation of a deployable optimization or a general Three.js/WebGPU result.
+
+The deterministic public package `first-device-live-7b343849f9dc3e8a.tar.br` contains the sanitized pair and receipt, is 4,486,242 bytes, and has SHA-256 `5cb66f15b53c5360785a063fd2a46d82cd1041a97827cfd354e47bb589467b99`. Its archive, embedded receipt, and public-run commitments pass the strict package verifier while preserving the `confirmation-not-met` decision.
 
 ## Evidence identifiers
 
@@ -124,6 +141,8 @@ The next decision experiment must retain the zero-`firstInstance` fallback and c
 | Frozen render-order crossover | B | `depth-ordering-render-only-o65536-b32-2026-09-01T02-27-00.288Z` |
 | Indirect `firstInstance` crossover | A | `first-instance-render-only-o65536-b32-2026-09-01T05-42-36.298Z` |
 | Indirect `firstInstance` crossover | B | `first-instance-render-only-o65536-b32-2026-09-01T05-44-58.948Z` |
+| Live indirect `firstInstance` | A | `first-instance-live-o65536-b32-2026-09-01T16-47-53.050Z` |
+| Live indirect `firstInstance` | B | `first-instance-live-o65536-b32-2026-09-01T16-50-07.577Z` |
 
 Generated run directories remain ignored source artifacts and are not part of the tracked repository. Each identifier above names a manifest-bound local directory containing frame-level CSV data, metadata, trial summaries, validation payloads, workload manifests, GPU telemetry, and SHA-256 commitments. The analyzer rejects incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts; this establishes internal artifact consistency, not independent authenticity.
 
@@ -135,6 +154,7 @@ Generated run directories remain ignored source artifacts and are not part of th
 - The current-package comparison has a real crossover: fixed-slice wins through compute efficiency while its render-only path is slower.
 - The tested bucket-serial depth-ordering mechanism is not a total-GPU optimization, and the frozen crossover finds no material render-order benefit after controlling within-trial time and physical-buffer placement.
 - Two same-device matrices observed approximately 17% lower timestamped render-pass time with indirect `firstInstance` addressing in the tested high-visibility fixed-slice path, but this remains an unconfirmed signal because one matrix failed nuisance-interaction bounds and the required two-matrix decision was not met.
+- Normal live culling preserved that addressing-path direction: two further matrices observed approximately 11.5-12.5% lower high-visibility timestamped GPU-pass time, almost entirely in render, but one matrix again failed a strict order-interaction bound and the pair did not confirm.
 
 ## What remains open
 
@@ -143,6 +163,6 @@ Generated run directories remain ignored source artifacts and are not part of th
 - Production assets, textures, dynamic cameras, moving objects, shadows, transparency, skinning, and morph targets are outside this result.
 - The benchmark does not measure presentation latency or queue overlap.
 - A different scene, material cost, resolution, depth distribution, or GPU may have a different render-order crossover; that would require a new preregistered experiment rather than extending this null result.
-- The indirect-`firstInstance` result is render-only. A live compute-plus-render experiment must establish a material total-GPU benefit while preserving the portable fallback before deployment.
+- The repeated indirect-`firstInstance` effect remains a same-device signal with unresolved lane-state/order heterogeneity. A deployment-topology experiment must isolate each lane in balanced fresh browser/device sessions before enabling the feature path.
 
-The frozen render-order crossover closes the ordering branch for the current fixture. Further optimization work should preserve the reproduced fixed-ownership compute savings and test whether the indirect-`firstInstance` render reduction survives normal live culling as a total-GPU result.
+The frozen render-order crossover closes the ordering branch for the current fixture. In the live crossover, the indirect-`firstInstance` specialization's compute contrast was effectively zero while its render-stage signal was approximately 0.25 ms; the result does not rank unrelated compute optimizations. The next bounded diagnostic should isolate construction and pipeline-priming order, then quantify exact occlusion headroom before committing to a larger GPU-resident occlusion experiment.
