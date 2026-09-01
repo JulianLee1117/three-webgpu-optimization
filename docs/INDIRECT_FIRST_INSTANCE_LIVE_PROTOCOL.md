@@ -178,11 +178,22 @@ command resource, command offset zero, and production address expression.
 
 Because valid atomic ordering may differ, the two address images are not
 required to be byte-identical. Their canonical bucket memberships must be
-identical. The production render is stricter: two stable captures per lane must
-have exact full-frame RGBA8, depth32float, and RGB24 object-ID commitments,
-nonzero coverage, and no non-visible or out-of-range ID. Color, depth, and
-object-ID commitments must be identical across lanes and stable across all
-validation points.
+identical. The direct diagnostic render is stricter: two stable captures per
+lane must have exact full-frame RGBA8, depth32float, and RGB24 object-ID
+commitments, nonzero coverage, and no non-visible or out-of-range ID. Color,
+depth, and object-ID commitments must be identical across lanes and stable
+across all validation points.
+
+That fresh diagnostic mesh is the membership oracle, but it does not by itself
+prove execution of the opaque timed bundle. While the same lane remains active,
+the harness also renders the existing benchmark scene twice through its actual
+pre-recorded `BundleGroup` into the exact timed target and reads back RGBA8.
+Both production captures must be byte-identical and equal the diagnostic color
+capture. Renderer call serials must advance by exactly one for each capture,
+with no compute, selection, or snapshot-preparation event. Before, between, and
+after commitments must retain the same bundle GPU object, sole render object,
+mesh, geometry, material, bindings, target, pipeline/cache state, and exactly
+one bundle-record callback. Timestamp tracking remains disabled throughout.
 
 Raw render WGSL and runtime bindings must prove the intended contrast: equal
 fragment shaders; a portable vertex input and bucket-base addition; a feature
@@ -191,6 +202,23 @@ declaration or reference; common matrix and survivor storage resources; and no
 unintended vertex-layout difference. Shader normalization may remove only the
 portable `bucketBase` location and the resulting renumbering of otherwise
 identical common inputs.
+
+Each of the three evidence points retains two independent runtime inspections:
+the validation attached to the parity snapshot and the final validation for
+that point. The runner issues the exact six-entry phase/role sequence, a
+consecutive capture ordinal, and a unique phase-bound challenge before each
+retained inspection. Those records are committed outside the page-produced
+payload and included in the observation digest. Verification requires exact
+challenge equality, the fixed sequence, consecutive capture counters, distinct
+observation digests, stable semantic evidence, and stable inspected resource
+identities across all six captures. Re-labeling or re-hashing one cached
+observation therefore cannot satisfy the retained evidence contract.
+
+The observed reset/cull compute-node identities must equal the corresponding
+lifecycle node identities. Every observed shared compute binding must equal its
+named lifecycle storage attribute, and each lane-local `indirectCommands`
+binding must equal that lane's lifecycle command-buffer identity. These joins
+are checked within every observation and across all six captures.
 
 Both timed compute pipelines and both timed render pipelines are primed in
 `lanePhysicalOrder` before timing. Parent, bundle, mesh, geometry, material,
@@ -207,29 +235,59 @@ then runs the fixed portable-then-feature serialized validation sequence.
 ## Crossover schedule
 
 `P` denotes portable bucket-base addressing and `F` denotes feature-gated
-indirect `firstInstance` addressing. Each eight-frame block uses one of two
-complementary patterns:
+indirect `firstInstance` addressing. Each trial selects one of two
+complementary cyclic eight-frame patterns and repeats that pattern for every
+warmup and measured block:
 
 ```text
-PFPF | FPFP
-FPFP | PFPF
+PPPFPFFF
+FFFPFPPP
 ```
 
-The orientations alternate, with a committed starting offset. Warmup contains
-40 blocks, or 320 frames. Measurement contains 60 blocks, or 480 retained
-rows: 240 per lane and 30 blocks of each orientation.
+The selected orientation is fixed within a trial and counterbalanced across
+repetitions. Each cyclic block, including the actual predecessor from the
+previous block, contains each of `PP`, `PF`, `FP`, and `FF` exactly twice. It
+also contains each of the eight possible `(t-2, t-1, t)` lane triples exactly
+once. Warmup contains 40 complete cycles, or 320 frames, so measurement starts
+with the exact cyclic two-frame history. Measurement contains 60 complete
+cycles, or 480 retained rows: 240 per lane, 120 of each first-order transition,
+and 60 of each two-frame-history/current triple.
 
 Every row records the block, orientation, within-block position, planned lane,
-lane construction order, command-buffer identity commitment, lane-selection
-serial, compute-call serial, render-call serial, and unique GPU frame ID. A
+the actual previous two timed lanes, lane construction order, command-buffer
+identity commitment, lane-selection serial, compute-call serial,
+render-call serial, and unique GPU frame ID. The actual history is carried
+across the warmup/measurement boundary and must equal the cyclic schedule. A
 trial is rejected for a missing, duplicate, reordered, or extra selection,
-compute, or render event.
+compute, render, transition, or history event.
 
 Three.js r185 uses two timestamp queries for each compute submission and two
 for each render pass. Warmup therefore consumes 640 queries in each pool and
 measurement consumes 960 in each pool, below the pinned 2,048-query capacity.
-Every retained frame must have exactly one compute timestamp UID and one render
-timestamp UID. Timestamp quantum must be no greater than 1,000 ns.
+The r185 timestamp helper otherwise treats an array-valued compute group as a
+render context with an undefined ID. Before first use, the harness therefore
+registers each exact lane compute-array identity with a distinct positive
+context ID through a version-pinned backend wrapper. The registration binds the
+backend, wrapper, array, lane, reset/cull node IDs, and registration serial.
+Every submission returns that actual registration record rather than inferring
+the submitted lane from the schedule.
+
+Every warmup and retained frame must have exactly one raw compute UID-duration
+record and one raw render UID-duration record. Strict parsing requires the r185
+forms `c:<frame-call>:<registered-context>:f<frame>` and
+`r:<frame-call>:<render-context>:f<frame>` in their corresponding pools. The
+frame, call index, compute context, submitted group, lane, and row must join
+exactly; both durations must be strictly positive. Compute and render timestamp
+quality is established independently in both warmup and measurement, and each
+pool's observed quantum must be no greater than 1,000 ns.
+
+The 320 warmup submissions are retained as compact event evidence rather than
+timing rows. The audit starts with physically accurate `null`/`null` lane
+history, reconstructs every scheduled lane, command buffer, submitted compute
+group, node set, serial, GPU frame, and raw UID record, and commits the final
+two executed lanes and serials at the post-warmup boundary. Measurement frame
+zero must join that executed tail; no conceptual cyclic predecessor is accepted
+for the first two warmup frames.
 Timestamp tracking is disabled during construction, priming, every validation,
 address challenge, production capture, and readback. The compute and render
 pool capacities, start/end indices, resolved UID sets, and phase resets are
@@ -248,20 +306,29 @@ excluded from warmup and measurement accounting.
 
 One matrix contains 12 repetitions and both visibility levels, for exactly 24
 paired trials and 11,520 retained rows. Visibility order, lane
-`lanePhysicalOrder`, and starting schedule orientation are pairwise
+`lanePhysicalOrder`, and cyclic schedule orientation are pairwise
 balanced by the committed plan.
 
-For every measured block, analysis computes:
+For every measured block and each previous-lane stratum `s` in `{P, F}`, analysis
+computes:
 
 ```text
-mean(feature GPU pass total) - mean(portable GPU pass total)
+delta_s = mean(feature GPU pass total | previous lane = s)
+        - mean(portable GPU pass total | previous lane = s)
+
+block delta = (delta_P + delta_F) / 2
 ```
 
-where each row's GPU pass total is its timestamped compute duration plus its
-timestamped render duration. The trial estimate is the conventional median of
-its 60 block deltas; an even median is the arithmetic mean of the two central
-values. Percentage deltas use the corresponding portable block mean as the
-denominator before taking the trial median.
+Each transition cell contains exactly two rows per block. The standardized
+portable and feature block means give each predecessor stratum weight one half;
+their difference equals the block delta. Each row's GPU pass total is its
+timestamped compute duration plus its timestamped render duration. The trial
+estimate is the conventional median of its 60 stratified block deltas; an even
+median is the arithmetic mean of the two central values. Percentage deltas use
+the standardized portable block mean as the denominator before taking the
+trial median. The exact two-frame-history balance is also reconstructed as a
+schedule gate, while the preregistered primary estimator stratifies on the immediately
+previous lane.
 
 The identical block and trial estimator is applied to render duration as a
 secondary confirmatory endpoint and to compute duration as a descriptive
@@ -304,8 +371,12 @@ matrices:
 - the 99% median render delta is at most -0.10 ms and at most -5%, with at
   least 10 of 12 render estimates strictly negative;
 - the 99% GPU-pass-total median is negative in both `lanePhysicalOrder` strata, both
-  starting-orientation strata, both visibility-order positions, and both
+  cyclic-orientation strata, both visibility-order positions, and both
   measurement halves;
+- the predecessor-stratified 99% GPU-pass-total median is negative after both
+  portable and feature predecessors, and the feature-predecessor minus
+  portable-predecessor interaction remains strictly inside both 0.10 ms and
+  5 percentage points;
 - each 99% GPU-pass-total nuisance interaction remains strictly inside both
   0.10 ms and 5 percentage points;
 - the 20% median GPU-pass-total regression is below both +0.02 ms and +5%, with at
@@ -346,6 +417,43 @@ request, and page lifecycle; it does not mean a different machine or driver.
 
 The committed Nvidia telemetry collector samples at 250 ms and must finish with
 status `available`, zero malformed records, and a reconstructable CSV/summary.
+Candidate evidence requires exactly one telemetry GPU. The page-reported
+adapter vendor must normalize exactly to `nvidia`, and its normalized adapter
+description must equal the sole telemetry GPU name under the frozen ASCII
+trim/collapse/lowercase policy. The audit records separate adapter, telemetry,
+and association commitments; the post-hoc verifier reconstructs them. This
+fails closed when a hybrid or multi-GPU topology cannot unambiguously associate
+the WebGPU workload with the sampled device.
+Collector liveness is a structural infrastructure gate, not a telemetry-value
+gate. The collector records its active start and stop-request monotonic times.
+For every observed GPU, the first-sample delay, maximum internal sample gap,
+and final-sample staleness must each be no greater than eight requested
+intervals (2,000 ms). The same GPU identity set must cover that active window.
+The post-hoc verifier reconstructs those facts from `gpu-telemetry.csv`; it
+never rejects temperature, utilization, clocks, power state, memory, or power.
+
+Candidate evidence also binds the WebGPU page adapter to the telemetry device
+instead of treating those records as independent environment descriptions.
+`gpu-telemetry-summary.json` must contain exactly one GPU, the page adapter
+vendor must normalize exactly to `nvidia`, and the normalized page adapter
+description must equal that GPU's normalized `gpuName`. Identity text is valid
+only when it contains ASCII horizontal tabs or printable ASCII characters;
+normalization trims ASCII spaces/tabs, collapses each remaining run to one
+space, and folds ASCII `A`-`Z` to lowercase. It performs no Unicode,
+punctuation, vendor-prefix, substring, or fuzzy normalization. The environment
+audit records the normalized identities and deterministic SHA-256 commitments,
+and the verifier reconstructs the association from the page and CSV-bound
+telemetry evidence. Zero GPUs, multiple GPUs, a non-NVIDIA vendor, or an exact
+name mismatch is a non-replaceable environment-gate failure. The association
+contains no GPU UUID or process identity, so public derivation preserves it
+unchanged and revalidates it after UUID and process pseudonymization.
+
+Each compute-process query records its stdout byte count, truncation status,
+non-empty row count, parsed-record count, malformed-row count, and stderr byte
+count. A genuinely blank, successful query is the only valid empty process
+set. Truncation, stderr, or any malformed identity row is a retryable collector
+failure; it cannot collapse into an apparently stable empty set.
+
 The compute-process identity set must be the same in the pre-run and post-run
 snapshots, using the exact sorted tuple `(gpuUuid, pid, sanitized processName)`;
 reported memory use is not part of identity. A pre/post mismatch is a
@@ -356,6 +464,42 @@ memory, and power values are contextual: none has a post hoc rejection
 threshold. Device drift is governed only by the condition-blind numerical drift
 gate above. A collector failure is handled by the matrix-level transient rule
 below; observed telemetry values or the presence of a stable process are not.
+
+Before candidate reservation and at runner start and teardown, the harness
+computes the same deterministic installed-dependency closure over every regular
+file under `node_modules`,
+excluding only generated `.bin/**` shims and `.vite*/**` caches. The closure
+binds sorted relative path, byte count, and file SHA-256; symbolic links or
+unsupported entries outside those exclusions fail closed. Its digest, file
+count, and total bytes are fixed in the series source identity, recorded at
+runner start and end, and must remain equal across both matrices. This binds
+the installed Three.js, both statically imported Three Blocks packages, Vite,
+Playwright, and installed transitive dependencies in addition to the tracked
+source and package lock.
+
+Generated Vite optimizer caches are excluded from that installed closure only
+because candidate serving makes them non-executable. The candidate server
+uses Vite's custom-app mode, serves the exact tracked `index.html` itself, and
+rejects all Vite-client and virtual-module requests under `/@vite/` or `/@id/`.
+It disables optimizer discovery, has no explicit optimizer entries, and
+receives a unique, initially absent cache directory outside the project for
+each matrix. A fail-closed middleware and transform audit also reject any
+decoded request, module identifier, source path, or transformed reference
+under an excluded `.vite*` directory. The cache must remain empty.
+
+The audit commits the entry HTML source and exact 2xx response, then records the
+sorted project-relative source path, source byte count and SHA-256, and every
+exact successful browser-response SHA-256 for each requested project or
+dependency JavaScript/CSS module. Query variants are canonicalized to one
+source while retaining distinct response variants and reconciled counts;
+redirects, errors, incomplete responses, or unmapped executable requests fail
+closed. The benchmark entry point and live strategy module are mandatory. The
+verifier independently rehashes every retained source and reconstructs the
+runtime-audit aggregate and request/response counts after teardown. Captured
+transformed-response commitments must be byte-identical across the two
+matrices. Thus neither a reusable untracked prebundle nor a randomized Vite
+client can substitute for the tracked source or installed dependency bytes
+bound above.
 
 The page and runner must record zero page errors, console errors, uncaptured
 WebGPU errors, and WebGPU validation errors from construction through teardown.
@@ -384,10 +528,73 @@ trial-local timestamp failure may restart only its complete two-visibility
 repetition in the same session, and only when an independently logged runner or
 device interruption identifies the cause before delta inspection.
 
-Browser/device loss, telemetry-collector failure, or run-level artifact
-incompleteness/corruption invalidates the entire attempted matrix. Its artifacts
-are preserved and the matrix restarts in a fresh session. Infrastructure-failed
-attempts do not count toward the exactly two valid candidate matrices. Shader,
+Before any attempt, a separate initialize-only command claims the study in the
+one root candidate registry. Its study key is the canonical SHA-256 of the
+experiment ID, Git tree, tracked-file digest, and package-lock digest; omitting
+the commit prevents an empty commit over the same tree from resetting the
+series. The claim binds the exact commit and full installed-dependency identity,
+so a closure change under that study key rejects. The derived basename is
+`first-device-live-<first-16-study-key-hex>`. A hash-linked materialization event
+then binds the one series ID and its opening-event digest. Root locking and exact
+inventory reject aliases, sibling copies, missing registries, duplicate source
+claims, deleted materialized series, and concurrent initialization.
+Verification also enforces claim time ≤ series-opening time ≤
+materialization time across the registry and series chains.
+
+Initialization emits a deterministic annotated-tag name, target, and canonical
+message containing the claim, series-opening, and materialization digests. That
+exact tag is created and published before timing. Every attempt requires the
+matching annotated tag locally; the pair verifier revalidates it and reports
+its message digest. Remote availability is verified operationally before the
+first run. Deleting and rewriting both ignored local registry and series bytes
+remains an inherent local limitation. The disclosed chains establish internally
+consistent reported chronology; external pre-timing chronology depends on a
+remote observer having fetched or retained the tag-object ID or ref before
+timing. These commitments establish integrity, not authorship.
+
+Every candidate attempt is launched by the committed series orchestrator. It
+opens a hash-chained JSONL ledger for one clean source/dependency identity and
+syncs an `attempt-reserved` event before starting the child runner. The runner
+records the exact series ID, reservation-event SHA-256, attempt and matrix
+ordinals, source commit and tree, and installed-dependency digest as structured
+metadata. Finalization binds that reservation, child disposition, independently
+derived closed classification, exact run-directory identity, and a recursive
+content commitment for the preserved attempt. The pair verifier rejects a
+broken chain, a missing or surplus attempt/run directory, a transplanted run,
+post-finalization byte changes, overlapping sessions, a third valid matrix, or
+any cross-matrix source, browser, backend, page-state, adapter/driver, physical
+GPU, protocol, or workload mismatch. Ambiguous interrupted-child recovery
+fails closed rather than starting an overlapping session.
+
+A completed matrix advances its slot whether its numerical decision passes or
+fails and whether its stable-process environment gate passes or fails. A
+retryable infrastructure attempt retains its matrix ordinal and stops the
+orchestrator for an explicit fresh-session invocation. A non-retryable
+implementation/evidence failure terminates that source series. The registry and
+ledger hash chains provide internally reproducible chronology and byte
+commitments, while the matching current local tag binds the reported selected
+opening boundary. External preexistence of that boundary depends on the retained
+remote observation described above; none is an author signature or establishes
+external authorship.
+The exact event schemas, classifications, commands, and pair identity are
+specified in
+[`FIRST_INSTANCE_LIVE_CANDIDATE_LEDGER.md`](FIRST_INSTANCE_LIVE_CANDIDATE_LEDGER.md).
+
+Browser/device loss, telemetry-collector failure, or an artifact-persistence
+failure with exact infrastructure provenance invalidates the entire attempted
+matrix. Artifact provenance is closed to a pre-metadata recorded spawn failure,
+operating-system termination, or Windows abnormal status, plus the frozen
+runner's allowlisted filesystem-I/O marker. When failed metadata exists, the
+marker's I/O code must also occur in that metadata's error record. Artifact
+absence or corruption by itself is not retry evidence. In particular, a
+completed matrix cannot be replaced by deleting or corrupting its manifest,
+and readable failed shader or validation metadata cannot borrow a later I/O
+marker even if its manifest is incomplete.
+Its artifacts are preserved and the matrix restarts in a fresh session.
+Infrastructure-failed attempts do not count toward the exactly two valid
+candidate matrices. More than one runner output inside a single reservation is
+surplus evidence, not retryable incompleteness. A valid candidate additionally
+requires a zero child exit with no signal. Shader,
 binding, command, membership, address, output, lifecycle, schedule, source,
 ordinary WebGPU validation, or post-hoc-verification failure is an
 implementation/evidence failure, not a retry condition; correcting one requires
@@ -411,3 +618,8 @@ SHA-256 manifest over the derived bytes and records the sanitizer source hash.
 The private original and its distinct manifest remain unchanged. Both bundles
 are labeled explicitly, and the public manifest never purports to authenticate
 bytes removed after hashing.
+
+The frozen allowlist, replacement templates, rejection rules, invocation, and
+manifest-provenance boundary are specified in
+[`PUBLIC_EVIDENCE_SANITIZER.md`](PUBLIC_EVIDENCE_SANITIZER.md) and implemented by
+the committed `scripts/sanitize-live-evidence.mjs` source.

@@ -23,8 +23,17 @@
     "smoke:depth": "node scripts/smoke-depth-ordering.mjs",
     "smoke:frozen-depth": "node scripts/smoke-frozen-depth-crossover.mjs",
     "smoke:first-instance": "node scripts/smoke-first-instance-crossover.mjs",
+    "smoke:first-instance-live": "node scripts/smoke-first-instance-live-crossover.mjs",
     "probe:first-instance": "node scripts/probe-first-instance-addressing.mjs",
     "benchmark:focused": "node scripts/run-benchmark.mjs",
+    "candidate:init:first-instance-live": "node scripts/run-live-first-instance-candidate.mjs --initialize",
+    "candidate:first-instance-live": "node scripts/run-live-first-instance-candidate.mjs",
+    "verify:candidate:first-instance-live": "node analysis/verify-live-first-instance-candidate-pair.mjs",
+    "sanitize:first-instance-live": "node scripts/sanitize-live-evidence.mjs",
+    "build:public-pair:first-instance-live": "node scripts/build-public-live-first-instance-candidate-pair.mjs",
+    "verify:public-pair:first-instance-live": "node analysis/verify-public-live-first-instance-candidate-pair.mjs",
+    "build:public-package:first-instance-live": "node scripts/build-public-live-first-instance-package.mjs",
+    "verify:public-package:first-instance-live": "node analysis/verify-public-live-first-instance-package.mjs",
     "analyze": "node analysis/summarize.mjs"
   },
   "dependencies": {

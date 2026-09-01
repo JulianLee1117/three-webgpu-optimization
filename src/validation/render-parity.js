@@ -45,7 +45,7 @@ async function sha256Bytes(value) {
   return toHex(await crypto.subtle.digest('SHA-256', bytes));
 }
 
-async function readbackRecord(value, format, expectedByteLength) {
+export async function renderReadbackRecord(value, format, expectedByteLength) {
   if (value.byteLength !== expectedByteLength) {
     throw new Error(
       `${format} readback has ${value.byteLength} bytes; expected ${expectedByteLength}.`,
@@ -273,9 +273,9 @@ async function captureOnce({
   ]);
 
   const [colorRecord, depthRecord, objectIdRecord] = await Promise.all([
-    readbackRecord(color, 'rgba8unorm', VIEWPORT.width * VIEWPORT.height * 4),
-    readbackRecord(depth, 'depth32float', VIEWPORT.width * VIEWPORT.height * 4),
-    readbackRecord(
+    renderReadbackRecord(color, 'rgba8unorm', VIEWPORT.width * VIEWPORT.height * 4),
+    renderReadbackRecord(depth, 'depth32float', VIEWPORT.width * VIEWPORT.height * 4),
+    renderReadbackRecord(
       objectId,
       'rgba8unorm-object-id-plus-one',
       VIEWPORT.width * VIEWPORT.height * 4,

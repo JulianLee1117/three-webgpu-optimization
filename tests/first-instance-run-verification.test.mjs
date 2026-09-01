@@ -29,6 +29,7 @@ import {
 } from '../src/benchmark/plan.js';
 import { createFirstInstanceShaderEvidence } from '../src/validation/first-instance-shader-evidence.js';
 import {
+  createNvidiaTelemetryCoverageAudit,
   NVIDIA_QUERY_FIELDS,
   TELEMETRY_CSV_FIELDS,
   summarizeTelemetryRows,
@@ -1067,8 +1068,17 @@ function unavailableTelemetryReport() {
     capturedAtIso: '2026-08-31T20:00:01.000Z',
     runElapsedMs,
     reason: 'command-not-found',
+    rawNonemptyLineCount: 0,
+    parsedRecordCount: 0,
+    malformedLineCount: 0,
+    stdoutByteCount: 0,
+    stdoutTruncated: false,
+    stderrByteCount: 0,
     processes: [],
   });
+  const rows = [];
+  const collectorStartedRunElapsedMs = null;
+  const collectorStopRequestedRunElapsedMs = null;
   return {
     provider: 'nvidia-smi',
     status: 'unavailable',
@@ -1079,6 +1089,8 @@ function unavailableTelemetryReport() {
       requestedIntervalMs: 250,
       queryFields: [...NVIDIA_QUERY_FIELDS],
       outputFile: 'gpu-telemetry.csv',
+      collectorStartedRunElapsedMs,
+      collectorStopRequestedRunElapsedMs,
       malformedLineCount: 0,
       stderrByteCount: 0,
       exit: null,
@@ -1090,6 +1102,10 @@ function unavailableTelemetryReport() {
       lastObservedAtIso: null,
       gpus: [],
     },
+    coverageAudit: createNvidiaTelemetryCoverageAudit(rows, {
+      collectorStartedRunElapsedMs,
+      collectorStopRequestedRunElapsedMs,
+    }),
     computeProcesses: {
       pre: processSnapshot('pre-run', 1),
       post: processSnapshot('post-run', 2),
@@ -1139,8 +1155,14 @@ function availableTelemetryReport() {
   const report = unavailableTelemetryReport();
   report.status = 'available';
   report.reason = null;
+  report.sampling.collectorStartedRunElapsedMs = 0;
+  report.sampling.collectorStopRequestedRunElapsedMs = 2;
   report.sampling.exit = { code: 0, signal: null };
   report.summary = summarizeTelemetryRows(rows);
+  report.coverageAudit = createNvidiaTelemetryCoverageAudit(rows, {
+    collectorStartedRunElapsedMs: report.sampling.collectorStartedRunElapsedMs,
+    collectorStopRequestedRunElapsedMs: report.sampling.collectorStopRequestedRunElapsedMs,
+  });
   return { report, csv: `${telemetryRowsToCsv(rows)}\n` };
 }
 
@@ -1670,6 +1692,21 @@ test('verified first-instance run rejects rehashed telemetry coherence tampering
     await assert.rejects(
       summarizeInput(directory),
       /gpu-telemetry-summary\.json sampling has an unexpected schema/,
+    );
+  });
+
+  await t.test('coverage audit differs from CSV reconstruction', async (subtest) => {
+    const { report, csv } = availableTelemetryReport();
+    report.coverageAudit = { ...report.coverageAudit, finalMaximumGapMs: 0 };
+    const directory = await createRunDirectory(subtest, (fixture) => {
+      fixture.telemetrySummary = report;
+      fixture.metadata.environment.gpuTelemetry = structuredClone(report);
+      fixture.telemetryCsv = csv;
+      fixture.telemetryCsvPresent = true;
+    });
+    await assert.rejects(
+      summarizeInput(directory),
+      /does not reconstruct telemetry coverage audit/,
     );
   });
 });

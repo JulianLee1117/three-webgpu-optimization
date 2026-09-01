@@ -22,6 +22,9 @@ export const NVIDIA_QUERY_FIELDS = Object.freeze([
   'power.draw',
 ]);
 
+export const NVIDIA_TELEMETRY_INTERVAL_MS = 250;
+export const NVIDIA_TELEMETRY_LIVENESS_TOLERANCE_MULTIPLIER = 8;
+
 export const TELEMETRY_CSV_FIELDS = Object.freeze([
   'observedAtIso',
   'runElapsedMs',
@@ -58,24 +61,44 @@ const COMPUTE_PROCESS_FIELDS = Object.freeze([
 export function parseCsvRecord(line) {
   const fields = [];
   let field = '';
-  let quoted = false;
+  let state = 'field-start';
   for (let index = 0; index < line.length; index += 1) {
     const character = line[index];
-    if (character === '"') {
-      if (quoted && line[index + 1] === '"') {
+    if (state === 'quoted') {
+      if (character === '"' && line[index + 1] === '"') {
         field += '"';
         index += 1;
+      } else if (character === '"') {
+        state = 'after-quote';
       } else {
-        quoted = !quoted;
+        field += character;
       }
-    } else if (character === ',' && !quoted) {
+      continue;
+    }
+    if (state === 'after-quote') {
+      if (character === ',') {
+        fields.push(field.trim());
+        field = '';
+        state = 'field-start';
+      } else if (!/\s/.test(character)) {
+        return null;
+      }
+      continue;
+    }
+    if (character === ',') {
       fields.push(field.trim());
       field = '';
+      state = 'field-start';
+    } else if (character === '"') {
+      if (state !== 'field-start' || field.trim() !== '') return null;
+      field = '';
+      state = 'quoted';
     } else {
       field += character;
+      if (!/\s/.test(character)) state = 'unquoted';
     }
   }
-  if (quoted) return null;
+  if (state === 'quoted') return null;
   fields.push(field.trim());
   return fields;
 }
@@ -94,7 +117,7 @@ function nullableNumber(value) {
 
 function nullableInteger(value) {
   const numeric = nullableNumber(value);
-  return Number.isInteger(numeric) ? numeric : null;
+  return Number.isSafeInteger(numeric) ? numeric : null;
 }
 
 export function parseNvidiaSmiLine(line) {
@@ -139,21 +162,329 @@ function portableBasename(value) {
   return normalized.replaceAll('\\', '/').split('/').at(-1) || null;
 }
 
+function strictNullableNumber(value) {
+  const normalized = value?.trim() ?? '';
+  if (NULL_VALUES.has(normalized)) return { valid: true, value: null };
+  const numeric = Number(normalized);
+  return Number.isFinite(numeric)
+    ? { valid: true, value: numeric }
+    : { valid: false, value: null };
+}
+
 export function parseComputeProcessCsv(output) {
   const processes = [];
+  let rawNonemptyLineCount = 0;
+  let malformedLineCount = 0;
   for (const line of output.split(/\r?\n/)) {
     if (!line.trim()) continue;
+    rawNonemptyLineCount += 1;
     const fields = parseCsvRecord(line);
-    if (!fields || fields.length !== COMPUTE_PROCESS_FIELDS.length) continue;
+    if (!fields || fields.length !== COMPUTE_PROCESS_FIELDS.length) {
+      malformedLineCount += 1;
+      continue;
+    }
     const [gpuUuid, pid, processName, usedMemoryMiB] = fields;
+    const parsedGpuUuid = nullableText(gpuUuid);
+    const parsedPid = nullableInteger(pid);
+    const parsedProcessName = portableBasename(processName);
+    const parsedMemory = strictNullableNumber(usedMemoryMiB);
+    if (parsedGpuUuid === null
+      || parsedPid === null
+      || parsedPid <= 0
+      || parsedProcessName === null
+      || !parsedMemory.valid
+      || (parsedMemory.value !== null && parsedMemory.value < 0)) {
+      malformedLineCount += 1;
+      continue;
+    }
     processes.push({
-      gpuUuid: nullableText(gpuUuid),
-      pid: nullableInteger(pid),
-      processName: portableBasename(processName),
-      usedMemoryMiB: nullableNumber(usedMemoryMiB),
+      gpuUuid: parsedGpuUuid,
+      pid: parsedPid,
+      processName: parsedProcessName,
+      usedMemoryMiB: parsedMemory.value,
     });
   }
-  return processes;
+  return {
+    processes,
+    rawNonemptyLineCount,
+    parsedRecordCount: processes.length,
+    malformedLineCount,
+  };
+}
+
+function computeProcessSnapshotDiagnosticsPass(snapshot) {
+  return Number.isSafeInteger(snapshot?.rawNonemptyLineCount)
+    && snapshot.rawNonemptyLineCount >= 0
+    && Number.isSafeInteger(snapshot?.parsedRecordCount)
+    && snapshot.parsedRecordCount >= 0
+    && Number.isSafeInteger(snapshot?.malformedLineCount)
+    && snapshot.malformedLineCount >= 0
+    && Number.isSafeInteger(snapshot?.stdoutByteCount)
+    && snapshot.stdoutByteCount >= 0
+    && snapshot.stdoutByteCount <= 1_000_000
+    && snapshot.stdoutTruncated === false
+    && Number.isSafeInteger(snapshot?.stderrByteCount)
+    && snapshot.stderrByteCount === 0
+    && snapshot.malformedLineCount === 0
+    && snapshot.parsedRecordCount + snapshot.malformedLineCount
+      === snapshot.rawNonemptyLineCount
+    && snapshot.parsedRecordCount === snapshot.rawNonemptyLineCount
+    && snapshot.parsedRecordCount === snapshot.processes.length
+    && (snapshot.parsedRecordCount === 0 || snapshot.stdoutByteCount > 0);
+}
+
+function computeProcessIdentityTuples(snapshot, label, reasons) {
+  if (!snapshot
+    || snapshot.status !== 'available'
+    || !Array.isArray(snapshot.processes)
+    || !computeProcessSnapshotDiagnosticsPass(snapshot)) {
+    reasons.push(`${label} compute-process snapshot is unavailable`);
+    return [];
+  }
+  const tuples = [];
+  for (const [index, processRecord] of snapshot.processes.entries()) {
+    const gpuUuid = processRecord?.gpuUuid;
+    const pid = processRecord?.pid;
+    const processName = portableBasename(processRecord?.processName ?? '');
+    if (typeof gpuUuid !== 'string' || gpuUuid.length === 0
+      || !Number.isSafeInteger(pid) || pid <= 0
+      || typeof processName !== 'string' || processName.length === 0) {
+      reasons.push(`${label} compute-process record ${index} has an invalid identity tuple`);
+      continue;
+    }
+    tuples.push(Object.freeze({ gpuUuid, pid, processName }));
+  }
+  tuples.sort((left, right) => (
+    left.gpuUuid.localeCompare(right.gpuUuid)
+      || left.pid - right.pid
+      || left.processName.localeCompare(right.processName)
+  ));
+  if (new Set(tuples.map((tuple) => JSON.stringify(tuple))).size !== tuples.length) {
+    reasons.push(`${label} compute-process snapshot contains duplicate identity tuples`);
+  }
+  return tuples;
+}
+
+function telemetryGpuIdentity(row) {
+  if (!Number.isSafeInteger(row?.gpuIndex)
+    || row.gpuIndex < 0
+    || typeof row?.gpuName !== 'string'
+    || row.gpuName.trim() === ''
+    || typeof row?.gpuUuid !== 'string'
+    || row.gpuUuid.trim() === '') return null;
+  return Object.freeze({
+    gpuIndex: row.gpuIndex,
+    gpuName: row.gpuName,
+    gpuUuid: row.gpuUuid,
+  });
+}
+
+function identityKey(identity) {
+  return JSON.stringify([identity.gpuIndex, identity.gpuName, identity.gpuUuid]);
+}
+
+function sameSortedStrings(left, right) {
+  return left.length === right.length
+    && left.every((value, index) => value === right[index]);
+}
+
+export function createNvidiaTelemetryCoverageAudit(rows, {
+  collectorStartedRunElapsedMs,
+  collectorStopRequestedRunElapsedMs,
+  requestedIntervalMs = NVIDIA_TELEMETRY_INTERVAL_MS,
+} = {}) {
+  const failureCodes = [];
+  const reasons = [];
+  const addFailure = (code, reason) => {
+    if (!failureCodes.includes(code)) failureCodes.push(code);
+    if (!reasons.includes(reason)) reasons.push(reason);
+  };
+  const intervalValid = Number.isFinite(requestedIntervalMs) && requestedIntervalMs > 0;
+  const livenessToleranceMs = intervalValid
+    ? requestedIntervalMs * NVIDIA_TELEMETRY_LIVENESS_TOLERANCE_MULTIPLIER
+    : null;
+  const sampleGroupingGapMs = intervalValid ? requestedIntervalMs / 2 : null;
+  const boundsValid = Number.isFinite(collectorStartedRunElapsedMs)
+    && collectorStartedRunElapsedMs >= 0
+    && Number.isFinite(collectorStopRequestedRunElapsedMs)
+    && collectorStopRequestedRunElapsedMs >= collectorStartedRunElapsedMs;
+  if (!intervalValid || !boundsValid) {
+    addFailure(
+      'collector-bounds-invalid',
+      'collector interval or active elapsed-time bounds are unavailable or invalid',
+    );
+  }
+
+  const orderedRows = rows.map((row, sourceIndex) => ({ row, sourceIndex }))
+    .sort((left, right) => (
+      Number(left.row.runElapsedMs) - Number(right.row.runElapsedMs)
+        || left.sourceIndex - right.sourceIndex
+    ));
+  if (orderedRows.length === 0) {
+    addFailure('telemetry-no-samples', 'collector produced no valid GPU samples');
+  }
+
+  const cycles = [];
+  let currentCycle = [];
+  let precedingElapsedMs = null;
+  for (const entry of orderedRows) {
+    const elapsedMs = entry.row.runElapsedMs;
+    if (!Number.isFinite(elapsedMs) || elapsedMs < 0) {
+      addFailure('telemetry-sample-time-invalid', 'a GPU sample has invalid elapsed time');
+      continue;
+    }
+    if (boundsValid
+      && (elapsedMs < collectorStartedRunElapsedMs
+        || elapsedMs > collectorStopRequestedRunElapsedMs)) {
+      addFailure(
+        'telemetry-sample-outside-collector-bounds',
+        'a GPU sample falls outside the recorded collector active bounds',
+      );
+    }
+    if (currentCycle.length > 0
+      && elapsedMs - precedingElapsedMs > sampleGroupingGapMs) {
+      cycles.push(currentCycle);
+      currentCycle = [];
+    }
+    currentCycle.push(entry.row);
+    precedingElapsedMs = elapsedMs;
+  }
+  if (currentCycle.length > 0) cycles.push(currentCycle);
+
+  const cycleIdentityKeys = [];
+  const identityByKey = new Map();
+  let identitiesValid = true;
+  let duplicateIdentityInCycle = false;
+  for (const cycle of cycles) {
+    const keys = [];
+    for (const row of cycle) {
+      const identity = telemetryGpuIdentity(row);
+      if (identity === null) {
+        identitiesValid = false;
+        continue;
+      }
+      const key = identityKey(identity);
+      identityByKey.set(key, identity);
+      keys.push(key);
+    }
+    keys.sort();
+    if (new Set(keys).size !== keys.length) duplicateIdentityInCycle = true;
+    cycleIdentityKeys.push(keys);
+  }
+  if (!identitiesValid) {
+    addFailure(
+      'telemetry-gpu-identity-invalid',
+      'a GPU sample lacks a concrete index, name, or UUID identity',
+    );
+  }
+  const expectedIdentityKeys = cycleIdentityKeys[0] ?? [];
+  const constantGpuIdentitySet = identitiesValid
+    && !duplicateIdentityInCycle
+    && expectedIdentityKeys.length > 0
+    && cycleIdentityKeys.every((keys) => sameSortedStrings(keys, expectedIdentityKeys));
+  if (!constantGpuIdentitySet) {
+    addFailure(
+      'telemetry-gpu-identity-set-changed',
+      'per-sample GPU identity set is empty, duplicated, or changed during collection',
+    );
+  }
+
+  let initialMaximumGapMs = null;
+  let internalMaximumGapMs = null;
+  let finalMaximumGapMs = null;
+  if (boundsValid && expectedIdentityKeys.length > 0) {
+    const rowsByIdentity = new Map(expectedIdentityKeys.map((key) => [key, []]));
+    for (const { row } of orderedRows) {
+      const identity = telemetryGpuIdentity(row);
+      if (identity === null) continue;
+      const key = identityKey(identity);
+      if (!rowsByIdentity.has(key)) rowsByIdentity.set(key, []);
+      rowsByIdentity.get(key).push(row.runElapsedMs);
+    }
+    for (const key of expectedIdentityKeys) {
+      const timestamps = rowsByIdentity.get(key) ?? [];
+      if (timestamps.length === 0) continue;
+      initialMaximumGapMs = Math.max(
+        initialMaximumGapMs ?? 0,
+        timestamps[0] - collectorStartedRunElapsedMs,
+      );
+      finalMaximumGapMs = Math.max(
+        finalMaximumGapMs ?? 0,
+        Math.max(0, collectorStopRequestedRunElapsedMs - timestamps.at(-1)),
+      );
+      for (let index = 1; index < timestamps.length; index += 1) {
+        internalMaximumGapMs = Math.max(
+          internalMaximumGapMs ?? 0,
+          timestamps[index] - timestamps[index - 1],
+        );
+      }
+    }
+    if ((initialMaximumGapMs ?? Infinity) > livenessToleranceMs) {
+      addFailure(
+        'telemetry-initial-gap-exceeded',
+        `initial GPU sample gap exceeds ${livenessToleranceMs} ms`,
+      );
+    }
+    if ((internalMaximumGapMs ?? 0) > livenessToleranceMs) {
+      addFailure(
+        'telemetry-internal-gap-exceeded',
+        `internal GPU sample gap exceeds ${livenessToleranceMs} ms`,
+      );
+    }
+    if ((finalMaximumGapMs ?? Infinity) > livenessToleranceMs) {
+      addFailure(
+        'telemetry-final-gap-exceeded',
+        `final GPU sample gap exceeds ${livenessToleranceMs} ms`,
+      );
+    }
+  }
+
+  return Object.freeze({
+    schemaVersion: 1,
+    kind: 'nvidia-telemetry-collector-coverage',
+    requestedIntervalMs,
+    livenessToleranceMultiplier: NVIDIA_TELEMETRY_LIVENESS_TOLERANCE_MULTIPLIER,
+    livenessToleranceMs,
+    sampleGroupingGapMs,
+    collectorStartedRunElapsedMs: Number.isFinite(collectorStartedRunElapsedMs)
+      ? collectorStartedRunElapsedMs
+      : null,
+    collectorStopRequestedRunElapsedMs: Number.isFinite(collectorStopRequestedRunElapsedMs)
+      ? collectorStopRequestedRunElapsedMs
+      : null,
+    activeDurationMs: boundsValid
+      ? collectorStopRequestedRunElapsedMs - collectorStartedRunElapsedMs
+      : null,
+    sampleCount: rows.length,
+    sampleCycleCount: cycles.length,
+    gpuIdentities: Object.freeze(expectedIdentityKeys.map((key) => identityByKey.get(key))),
+    constantGpuIdentitySet,
+    initialMaximumGapMs,
+    internalMaximumGapMs,
+    finalMaximumGapMs,
+    pass: failureCodes.length === 0,
+    failureCodes: Object.freeze(failureCodes),
+    reasons: Object.freeze(reasons),
+  });
+}
+
+export function compareComputeProcessIdentitySets(preSnapshot, postSnapshot) {
+  const reasons = [];
+  const pre = computeProcessIdentityTuples(preSnapshot, 'pre-run', reasons);
+  const post = computeProcessIdentityTuples(postSnapshot, 'post-run', reasons);
+  if (JSON.stringify(pre) !== JSON.stringify(post)) {
+    reasons.push('pre-run and post-run compute-process identity sets differ');
+  }
+  return Object.freeze({
+    schemaVersion: 1,
+    kind: 'nvidia-compute-process-identity-set-comparison',
+    identityFields: Object.freeze(['gpuUuid', 'pid', 'processName']),
+    ignoredFields: Object.freeze(['usedMemoryMiB']),
+    pass: reasons.length === 0,
+    pre: Object.freeze(pre),
+    post: Object.freeze(post),
+    reasons: Object.freeze([...reasons]),
+  });
 }
 
 function median(values) {
@@ -261,12 +592,21 @@ async function runQuery(command, arguments_, timeoutMs = 5_000) {
         stdio: ['ignore', 'pipe', 'pipe'],
       });
     } catch (error) {
-      resolve({ ok: false, reason: commandFailureReason(error), stdout: '' });
+      resolve({
+        ok: false,
+        reason: commandFailureReason(error),
+        stdout: '',
+        stdoutByteCount: 0,
+        stdoutTruncated: false,
+        stderrByteCount: 0,
+      });
       return;
     }
 
     const chunks = [];
-    let byteCount = 0;
+    let retainedByteCount = 0;
+    let stdoutByteCount = 0;
+    let stderrByteCount = 0;
     let timedOut = false;
     let settled = false;
     const finish = (result) => {
@@ -282,21 +622,30 @@ async function runQuery(command, arguments_, timeoutMs = 5_000) {
     timer.unref?.();
 
     child.stdout.on('data', (chunk) => {
-      if (byteCount >= 1_000_000) return;
-      const retained = chunk.subarray(0, Math.max(0, 1_000_000 - byteCount));
+      stdoutByteCount += chunk.length;
+      if (retainedByteCount >= 1_000_000) return;
+      const retained = chunk.subarray(0, Math.max(0, 1_000_000 - retainedByteCount));
       chunks.push(retained);
-      byteCount += retained.length;
+      retainedByteCount += retained.length;
     });
-    child.stderr.resume();
+    child.stderr.on('data', (chunk) => {
+      stderrByteCount += chunk.length;
+    });
     child.on('error', (error) => finish({
       ok: false,
       reason: commandFailureReason(error),
       stdout: '',
+      stdoutByteCount,
+      stdoutTruncated: stdoutByteCount > retainedByteCount,
+      stderrByteCount,
     }));
     child.on('close', (code) => finish({
       ok: code === 0 && !timedOut,
       reason: timedOut ? 'query-timeout' : code === 0 ? null : `query-exit-${code ?? 'unknown'}`,
       stdout: Buffer.concat(chunks).toString('utf8'),
+      stdoutByteCount,
+      stdoutTruncated: stdoutByteCount > retainedByteCount,
+      stderrByteCount,
     }));
   });
 }
@@ -308,7 +657,7 @@ export class NvidiaTelemetryRecorder {
     runStartedMonotonic,
     getContext,
     command = process.env.BENCHMARK_NVIDIA_SMI_PATH ?? 'nvidia-smi',
-    intervalMs = 250,
+    intervalMs = NVIDIA_TELEMETRY_INTERVAL_MS,
     monotonicNow,
     wallClockNow,
   }) {
@@ -332,6 +681,8 @@ export class NvidiaTelemetryRecorder {
     this.lineReader = null;
     this.exit = null;
     this.exitHandler = null;
+    this.collectorStartedRunElapsedMs = null;
+    this.collectorStopRequestedRunElapsedMs = null;
   }
 
   async start() {
@@ -369,6 +720,7 @@ export class NvidiaTelemetryRecorder {
       });
       this.child.on('spawn', () => {
         this.commandSpawned = true;
+        this.collectorStartedRunElapsedMs = this.monotonicNow() - this.runStartedMonotonic;
         this.status = 'active';
         settle();
       });
@@ -399,6 +751,7 @@ export class NvidiaTelemetryRecorder {
   }
 
   consumeLine(line) {
+    if (this.stopRequested) return;
     const sample = parseNvidiaSmiLine(line);
     if (!sample) {
       if (line.trim()) this.malformedLineCount += 1;
@@ -430,6 +783,12 @@ export class NvidiaTelemetryRecorder {
         capturedAtIso,
         runElapsedMs,
         reason: this.reason ?? 'sampling-command-unavailable',
+        rawNonemptyLineCount: 0,
+        parsedRecordCount: 0,
+        malformedLineCount: 0,
+        stdoutByteCount: 0,
+        stdoutTruncated: false,
+        stderrByteCount: 0,
         processes: [],
       };
     }
@@ -437,19 +796,41 @@ export class NvidiaTelemetryRecorder {
       `--query-compute-apps=${COMPUTE_PROCESS_FIELDS.join(',')}`,
       '--format=csv,noheader,nounits',
     ]);
+    const parsed = parseComputeProcessCsv(result.stdout);
+    const available = result.ok
+      && result.stdoutTruncated === false
+      && result.stderrByteCount === 0
+      && parsed.malformedLineCount === 0
+      && parsed.parsedRecordCount === parsed.rawNonemptyLineCount;
+    const reason = !result.ok
+      ? result.reason
+      : result.stdoutTruncated
+        ? 'compute-process-output-truncated'
+        : result.stderrByteCount !== 0
+          ? 'compute-process-query-stderr'
+          : parsed.malformedLineCount !== 0
+            ? 'compute-process-output-malformed'
+            : null;
     return {
       label,
-      status: result.ok ? 'available' : 'unavailable',
+      status: available ? 'available' : 'unavailable',
       capturedAtIso,
       runElapsedMs,
-      reason: result.reason,
-      processes: result.ok ? parseComputeProcessCsv(result.stdout) : [],
+      reason,
+      rawNonemptyLineCount: parsed.rawNonemptyLineCount,
+      parsedRecordCount: parsed.parsedRecordCount,
+      malformedLineCount: parsed.malformedLineCount,
+      stdoutByteCount: result.stdoutByteCount,
+      stdoutTruncated: result.stdoutTruncated,
+      stderrByteCount: result.stderrByteCount,
+      processes: available ? parsed.processes : [],
     };
   }
 
   async stop() {
     if (!this.stopRequested) {
       this.stopRequested = true;
+      this.collectorStopRequestedRunElapsedMs = this.monotonicNow() - this.runStartedMonotonic;
       if (this.child?.exitCode === null && this.child?.signalCode === null) {
         const closed = once(this.child, 'close').catch(() => undefined);
         this.child.kill('SIGTERM');
@@ -483,6 +864,11 @@ export class NvidiaTelemetryRecorder {
   }
 
   report({ preComputeProcesses = null, postComputeProcesses = null } = {}) {
+    const coverageAudit = createNvidiaTelemetryCoverageAudit(this.rows, {
+      collectorStartedRunElapsedMs: this.collectorStartedRunElapsedMs,
+      collectorStopRequestedRunElapsedMs: this.collectorStopRequestedRunElapsedMs,
+      requestedIntervalMs: this.intervalMs,
+    });
     return {
       provider: 'nvidia-smi',
       status: this.status,
@@ -493,11 +879,14 @@ export class NvidiaTelemetryRecorder {
         requestedIntervalMs: this.intervalMs,
         queryFields: [...NVIDIA_QUERY_FIELDS],
         outputFile: this.outputFile,
+        collectorStartedRunElapsedMs: this.collectorStartedRunElapsedMs,
+        collectorStopRequestedRunElapsedMs: this.collectorStopRequestedRunElapsedMs,
         malformedLineCount: this.malformedLineCount,
         stderrByteCount: this.stderrByteCount,
         exit: this.exit,
       },
       summary: summarizeTelemetryRows(this.rows),
+      coverageAudit,
       computeProcesses: {
         pre: preComputeProcesses,
         post: postComputeProcesses,

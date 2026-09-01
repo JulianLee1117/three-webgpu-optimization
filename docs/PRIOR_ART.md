@@ -6,6 +6,11 @@ The narrower question is how those mechanisms behave through Three.js WebGPU API
 
 ## Direct Three.js ecosystem work
 
+- Three.js r185 [completed `InstancedMesh` support inside render bundles](https://github.com/mrdoob/three.js/pull/33839),
+  including geometry updates during bundle replay. The experiments here build
+  on that renderer capability and isolate compute-written indexed-indirect
+  addressing and fixed-ownership layout choices; they do not claim the render-
+  bundle integration itself.
 - [Three Blocks instance culling](https://threejs-blocks.com/docs/blocks/instance-culling) provides GPU instance culling and compacted survivors for WebGPU.
 - [Three Blocks `ComputeInstanceCulling`](https://threejs-blocks.com/docs/api/ComputeInstanceCulling) exposes indirect arguments, survivor data, optional sorting, diagnostic readback, and explicit camera/update methods.
 - The [Three Blocks changelog](https://threejs-blocks.com/changelog) records the removal of its earlier indirect-batching implementation in version 0.11.0.
@@ -61,7 +66,23 @@ The controlled contribution is the causal measurement and Three.js integration b
 - The core WebGPU API and Three.js r185 path used here do not provide a counted multi-draw operation equivalent to native `drawIndirectCount` workflows.
 - The [Three.js r185 WebGPU timestamp-query pool](https://github.com/mrdoob/three.js/blob/r185/src/renderers/webgpu/utils/WebGPUTimestampQueryPool.js) is fixed at 2,048 queries per timestamp type. Each timed submission uses two queries. This is a Three.js version-specific measurement constraint, not a WebGPU limit.
 - Per-frame timestamp joining reads version-pinned r185 backend pool metadata after the public resolution call. That instrumentation is not a stable Three.js timing API.
-- In the [r185 backend timestamp-identifier path](https://github.com/mrdoob/three.js/blob/r185/src/renderers/common/Backend.js#L474-L510), multiple array-valued `Renderer.compute()` calls within one frame receive a colliding identifier. Query slots are consumed for every call, but the identifier map retains only the last call's offset. One-call lanes are unaffected; a valid multi-call aggregate needs unique per-call instrumentation or a Three.js change.
+- In r185, `Renderer.compute()` passes an array-valued compute group to the
+  backend timestamp-identifier path. The array has neither the single-node
+  `isComputeNode` marker nor an `id`, so the default identifier is
+  render-prefixed and contains an undefined context ID even though the WebGPU
+  backend allocates its queries from the compute pool. The live crossover
+  registers each exact compute-group identity with a unique lifecycle-bound
+  context ID through a version-pinned wrapper, retains the resulting UID and
+  duration pair for every frame, and rejects any type, context, frame, or lane
+  mismatch. This attribution wrapper is measurement instrumentation, not a
+  stable Three.js API.
+- In the [r185 backend timestamp-identifier path](https://github.com/mrdoob/three.js/blob/r185/src/renderers/common/Backend.js#L474-L510),
+  multiple array-valued `Renderer.compute()` calls within one frame receive a
+  colliding identifier. Query slots are consumed for every call, but the
+  identifier map retains only the last call's offset. A one-call lane avoids
+  that collision but still lacks operation and lane attribution without the
+  registration above; a valid multi-call aggregate needs unique per-call
+  instrumentation or a Three.js change.
 - High-resolution JavaScript CPU timing depends on browser security and precision policy. The harness requests cross-origin isolation with COOP/COEP headers, records the actual isolation state, and measures the observed `performance.now()` increment instead of assuming a resolution. The smoke gate and focused runner enforce the isolation and precision threshold.
 
 The query-pool limit matters directly at 32 buckets: the public lane would request 19,200 queries during the unresolved 300-frame warmup and 15,360 during the 240-frame measurement block. Each one-submission lane requests 600 and 480 queries respectively, with resolution between phases. Capacity chunking alone would not repair the public lane's timestamp-identifier collision. The standard GPU-timestamp matrix therefore does not substitute coalesced or historical timings for the v0.11 public baseline; it reports each selected comparator under its own identity and keeps the public lane as a separate API/scheduling reference.

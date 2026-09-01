@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 64 64%22><rect width=%2264%22 height=%2264%22 rx=%2212%22 fill=%22%23060a12%22/><path d=%22M16 44V20h8l8 12 8-12h8v24h-8V32l-8 12-8-12v12z%22 fill=%22%236aa8ff%22/></svg>" />
+    <link rel="stylesheet" href="/src/styles.css" />
     <title>Three.js WebGPU Fixed-Slice Benchmark</title>
     <script type="module" src="/src/main.js"></script>
   </head>
@@ -27,6 +28,7 @@
               <option value="fixed-slice">Fixed-slice compacted</option>
               <option value="fixed-slice-indirect-first-instance">Fixed-slice indirect first-instance addressing</option>
               <option value="indirect-first-instance-frozen-crossover">Frozen first-instance render crossover</option>
+              <option value="indirect-first-instance-live-crossover">Live first-instance compute + render crossover</option>
               <option value="fixed-slice-per-bucket">Fixed-slice per-bucket render objects</option>
               <option value="fixed-slice-depth-front-to-back">Fixed-slice depth bins, front to back</option>
               <option value="fixed-slice-depth-reverse">Fixed-slice depth bins, reverse</option>
@@ -65,7 +67,7 @@
           <div class="actions">
             <button id="rebuild">Rebuild</button>
             <button id="validate">Validate</button>
-            <button id="trial">Run 300 + 240</button>
+            <button id="trial">Run selected trial</button>
             <button id="export" disabled>Export frames</button>
           </div>
           <dl>

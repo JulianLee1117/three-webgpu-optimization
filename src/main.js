@@ -18,11 +18,22 @@ import {
   firstInstanceCrossoverFrame,
 } from './benchmark/first-instance-crossover-schedule.js';
 import {
+  FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+  FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
+  firstInstanceLiveCrossoverFrame,
+} from './benchmark/first-instance-live-crossover-schedule.js';
+import {
   FIRST_INSTANCE_CROSSOVER_LANES,
   FIRST_INSTANCE_CROSSOVER_MODE,
+  FIRST_INSTANCE_LIVE_CROSSOVER_LANES,
+  FIRST_INSTANCE_LIVE_CROSSOVER_MODE,
   FROZEN_DEPTH_CROSSOVER_LANES,
   FROZEN_DEPTH_CROSSOVER_MODE,
 } from './benchmark/plan.js';
+import {
+  preprimeTimestampPools,
+  timestampPoolDiagnostics,
+} from './benchmark/gpu-timestamps.js';
 import { downloadRows } from './lib/csv.js';
 import {
   fingerprintFixedSubsetScenario,
@@ -38,6 +49,7 @@ import {
 } from './strategies/depth-binned-fixed-slice.js';
 import { buildFrozenDepthCrossoverStrategy } from './strategies/frozen-depth-crossover.js';
 import { buildFirstInstanceCrossoverStrategy } from './strategies/first-instance-crossover.js';
+import { buildFirstInstanceLiveCrossoverStrategy } from './strategies/live-first-instance-crossover.js';
 import {
   buildFixedSlicePerBucketStrategy,
   buildFixedSliceStrategy,
@@ -50,8 +62,12 @@ import {
 } from './strategies/three-blocks-current.js';
 import { buildThreeBlocksHistoricalStrategy } from './strategies/three-blocks-historical.js';
 import { cpuVisibleIds } from './validation/membership.js';
-import { captureExactRenderParity } from './validation/render-parity.js';
-import './styles.css';
+import {
+  captureExactRenderParity,
+  renderReadbackRecord,
+} from './validation/render-parity.js';
+import { createFirstInstanceAddressChallengeOracle } from './validation/first-instance-address-challenge.js';
+import { runFirstInstanceLiveForcedFeatureOffGate as runForcedFeatureOffGate } from './validation/first-instance-live-forced-off.js';
 
 const elements = Object.fromEntries([
   'strategy', 'objects', 'buckets', 'visibility', 'layout', 'rebuild', 'validate', 'trial', 'export',
@@ -88,6 +104,21 @@ elements['canvas-host'].appendChild(renderer.domElement);
 await renderer.init();
 const timestampAvailable = renderer.backend?.trackTimestamp === true;
 renderer.backend.trackTimestamp = false;
+const webgpuUncapturedErrors = [];
+const webgpuDeviceLosses = [];
+renderer.backend?.device?.addEventListener?.('uncapturederror', (event) => {
+  const gpuError = event?.error;
+  webgpuUncapturedErrors.push({
+    name: gpuError?.constructor?.name ?? 'GPUError',
+    message: gpuError?.message ?? String(gpuError ?? 'unknown WebGPU error'),
+  });
+});
+renderer.backend?.device?.lost?.then((info) => {
+  webgpuDeviceLosses.push({
+    reason: info?.reason ?? null,
+    message: info?.message ?? null,
+  });
+});
 
 const camera = new THREE.PerspectiveCamera(CAMERA.fov, CAMERA.aspect, CAMERA.near, CAMERA.far);
 camera.coordinateSystem = renderer.coordinateSystem;
@@ -121,16 +152,28 @@ let sourceScenarioManifest = null;
 let rebuilding = false;
 let validating = false;
 let lastRows = [];
+let lastSummary = null;
 let lastValidation = null;
 let frozenSelectorWriteSerial = 0;
 let firstInstanceSelectorWriteSerial = 0;
+let firstInstanceLiveSelectorWriteSerial = 0;
 let firstInstanceLifecycleAtTimingStart = null;
+let firstInstanceLiveLifecycleAtTimingStart = null;
+let firstInstanceLiveTimestampPreprime = null;
+let firstInstanceLiveTimestampPoolsAtTimingStart = null;
+let firstInstanceLivePreviousLaneId = null;
+let firstInstanceLivePreviousPreviousLaneId = null;
+let firstInstanceLiveWarmupTailSnapshot = null;
 let frozenCrossoverConfiguration = Object.freeze({
   laneStorageOrder: Object.freeze([...FROZEN_DEPTH_CROSSOVER_LANES]),
   superblockOrientationOffset: 0,
 });
 let firstInstanceCrossoverConfiguration = Object.freeze({
   laneCommandSegmentOrder: Object.freeze([...FIRST_INSTANCE_CROSSOVER_LANES]),
+  superblockOrientationOffset: 0,
+});
+let firstInstanceLiveCrossoverConfiguration = Object.freeze({
+  lanePhysicalOrder: Object.freeze([...FIRST_INSTANCE_LIVE_CROSSOVER_LANES]),
   superblockOrientationOffset: 0,
 });
 
@@ -145,6 +188,14 @@ function isFrozenCrossoverStrategy() {
 
 function isFirstInstanceCrossoverStrategy() {
   return strategy?.id === FIRST_INSTANCE_CROSSOVER_MODE;
+}
+
+function isFirstInstanceLiveCrossoverStrategy() {
+  return strategy?.id === FIRST_INSTANCE_LIVE_CROSSOVER_MODE;
+}
+
+function isAnyFirstInstanceCrossoverStrategy() {
+  return isFirstInstanceCrossoverStrategy() || isFirstInstanceLiveCrossoverStrategy();
 }
 
 function isRenderOnlyCrossoverStrategy() {
@@ -192,12 +243,124 @@ function firstInstanceLifecycleCommitment(lifecycle) {
   return staticLifecycle === null ? null : fnv1a64Text(JSON.stringify(staticLifecycle));
 }
 
+function firstInstanceLiveStaticLifecycle(lifecycle) {
+  if (!lifecycle || typeof lifecycle !== 'object') return null;
+  const {
+    activeLane: _activeLane,
+    activeCommandBufferId: _activeCommandBufferId,
+    residentPreparedLane: _residentPreparedLane,
+    laneSelectionSerial: _laneSelectionSerial,
+    computeCallSerial: _computeCallSerial,
+    prepareSerial: _prepareSerial,
+    ...staticLifecycle
+  } = lifecycle;
+  return staticLifecycle;
+}
+
+function firstInstanceLiveLifecycleCommitment(lifecycle) {
+  const staticLifecycle = firstInstanceLiveStaticLifecycle(lifecycle);
+  return staticLifecycle === null ? null : fnv1a64Text(JSON.stringify(staticLifecycle));
+}
+
+function timestampPoolStaticCommitment(diagnostics) {
+  if (!diagnostics || typeof diagnostics !== 'object') return null;
+  return Object.fromEntries(['render', 'compute'].map((type) => {
+    const pool = diagnostics[type];
+    return [type, pool ? {
+      poolIdentity: pool.poolIdentity,
+      querySetIdentity: pool.querySetIdentity,
+      resolveBufferIdentity: pool.resolveBufferIdentity,
+      resultBufferIdentity: pool.resultBufferIdentity,
+      maxQueries: pool.maxQueries,
+      isDisposed: pool.isDisposed,
+    } : null];
+  }));
+}
+
+function rectangleEvidence(value) {
+  return {
+    x: value.x,
+    y: value.y,
+    width: value.z,
+    height: value.w,
+  };
+}
+
+function viewportEvidence(value) {
+  return {
+    ...rectangleEvidence(value),
+    minDepth: value.minDepth ?? 0,
+    maxDepth: value.maxDepth ?? 1,
+  };
+}
+
+function bindLiveFirstInstanceViewportState(renderTarget) {
+  renderer.setViewport(0, 0, VIEWPORT.width, VIEWPORT.height, 0, 1);
+  renderer.setScissor(0, 0, VIEWPORT.width, VIEWPORT.height);
+  renderer.setScissorTest(false);
+  renderTarget.viewport.set(0, 0, VIEWPORT.width, VIEWPORT.height);
+  renderTarget.viewport.minDepth = 0;
+  renderTarget.viewport.maxDepth = 1;
+  renderTarget.scissor.set(0, 0, VIEWPORT.width, VIEWPORT.height);
+  renderTarget.scissorTest = false;
+}
+
+function captureLiveFirstInstanceViewportState(renderTarget) {
+  const viewport = renderer.getViewport(new THREE.Vector4());
+  const scissor = renderer.getScissor(new THREE.Vector4());
+  const canvasViewport = renderer.getCanvasTarget?.()?._viewport ?? viewport;
+  return {
+    schemaVersion: 1,
+    kind: 'three-r185-live-first-instance-viewport-state',
+    renderer: {
+      viewport: viewportEvidence({
+        ...viewport,
+        minDepth: canvasViewport.minDepth,
+        maxDepth: canvasViewport.maxDepth,
+      }),
+      scissor: rectangleEvidence(scissor),
+      scissorTest: renderer.getScissorTest(),
+      activeRenderTargetTextureUuid: renderer.getRenderTarget()?.texture?.uuid ?? null,
+    },
+    renderTarget: {
+      textureUuid: renderTarget.texture.uuid,
+      width: renderTarget.width,
+      height: renderTarget.height,
+      viewport: viewportEvidence(renderTarget.viewport),
+      scissor: rectangleEvidence(renderTarget.scissor),
+      scissorTest: renderTarget.scissorTest === true,
+    },
+  };
+}
+
+function liveFirstInstanceViewportStateIsPinned(state, renderTarget) {
+  const exactRectangle = (value) => value?.x === 0
+    && value.y === 0
+    && value.width === VIEWPORT.width
+    && value.height === VIEWPORT.height;
+  const exactViewport = (value) => exactRectangle(value)
+    && value.minDepth === 0
+    && value.maxDepth === 1;
+  return state?.schemaVersion === 1
+    && state.kind === 'three-r185-live-first-instance-viewport-state'
+    && exactViewport(state.renderer?.viewport)
+    && exactRectangle(state.renderer?.scissor)
+    && state.renderer?.scissorTest === false
+    && state.renderer?.activeRenderTargetTextureUuid === null
+    && state.renderTarget?.textureUuid === renderTarget.texture.uuid
+    && state.renderTarget?.width === VIEWPORT.width
+    && state.renderTarget?.height === VIEWPORT.height
+    && exactViewport(state.renderTarget?.viewport)
+    && exactRectangle(state.renderTarget?.scissor)
+    && state.renderTarget?.scissorTest === false;
+}
+
 function renderBenchmarkScene() {
-  if (!isRenderOnlyCrossoverStrategy()) {
+  if (!isRenderOnlyCrossoverStrategy() && !isFirstInstanceLiveCrossoverStrategy()) {
     renderer.render(scene, camera);
     return;
   }
-  const renderTarget = isFirstInstanceCrossoverStrategy()
+  const renderTarget = isAnyFirstInstanceCrossoverStrategy()
     ? firstInstanceCrossoverRenderTarget
     : frozenCrossoverRenderTarget;
   const previousTarget = renderer.getRenderTarget();
@@ -211,6 +374,182 @@ function renderBenchmarkScene() {
   }
 }
 
+function parseTimestampEvidenceJson(value, label) {
+  if (typeof value !== 'string') {
+    throw new TypeError(`${label} must be canonical JSON text.`);
+  }
+  const parsed = JSON.parse(value);
+  if (!Array.isArray(parsed) || JSON.stringify(parsed) !== value) {
+    throw new Error(`${label} is not a canonical JSON Array.`);
+  }
+  return parsed;
+}
+
+function createLiveFirstInstanceWarmupScheduleAudit(context, lifecycleDiagnostics) {
+  const sourceRows = trial.warmupRows;
+  const events = sourceRows.map((row) => ({
+    schemaVersion: 1,
+    kind: 'live-first-instance-warmup-frame-event',
+    phase: row.phase,
+    frameIndex: row.frameIndex,
+    warmupFrameIndex: row.warmupFrameIndex,
+    phaseFrameIndex: row.phaseFrameIndex,
+    crossoverBlockIndex: row.crossoverBlockIndex,
+    withinBlockPosition: row.withinBlockPosition,
+    crossoverPattern: row.crossoverPattern,
+    crossoverPatternIndex: row.crossoverPatternIndex,
+    previousPreviousLaneId: row.previousPreviousLaneId,
+    previousLaneId: row.previousLaneId,
+    laneId: row.laneId,
+    commandBufferId: row.commandBufferId,
+    submittedComputeLaneId: row.submittedComputeLaneId,
+    computeTimestampContextId: row.computeTimestampContextId,
+    computeGroupIdentity: row.computeGroupIdentity,
+    computeTimestampRegistrationSerial: row.computeTimestampRegistrationSerial,
+    computeTimestampBackendIdentity: row.computeTimestampBackendIdentity,
+    computeTimestampBackendWrapperIdentity: row.computeTimestampBackendWrapperIdentity,
+    submittedComputeNodeIds: parseTimestampEvidenceJson(
+      row.submittedComputeNodeIds,
+      `warmup frame ${row.frameIndex} compute-node IDs`,
+    ),
+    gpuFrameId: row.gpuFrameId,
+    selectorWriteSerial: row.selectorWriteSerial,
+    strategySelectionSerial: row.strategySelectionSerial,
+    strategyComputeCallSerial: row.strategyComputeCallSerial,
+    computeCallSerial: row.computeCallSerial,
+    computeFrameCallIndex: row.computeFrameCallIndex,
+    renderCallSerial: row.renderCallSerial,
+    renderFrameCallIndex: row.renderFrameCallIndex,
+    gpuComputeMs: row.gpuComputeMs,
+    gpuComputeTimestampUids: parseTimestampEvidenceJson(
+      row.gpuComputeTimestampUids,
+      `warmup frame ${row.frameIndex} compute timestamp UIDs`,
+    ),
+    gpuComputeTimestampRecords: parseTimestampEvidenceJson(
+      row.gpuComputeTimestampRecords,
+      `warmup frame ${row.frameIndex} compute timestamp records`,
+    ),
+    gpuRenderMs: row.gpuRenderMs,
+    gpuRenderTimestampUids: parseTimestampEvidenceJson(
+      row.gpuRenderTimestampUids,
+      `warmup frame ${row.frameIndex} render timestamp UIDs`,
+    ),
+    gpuRenderTimestampRecords: parseTimestampEvidenceJson(
+      row.gpuRenderTimestampRecords,
+      `warmup frame ${row.frameIndex} render timestamp records`,
+    ),
+    gpuPassTotalMs: row.gpuPassTotalMs,
+  }));
+  const computePhase = trial.timestampPhases?.warmup?.pools?.compute;
+  const renderPhase = trial.timestampPhases?.warmup?.pools?.render;
+  const commandBufferIds = Object.fromEntries(FIRST_INSTANCE_LIVE_CROSSOVER_LANES.map(
+    (laneId) => [laneId, lifecycleDiagnostics?.commandBufferCommitments?.[laneId]?.attributeId],
+  ));
+  const registrations = lifecycleDiagnostics?.computeTimestampRegistrations;
+  const exactUid = (record, type, event) => {
+    const prefix = type === 'compute' ? 'c' : 'r';
+    const expectedCallIndex = type === 'compute'
+      ? event.computeFrameCallIndex
+      : event.renderFrameCallIndex;
+    return record?.type === type
+      && record?.frameId === event.gpuFrameId
+      && record?.callIndex === expectedCallIndex
+      && record?.durationMs > 0
+      && new RegExp(`^${prefix}:[1-9]\\d*:(0|[1-9]\\d*):f(0|[1-9]\\d*)$`)
+        .test(record?.uid ?? '');
+  };
+  const eventsExact = events.length === FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES
+    && events.every((event, index) => {
+      const scheduled = firstInstanceLiveCrossoverFrame(
+        index,
+        context.superblockOrientationOffset,
+      );
+      const expectedPreviousLaneId = index === 0 ? null : events[index - 1]?.laneId;
+      const expectedPreviousPreviousLaneId = index < 2 ? null : events[index - 2]?.laneId;
+      const registration = registrations?.[scheduled.laneId];
+      const computeRecord = event.gpuComputeTimestampRecords[0];
+      const renderRecord = event.gpuRenderTimestampRecords[0];
+      const ordinal = index + 1;
+      return event.phase === 'warmup'
+        && event.frameIndex === index
+        && event.warmupFrameIndex === index
+        && event.phaseFrameIndex === index
+        && event.crossoverBlockIndex === scheduled.crossoverBlockIndex
+        && event.withinBlockPosition === scheduled.withinBlockPosition
+        && event.crossoverPattern === scheduled.pattern
+        && event.crossoverPatternIndex === scheduled.patternIndex
+        && event.previousPreviousLaneId === expectedPreviousPreviousLaneId
+        && event.previousLaneId === expectedPreviousLaneId
+        && event.laneId === scheduled.laneId
+        && event.commandBufferId === commandBufferIds[scheduled.laneId]
+        && event.submittedComputeLaneId === scheduled.laneId
+        && event.computeTimestampContextId === registration?.timestampContextId
+        && event.computeGroupIdentity === registration?.computeGroupIdentity
+        && event.computeTimestampRegistrationSerial === registration?.registrationSerial
+        && event.computeTimestampBackendIdentity === registration?.backendIdentity
+        && event.computeTimestampBackendWrapperIdentity
+          === registration?.backendWrapperIdentity
+        && JSON.stringify(event.submittedComputeNodeIds)
+          === JSON.stringify(registration?.computeNodeIds)
+        && event.selectorWriteSerial === context.selectorWriteSerialAtTimingStart + ordinal
+        && event.strategySelectionSerial
+          === context.strategySelectionSerialAtTimingStart + ordinal
+        && event.strategyComputeCallSerial
+          === context.strategyComputeCallSerialAtTimingStart + ordinal
+        && event.computeCallSerial === context.computeCallSerialAtTimingStart + ordinal
+        && event.renderCallSerial === context.renderCallSerialAtTimingStart + ordinal
+        && event.computeFrameCallIndex === 1
+        && event.renderFrameCallIndex === 1
+        && event.gpuComputeTimestampUids.length === 1
+        && event.gpuComputeTimestampRecords.length === 1
+        && event.gpuComputeTimestampUids[0] === computeRecord?.uid
+        && exactUid(computeRecord, 'compute', event)
+        && computeRecord?.contextId === registration?.timestampContextId
+        && event.gpuComputeMs === computeRecord?.durationMs
+        && event.gpuRenderTimestampUids.length === 1
+        && event.gpuRenderTimestampRecords.length === 1
+        && event.gpuRenderTimestampUids[0] === renderRecord?.uid
+        && exactUid(renderRecord, 'render', event)
+        && event.gpuRenderMs === renderRecord?.durationMs
+        && event.gpuPassTotalMs === event.gpuComputeMs + event.gpuRenderMs
+        && (index === 0 || event.gpuFrameId === events[index - 1].gpuFrameId + 1);
+    });
+  const timestampPhaseExact = JSON.stringify(computePhase?.frames)
+      === JSON.stringify(events.map((event) => event.gpuFrameId))
+    && JSON.stringify(renderPhase?.frames)
+      === JSON.stringify(events.map((event) => event.gpuFrameId))
+    && JSON.stringify(computePhase?.uidRecords)
+      === JSON.stringify(events.flatMap((event) => event.gpuComputeTimestampRecords))
+    && JSON.stringify(renderPhase?.uidRecords)
+      === JSON.stringify(events.flatMap((event) => event.gpuRenderTimestampRecords));
+  const tail = firstInstanceLiveWarmupTailSnapshot;
+  const last = events.at(-1);
+  const penultimate = events.at(-2);
+  const postWarmupStateExact = tail?.previousPreviousLaneId === penultimate?.laneId
+    && tail?.previousLaneId === last?.laneId
+    && tail?.lastWarmupGpuFrameId === last?.gpuFrameId
+    && tail?.selectorWriteSerial === last?.selectorWriteSerial
+    && tail?.strategySelectionSerial === last?.strategySelectionSerial
+    && tail?.strategyComputeCallSerial === last?.strategyComputeCallSerial
+    && tail?.computeCallSerial === last?.computeCallSerial
+    && tail?.renderCallSerial === last?.renderCallSerial;
+  return {
+    schemaVersion: 1,
+    kind: 'live-first-instance-compact-warmup-schedule-audit',
+    pass: eventsExact && timestampPhaseExact && postWarmupStateExact,
+    expectedFrameCount: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
+    actualStartupHistory: {
+      previousPreviousLaneId: events[0]?.previousPreviousLaneId ?? null,
+      previousLaneId: events[0]?.previousLaneId ?? null,
+    },
+    eventsExact,
+    timestampPhaseExact,
+    postWarmupStateExact,
+    postWarmupState: tail === null ? null : { ...tail },
+    events,
+  };
+}
+
 const DEPTH_STRATEGY_IDS = new Set([
   'fixed-slice-depth-front-to-back',
   'fixed-slice-depth-reverse',
@@ -220,6 +559,257 @@ const DEPTH_ORDERING_LAYOUT_IDS = new Set(['high-overlap', 'low-overlap']);
 function validateTrialCompletion(context) {
   const diagnostics = strategy?.diagnostics?.() ?? null;
   const lifecycleDiagnostics = strategy?.lifecycleDiagnostics?.() ?? null;
+  if (context.modeId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE) {
+    const timedFrameCount = FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES
+      + FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES;
+    const selectorWritesDuringTiming = firstInstanceLiveSelectorWriteSerial
+      - context.selectorWriteSerialAtTimingStart;
+    const strategySelectionsDuringTiming = (lifecycleDiagnostics?.laneSelectionSerial ?? -1)
+      - context.strategySelectionSerialAtTimingStart;
+    const strategyComputeCallsDuringTiming = (lifecycleDiagnostics?.computeCallSerial ?? -1)
+      - context.strategyComputeCallSerialAtTimingStart;
+    const strategyPreparesDuringTiming = (lifecycleDiagnostics?.prepareSerial ?? -1)
+      - context.strategyPrepareSerialAtTimingStart;
+    const renderCallsDuringTiming = renderer.info.render.calls
+      - context.renderCallSerialAtTimingStart;
+    const computeCallsDuringTiming = renderer.info.compute.calls
+      - context.computeCallSerialAtTimingStart;
+    const cacheAtTimingEnd = pinnedRendererCacheDiagnostics();
+    const viewportStateAtTimingEnd = captureLiveFirstInstanceViewportState(
+      firstInstanceCrossoverRenderTarget,
+    );
+    const viewportStateExact = JSON.stringify(viewportStateAtTimingEnd)
+      === context.viewportStateAtTimingStart
+      && liveFirstInstanceViewportStateIsPinned(
+        viewportStateAtTimingEnd,
+        firstInstanceCrossoverRenderTarget,
+      );
+    const computeProgramEntriesExact = cacheAtTimingEnd.computeProgramEntries
+      === context.computeProgramEntriesAtTimingStart;
+    const rendererMemoryExact = JSON.stringify(cacheAtTimingEnd.memory)
+      === context.rendererMemoryAtTimingStart;
+    const cameraViewFnv64AtTimingEnd = fnv1a64Float32(camera.matrixWorldInverse.elements);
+    const cameraProjectionFnv64AtTimingEnd = fnv1a64Float32(
+      camera.projectionMatrix.elements,
+    );
+    const lifecycleAtTimingEnd = firstInstanceLiveStaticLifecycle(lifecycleDiagnostics);
+    const lifecycleCommitmentAtTimingEnd = firstInstanceLiveLifecycleCommitment(
+      lifecycleDiagnostics,
+    );
+    const lifecycleExact = firstInstanceLiveLifecycleAtTimingStart !== null
+      && JSON.stringify(lifecycleAtTimingEnd)
+        === JSON.stringify(firstInstanceLiveLifecycleAtTimingStart);
+    const plannedLanePhysicalOrder = context.plannedLanePhysicalOrder?.split('|') ?? [];
+    const configuredLanePhysicalOrderExact = plannedLanePhysicalOrder.length
+      === FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+      && plannedLanePhysicalOrder.every(
+        (laneId, index) => lifecycleDiagnostics?.lanePhysicalOrder?.[index] === laneId,
+      )
+      && plannedLanePhysicalOrder.every(
+        (laneId, index) => lifecycleDiagnostics?.laneConstructionOrder?.[index] === laneId,
+      )
+      && plannedLanePhysicalOrder.every(
+        (laneId, index) => lifecycleDiagnostics?.firstComputeUseOrder?.[index] === laneId,
+      )
+      && plannedLanePhysicalOrder.every(
+        (laneId, index) => lifecycleDiagnostics?.renderPipelinePrimeOrder?.[index] === laneId,
+      );
+    const commandBuffersExact = JSON.stringify(
+      lifecycleDiagnostics?.commandBufferCommitments ?? null,
+    ) === context.commandBufferCommitmentsAtTimingStart;
+    const bundleRecordCountsExact = FIRST_INSTANCE_LIVE_CROSSOVER_LANES.every(
+      (laneId) => lifecycleDiagnostics?.bundleRecordCounts?.[laneId] === 1,
+    );
+    const timestampPoolsAtTimingEnd = timestampPoolDiagnostics(renderer);
+    const timestampPoolStaticAtTimingStart = timestampPoolStaticCommitment(
+      firstInstanceLiveTimestampPoolsAtTimingStart,
+    );
+    const timestampPoolStaticAtTimingEnd = timestampPoolStaticCommitment(
+      timestampPoolsAtTimingEnd,
+    );
+    const timestampPoolsStaticExact = timestampPoolStaticAtTimingStart !== null
+      && JSON.stringify(timestampPoolStaticAtTimingEnd)
+        === JSON.stringify(timestampPoolStaticAtTimingStart);
+    const timestampPreprimeExact = firstInstanceLiveTimestampPreprime?.schemaVersion === 1
+      && firstInstanceLiveTimestampPreprime?.kind === 'three-r185-timestamp-pool-preprime'
+      && firstInstanceLiveTimestampPreprime?.addedTimestampUidCount?.render === 1
+      && firstInstanceLiveTimestampPreprime?.addedTimestampUidCount?.compute === 1
+      && JSON.stringify(timestampPoolStaticCommitment(firstInstanceLiveTimestampPreprime.after))
+        === JSON.stringify(timestampPoolStaticAtTimingStart);
+    const timestampPoolsResolvedCleanly = ['render', 'compute'].every((type) => {
+      const before = firstInstanceLiveTimestampPoolsAtTimingStart?.[type];
+      const after = timestampPoolsAtTimingEnd?.[type];
+      return before
+        && after
+        && after.currentQueryIndex === 0
+        && after.queryOffsetCount === 0
+        && after.pendingResolve === false
+        && after.isDisposed === false
+        && after.resultBufferMapState === 'unmapped'
+        && after.frameCount === FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES
+        && after.timestampUidCount === before.timestampUidCount + timedFrameCount;
+    });
+    const commandBufferIds = FIRST_INSTANCE_LIVE_CROSSOVER_LANES.map(
+      (laneId) => lifecycleDiagnostics?.commandBufferCommitments?.[laneId]?.attributeId,
+    );
+    const warmupScheduleAudit = createLiveFirstInstanceWarmupScheduleAudit(
+      context,
+      lifecycleDiagnostics,
+    );
+    const webgpuUncapturedErrorsDuringTiming = webgpuUncapturedErrors.length
+      - context.webgpuUncapturedErrorCountAtTimingStart;
+    const timestampPoolsExact = timestampPoolsStaticExact && timestampPoolsResolvedCleanly;
+    return {
+      pass: diagnostics?.kind === 'live-first-instance-compute-render-crossover'
+        && diagnostics.objectCount === context.objectCount
+        && diagnostics.bucketCount === context.bucketCount
+        && diagnostics.configuredDrawCommands === context.bucketCount
+        && diagnostics.configuredRenderObjects === 1
+        && diagnostics.laneCommandBufferCount === 2
+        && diagnostics.activeRenderObjectCount === 1
+        && lifecycleDiagnostics?.kind
+          === 'live-first-instance-crossover-static-resource-lifecycle'
+        && lifecycleDiagnostics.lanesPrimed === true
+        && lifecycleDiagnostics.allBundlesStatic === true
+        && lifecycleDiagnostics.shaderEvidencePass === true
+        && lifecycleDiagnostics.geometry?.pass === true
+        && lifecycleDiagnostics.commandBuffersDistinct === true
+        && lifecycleDiagnostics.commandBuffersZeroOffset === true
+        && lifecycleDiagnostics.configuredComputeDispatches === 2
+        && lifecycleDiagnostics.configuredComputeSubmissions === 1
+        && bundleRecordCountsExact
+        && configuredLanePhysicalOrderExact
+        && commandBuffersExact
+        && new Set(commandBufferIds).size === 2
+        && lifecycleExact
+        && lifecycleCommitmentAtTimingEnd === context.lifecycleCommitmentAtTimingStart
+        && firstInstanceCrossoverRenderTarget.texture.uuid
+          === context.renderTargetTextureUuidAtTimingStart
+        && firstInstanceCrossoverRenderTarget.width === context.renderTargetWidthAtTimingStart
+        && firstInstanceCrossoverRenderTarget.height === context.renderTargetHeightAtTimingStart
+        && firstInstanceCrossoverRenderTarget.samples === context.renderTargetSamplesAtTimingStart
+        && firstInstanceCrossoverRenderTarget.depthBuffer
+          === context.renderTargetDepthBufferAtTimingStart
+        && cameraViewFnv64AtTimingEnd === context.cameraViewFnv64AtTimingStart
+        && cameraProjectionFnv64AtTimingEnd === context.cameraProjectionFnv64AtTimingStart
+        && selectorWritesDuringTiming === timedFrameCount
+        && strategySelectionsDuringTiming === timedFrameCount
+        && strategyComputeCallsDuringTiming === timedFrameCount
+        && strategyPreparesDuringTiming === 0
+        && renderCallsDuringTiming === timedFrameCount
+        && computeCallsDuringTiming === timedFrameCount
+        && timestampPreprimeExact
+        && timestampPoolsExact
+        && warmupScheduleAudit.pass === true
+        && cacheAtTimingEnd.available === true
+        && cacheAtTimingEnd.totalPipelineCacheEntries
+          === context.totalPipelineCacheEntriesAtTimingStart
+        && cacheAtTimingEnd.computePipelineCacheEntries
+          === context.computePipelineCacheEntriesAtTimingStart
+        && computeProgramEntriesExact
+        && rendererMemoryExact
+        && viewportStateExact
+        && webgpuUncapturedErrorsDuringTiming === 0,
+      kind: 'first-instance-live-crossover-static-resource-invariant',
+      lanesPrimed: lifecycleDiagnostics?.lanesPrimed ?? null,
+      bundlesPrimed: lifecycleDiagnostics?.lanesPrimed ?? null,
+      bundleStaticFlags: lifecycleDiagnostics?.bundleStaticFlags ?? null,
+      allBundlesStatic: lifecycleDiagnostics?.allBundlesStatic ?? null,
+      bundleRecordCounts: lifecycleDiagnostics?.bundleRecordCounts ?? null,
+      shaderEvidencePass: lifecycleDiagnostics?.shaderEvidencePass ?? null,
+      geometryEvidencePass: lifecycleDiagnostics?.geometry?.pass ?? null,
+      plannedLanePhysicalOrder: context.plannedLanePhysicalOrder,
+      observedLanePhysicalOrder: lifecycleDiagnostics?.lanePhysicalOrder ?? null,
+      observedLaneConstructionOrder:
+        lifecycleDiagnostics?.laneConstructionOrder?.join('|') ?? null,
+      observedFirstComputeUseOrder:
+        lifecycleDiagnostics?.firstComputeUseOrder?.join('|') ?? null,
+      observedRenderPipelinePrimeOrder:
+        lifecycleDiagnostics?.renderPipelinePrimeOrder?.join('|') ?? null,
+      configuredLanePhysicalOrderExact,
+      lanePhysicalOrderExact: configuredLanePhysicalOrderExact,
+      commandBuffersDistinct: lifecycleDiagnostics?.commandBuffersDistinct ?? null,
+      commandBuffersZeroOffset: lifecycleDiagnostics?.commandBuffersZeroOffset ?? null,
+      commandBuffersExact,
+      commandBufferCommitments: lifecycleDiagnostics?.commandBufferCommitments ?? null,
+      lifecycleExact,
+      staticLifecycleAtTimingStart: firstInstanceLiveLifecycleAtTimingStart === null
+        ? null
+        : structuredClone(firstInstanceLiveLifecycleAtTimingStart),
+      staticLifecycleAtTimingEnd: lifecycleAtTimingEnd === null
+        ? null
+        : structuredClone(lifecycleAtTimingEnd),
+      lifecycleCommitmentAtTimingStart: context.lifecycleCommitmentAtTimingStart,
+      lifecycleCommitmentAtTimingEnd,
+      selectorWriteSerialAtTimingStart: context.selectorWriteSerialAtTimingStart,
+      selectorWriteSerialAtTimingEnd: firstInstanceLiveSelectorWriteSerial,
+      selectorWritesDuringTiming,
+      strategySelectionSerialAtTimingStart: context.strategySelectionSerialAtTimingStart,
+      strategySelectionSerialAtTimingEnd:
+        lifecycleDiagnostics?.laneSelectionSerial ?? null,
+      strategySelectionsDuringTiming,
+      strategyComputeCallSerialAtTimingStart: context.strategyComputeCallSerialAtTimingStart,
+      strategyComputeCallSerialAtTimingEnd:
+        lifecycleDiagnostics?.computeCallSerial ?? null,
+      strategyComputeCallsDuringTiming,
+      strategyPrepareSerialAtTimingStart: context.strategyPrepareSerialAtTimingStart,
+      strategyPrepareSerialAtTimingEnd: lifecycleDiagnostics?.prepareSerial ?? null,
+      strategyPreparesDuringTiming,
+      renderCallSerialAtTimingStart: context.renderCallSerialAtTimingStart,
+      renderCallSerialAtTimingEnd: renderer.info.render.calls,
+      renderCallsDuringTiming,
+      computeCallSerialAtTimingStart: context.computeCallSerialAtTimingStart,
+      computeCallSerialAtTimingEnd: renderer.info.compute.calls,
+      computeCallsDuringTiming,
+      timestampPreprime: firstInstanceLiveTimestampPreprime,
+      timestampPoolPreprime: firstInstanceLiveTimestampPreprime,
+      timestampPoolsAtTimingStart: firstInstanceLiveTimestampPoolsAtTimingStart,
+      timestampPoolsAtTimingEnd,
+      timestampPoolsStaticExact,
+      timestampPoolsResolvedCleanly,
+      timestampPreprimeExact,
+      timestampPoolsExact,
+      warmupScheduleAudit,
+      renderTargetTextureUuidAtTimingStart: context.renderTargetTextureUuidAtTimingStart,
+      renderTargetTextureUuidAtTimingEnd: firstInstanceCrossoverRenderTarget.texture.uuid,
+      renderTargetWidthAtTimingStart: context.renderTargetWidthAtTimingStart,
+      renderTargetWidthAtTimingEnd: firstInstanceCrossoverRenderTarget.width,
+      renderTargetHeightAtTimingStart: context.renderTargetHeightAtTimingStart,
+      renderTargetHeightAtTimingEnd: firstInstanceCrossoverRenderTarget.height,
+      renderTargetSamplesAtTimingStart: context.renderTargetSamplesAtTimingStart,
+      renderTargetSamplesAtTimingEnd: firstInstanceCrossoverRenderTarget.samples,
+      renderTargetDepthBufferAtTimingStart: context.renderTargetDepthBufferAtTimingStart,
+      renderTargetDepthBufferAtTimingEnd: firstInstanceCrossoverRenderTarget.depthBuffer,
+      cameraViewFnv64AtTimingStart: context.cameraViewFnv64AtTimingStart,
+      cameraViewFnv64AtTimingEnd,
+      cameraProjectionFnv64AtTimingStart: context.cameraProjectionFnv64AtTimingStart,
+      cameraProjectionFnv64AtTimingEnd,
+      totalPipelineCacheEntriesAtTimingStart:
+        context.totalPipelineCacheEntriesAtTimingStart,
+      totalPipelineCacheEntriesAtTimingEnd:
+        cacheAtTimingEnd.totalPipelineCacheEntries ?? null,
+      computePipelineCacheEntriesAtTimingStart:
+        context.computePipelineCacheEntriesAtTimingStart,
+      computePipelineCacheEntriesAtTimingEnd:
+        cacheAtTimingEnd.computePipelineCacheEntries ?? null,
+      computeProgramEntriesExact,
+      computeProgramEntriesAtTimingStart:
+        context.computeProgramEntriesAtTimingStart,
+      computeProgramEntriesAtTimingEnd:
+        cacheAtTimingEnd.computeProgramEntries ?? null,
+      rendererMemoryExact,
+      rendererMemoryAtTimingStart: JSON.parse(context.rendererMemoryAtTimingStart),
+      rendererMemoryAtTimingEnd: cacheAtTimingEnd.memory ?? null,
+      viewportStateExact,
+      viewportStateAtTimingStart: JSON.parse(context.viewportStateAtTimingStart),
+      viewportStateAtTimingEnd,
+      webgpuUncapturedErrorCountAtTimingStart:
+        context.webgpuUncapturedErrorCountAtTimingStart,
+      webgpuUncapturedErrorCountAtTimingEnd: webgpuUncapturedErrors.length,
+      webgpuUncapturedErrorsDuringTiming,
+      expectedTimedFrameCount: timedFrameCount,
+    };
+  }
   if (context.modeId === FIRST_INSTANCE_CROSSOVER_MODE) {
     const timedFrameCount = FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES
       + FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES;
@@ -642,6 +1232,7 @@ const trial = new TrialController(renderer, {
   onStatus: setStatus,
   onComplete: ({ rows, summary }) => {
     lastRows = rows;
+    lastSummary = summary;
     elements.export.disabled = rows.length === 0 || summary.accepted !== true;
     elements['gpu-summary'].textContent = `${formatMs(summary.gpuPassP50Ms)} / ${formatMs(summary.gpuPassP95Ms)}`;
     elements['cpu-summary'].textContent = `${formatMs(summary.cpuSubmitP50Ms)} / ${formatMs(summary.cpuSubmitP95Ms)}`;
@@ -653,6 +1244,7 @@ const trial = new TrialController(renderer, {
   },
   onError: (error) => {
     lastRows = [];
+    lastSummary = null;
     elements.export.disabled = true;
     elements.details.textContent = error?.stack ?? String(error);
     setControlsLocked(false);
@@ -679,6 +1271,13 @@ function selectedConfig() {
     ];
     config.superblockOrientationOffset =
       firstInstanceCrossoverConfiguration.superblockOrientationOffset;
+  }
+  if (config.strategyId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE) {
+    config.lanePhysicalOrder = [
+      ...firstInstanceLiveCrossoverConfiguration.lanePhysicalOrder,
+    ];
+    config.superblockOrientationOffset =
+      firstInstanceLiveCrossoverConfiguration.superblockOrientationOffset;
   }
   return config;
 }
@@ -731,6 +1330,31 @@ function configureFirstInstanceCrossover({
   return selectedConfig();
 }
 
+function configureFirstInstanceLiveCrossover({
+  lanePhysicalOrder,
+  superblockOrientationOffset,
+} = {}) {
+  if (rebuilding || validating || trial.active || trial.resolving) {
+    throw new Error('Live first-instance crossover configuration cannot change during active work.');
+  }
+  if (!Array.isArray(lanePhysicalOrder)
+    || lanePhysicalOrder.length !== FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+    || new Set(lanePhysicalOrder).size !== FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+    || FIRST_INSTANCE_LIVE_CROSSOVER_LANES.some(
+      (laneId) => !lanePhysicalOrder.includes(laneId),
+    )) {
+    throw new RangeError('lanePhysicalOrder must be the exact portable/feature pair.');
+  }
+  if (superblockOrientationOffset !== 0 && superblockOrientationOffset !== 1) {
+    throw new RangeError('superblockOrientationOffset must be zero or one.');
+  }
+  firstInstanceLiveCrossoverConfiguration = Object.freeze({
+    lanePhysicalOrder: Object.freeze([...lanePhysicalOrder]),
+    superblockOrientationOffset,
+  });
+  return selectedConfig();
+}
+
 async function fingerprintWorkload() {
   if (!scenario || sourceGeometries.length === 0) {
     throw new Error('Cannot fingerprint an unbuilt workload.');
@@ -766,7 +1390,12 @@ async function rebuild() {
     lastValidation = null;
     frozenSelectorWriteSerial = 0;
     firstInstanceSelectorWriteSerial = 0;
+    firstInstanceLiveSelectorWriteSerial = 0;
     firstInstanceLifecycleAtTimingStart = null;
+    firstInstanceLiveLifecycleAtTimingStart = null;
+    firstInstanceLiveTimestampPreprime = null;
+    firstInstanceLiveTimestampPoolsAtTimingStart = null;
+    firstInstanceLiveWarmupTailSnapshot = null;
     const config = selectedConfig();
     sourceGeometries = createIndexedGeometryFixtures(config.bucketCount, 'medium');
     sourceGeometryManifest = await fingerprintGeometryFixtures(sourceGeometries, 'medium');
@@ -801,6 +1430,7 @@ async function rebuild() {
       'fixed-slice-depth-reverse': buildDepthBinnedReverseStrategy,
       [FROZEN_DEPTH_CROSSOVER_MODE]: buildFrozenDepthCrossoverStrategy,
       [FIRST_INSTANCE_CROSSOVER_MODE]: buildFirstInstanceCrossoverStrategy,
+      [FIRST_INSTANCE_LIVE_CROSSOVER_MODE]: buildFirstInstanceLiveCrossoverStrategy,
       'fixed-slice-per-bucket': buildFixedSlicePerBucketStrategy,
       'three-blocks-coalesced': buildThreeBlocksCoalescedStrategy,
       'three-blocks-current': buildThreeBlocksCurrentStrategy,
@@ -819,10 +1449,15 @@ async function rebuild() {
       laneCommandSegmentOrder: config.strategyId === FIRST_INSTANCE_CROSSOVER_MODE
         ? config.laneCommandSegmentOrder
         : undefined,
+      lanePhysicalOrder: config.strategyId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE
+        ? config.lanePhysicalOrder
+        : undefined,
     });
     scene.add(strategy.root);
-    strategy.update(camera, renderer);
-    if (strategy.usesCompute) strategy.submitCompute(renderer);
+    if (!isFirstInstanceLiveCrossoverStrategy()) {
+      strategy.update(camera, renderer);
+      if (strategy.usesCompute) strategy.submitCompute(renderer);
+    }
     if (isFirstInstanceCrossoverStrategy()) {
       const previousTarget = renderer.getRenderTarget();
       const previousCubeFace = renderer.getActiveCubeFace();
@@ -843,6 +1478,32 @@ async function rebuild() {
           previousMipmapLevel,
         );
       }
+    } else if (isFirstInstanceLiveCrossoverStrategy()) {
+      const previousTarget = renderer.getRenderTarget();
+      const previousCubeFace = renderer.getActiveCubeFace();
+      const previousMipmapLevel = renderer.getActiveMipmapLevel();
+      try {
+        renderer.setRenderTarget(firstInstanceCrossoverRenderTarget);
+        await strategy.primeLanes({
+          renderer,
+          camera,
+          scene,
+          render: () => renderer.render(scene, camera),
+        });
+        await strategy.collectShaderSources(scene);
+        strategy.setActiveLane(config.lanePhysicalOrder[0]);
+        strategy.update(camera, renderer);
+        firstInstanceLiveTimestampPreprime = await preprimeTimestampPools(renderer, {
+          submitCompute: () => strategy.submitCompute(renderer),
+          submitRender: () => renderer.render(scene, camera),
+        });
+      } finally {
+        renderer.setRenderTarget(
+          previousTarget,
+          previousCubeFace,
+          previousMipmapLevel,
+        );
+      }
     } else {
       await renderer.compileAsync(scene, camera);
     }
@@ -850,6 +1511,7 @@ async function rebuild() {
     elements.validation.textContent = 'not run';
     elements.details.textContent = '';
     lastRows = [];
+    lastSummary = null;
     elements.export.disabled = true;
     setStatus('Ready.');
   } finally {
@@ -858,12 +1520,155 @@ async function rebuild() {
   }
 }
 
-async function validateCurrent() {
+async function runFirstInstanceLiveForcedFeatureOffGate({
+  objectCount,
+  bucketCount,
+  visibilityFraction,
+  scenarioSeed,
+} = {}) {
+  if (rebuilding || validating || trial.active || trial.resolving) {
+    throw new Error('Forced-feature-off gate requires an idle disposable page.');
+  }
+  if (scenarioSeed !== DEVELOPMENT_PROTOCOL.seed) {
+    throw new RangeError('Forced-feature-off gate scenario seed differs from the pinned seed.');
+  }
+  const selections = {
+    strategy: 'draw-all',
+    objects: String(objectCount),
+    buckets: String(bucketCount),
+    visibility: String(visibilityFraction),
+    layout: 'baseline',
+  };
+  for (const [id, value] of Object.entries(selections)) {
+    const select = elements[id];
+    if (!select || ![...select.options].some((option) => option.value === value)) {
+      throw new RangeError(`Forced-feature-off gate does not support ${id}=${value}.`);
+    }
+    select.value = value;
+  }
+  await rebuild();
+  if (scenario.objectCount !== objectCount
+    || scenario.bucketCount !== bucketCount
+    || scenario.expectedVisibleIds.length !== expectedCpuVisible.length
+    || renderer.backend?.trackTimestamp !== false) {
+    throw new Error('Forced-feature-off disposable workload did not reach the pinned state.');
+  }
+
+  validating = true;
+  setControlsLocked(true);
+  const uncapturedErrorCountBefore = webgpuUncapturedErrors.length;
+  try {
+    const evidence = await runForcedFeatureOffGate({
+      scenario,
+      sourceGeometries,
+      renderer,
+      camera,
+      expectedIds: expectedCpuVisible,
+      addressChallenge: async (context) => {
+        const laneId = 'portable';
+        const commandBuffer = context.strategy.laneState.commandBufferCommitment();
+        const oracle = createFirstInstanceAddressChallengeOracle({
+          scenario,
+          sourceGeometries,
+          firstIndexes: context.resources.firstIndexes,
+          visibleIdsAttribute: context.resources.visibleIdsAttribute,
+          laneIds: [laneId],
+          laneDefinitions: {
+            [laneId]: {
+              addressMode: context.resources.addressMode,
+              productionGeometry: context.resources.geometry,
+              indirectAttribute: context.resources.indirectAttribute,
+              indirectOffsets: context.resources.commandOffsets,
+              commandBuffer,
+              commandSegment: { index: 0, recordBase: 0, byteBase: 0 },
+            },
+          },
+          namePrefix: 'forced-off-first-instance-fragment-address-challenge',
+        });
+        try {
+          return await oracle.challengeLane(renderer, camera, laneId, {
+            visibleIds: context.snapshot.visibleIds,
+            activeCounts: context.correctness.actualCounts,
+          });
+        } finally {
+          oracle.dispose();
+        }
+      },
+      captureOutput: (context) => captureExactRenderParity({
+        renderer,
+        camera,
+        strategy: context.strategy,
+        expectedIds: context.expectedIds,
+      }),
+    });
+    const uncapturedErrorsDuringGate = webgpuUncapturedErrors.length
+      - uncapturedErrorCountBefore;
+    return {
+      ...evidence,
+      pass: evidence.pass
+        && uncapturedErrorsDuringGate === 0
+        && renderer.backend?.trackTimestamp === false,
+      configuration: {
+        objectCount,
+        bucketCount,
+        visibilityFraction,
+        scenarioSeed,
+        layout: 'baseline',
+      },
+      timestampTrackingEnabled: renderer.backend?.trackTimestamp === true,
+      uncapturedErrorCountBefore,
+      uncapturedErrorCountAfter: webgpuUncapturedErrors.length,
+      uncapturedErrorsDuringGate,
+    };
+  } finally {
+    validating = false;
+    setControlsLocked(false);
+  }
+}
+
+function createInteractiveShaderObservationRequest(role) {
+  const challengeBytes = crypto.getRandomValues(new Uint8Array(32));
+  return {
+    schemaVersion: 1,
+    kind: 'live-first-instance-shader-observation-challenge',
+    origin: 'page-interactive',
+    runId: null,
+    trialId: null,
+    planIndex: null,
+    repetitionIndex: null,
+    phase: 'interactive',
+    role,
+    captureOrdinal: strategy.shaderObservationSerial + 1,
+    challengeNonce: [...challengeBytes]
+      .map((value) => value.toString(16).padStart(2, '0'))
+      .join(''),
+  };
+}
+
+async function validateCurrent(shaderObservationRequest = null) {
   if (!strategy || validating || trial.active || trial.resolving) return null;
   validating = true;
   setControlsLocked(true);
   setStatus('Reading back survivor and command buffers…');
   try {
+    if (isFirstInstanceLiveCrossoverStrategy()) {
+      strategy.update(camera, renderer);
+      const result = await strategy.validateSerialized(
+        renderer,
+        expectedCpuVisible,
+        {
+          camera,
+          scene,
+          shaderObservationRequest: shaderObservationRequest
+            ?? createInteractiveShaderObservationRequest('main-validation'),
+        },
+      );
+      lastValidation = result;
+      elements.validation.textContent = result.pass ? 'PASS' : 'FAIL';
+      elements.details.textContent = JSON.stringify(result, null, 2);
+      setStatus(result.pass ? 'Validation passed.' : 'Validation failed.');
+      return result;
+    }
     if (isFrozenCrossoverStrategy()) {
       strategy.setActiveLane(frozenLaneOrder(FROZEN_DEPTH_CROSSOVER_LANES[0]));
     }
@@ -892,12 +1697,191 @@ function parityIdentity(parity) {
   )).join('||');
 }
 
-async function captureRenderParity() {
+function exactReadbackIdentity(left, right) {
+  return left?.format === right?.format
+    && left?.arrayType === right?.arrayType
+    && left?.byteLength === right?.byteLength
+    && left?.sha256 === right?.sha256;
+}
+
+async function captureLiveProductionBundleOutput(laneId, directDiagnosticColor) {
+  if (!isFirstInstanceLiveCrossoverStrategy()
+    || strategy.activeLane !== laneId
+    || renderer.autoClear !== true
+    || renderer.backend?.trackTimestamp !== false) {
+    throw new Error(
+      'Production bundle capture requires one active live lane, autoClear, and disabled timestamps.',
+    );
+  }
+  const target = firstInstanceCrossoverRenderTarget;
+  if (target.width !== VIEWPORT.width
+    || target.height !== VIEWPORT.height
+    || target.samples !== 0
+    || target.depthBuffer !== true) {
+    throw new Error('Production bundle capture target differs from the timed target contract.');
+  }
+  const captureOnce = async () => {
+    const previousTarget = renderer.getRenderTarget();
+    const previousCubeFace = renderer.getActiveCubeFace();
+    const previousMipmapLevel = renderer.getActiveMipmapLevel();
+    try {
+      renderer.setRenderTarget(target);
+      renderer.render(scene, camera);
+    } finally {
+      renderer.setRenderTarget(previousTarget, previousCubeFace, previousMipmapLevel);
+    }
+    const pixels = await renderer.readRenderTargetPixelsAsync(
+      target,
+      0,
+      0,
+      VIEWPORT.width,
+      VIEWPORT.height,
+    );
+    return renderReadbackRecord(
+      pixels,
+      'rgba8unorm',
+      VIEWPORT.width * VIEWPORT.height * 4,
+    );
+  };
+  const executionCounters = () => ({
+    laneSelectionSerial: strategy.laneSelectionSerial,
+    strategyComputeCallSerial: strategy.computeCallSerial,
+    strategyPrepareSerial: strategy.prepareSerial,
+    rendererComputeCallSerial: renderer.info.compute.calls,
+    rendererRenderCallSerial: renderer.info.render.calls,
+  });
+  const commitmentBefore = strategy.captureTimedRenderCommitment(laneId);
+  const executionBefore = executionCounters();
+  const first = await captureOnce();
+  const commitmentBetween = strategy.captureTimedRenderCommitment(laneId);
+  const executionBetween = executionCounters();
+  const second = await captureOnce();
+  const commitmentAfter = strategy.captureTimedRenderCommitment(laneId);
+  const executionAfter = executionCounters();
+  const stable = exactReadbackIdentity(first, second);
+  const resourcesStable = JSON.stringify(commitmentBefore)
+    === JSON.stringify(commitmentBetween)
+    && JSON.stringify(commitmentBefore) === JSON.stringify(commitmentAfter);
+  const bundleRecordedExactlyOnce = commitmentBefore.bundleRecordCallbackCount === 1
+    && commitmentBetween.bundleRecordCallbackCount === 1
+    && commitmentAfter.bundleRecordCallbackCount === 1;
+  const executionExact = executionBetween.rendererRenderCallSerial
+      === executionBefore.rendererRenderCallSerial + 1
+    && executionAfter.rendererRenderCallSerial
+      === executionBetween.rendererRenderCallSerial + 1
+    && ['laneSelectionSerial', 'strategyComputeCallSerial', 'strategyPrepareSerial',
+      'rendererComputeCallSerial'].every(
+      (field) => executionBefore[field] === executionBetween[field]
+        && executionBefore[field] === executionAfter[field],
+    );
+  const directDiagnosticExact = exactReadbackIdentity(second, directDiagnosticColor);
+  return {
+    schemaVersion: 1,
+    kind: 'live-first-instance-production-bundle-output',
+    pass: stable
+      && resourcesStable
+      && bundleRecordedExactlyOnce
+      && executionExact
+      && directDiagnosticExact,
+    laneId,
+    target: {
+      textureUuid: target.texture.uuid,
+      width: target.width,
+      height: target.height,
+      samples: target.samples,
+      depthBuffer: target.depthBuffer,
+    },
+    captures: 2,
+    color: second,
+    directDiagnosticColor,
+    directDiagnosticExact,
+    resourcesStable,
+    bundleRecordedExactlyOnce,
+    executionExact,
+    executionBefore,
+    executionBetween,
+    executionAfter,
+    commitmentBefore,
+    commitmentBetween,
+    commitmentAfter,
+    stability: {
+      pass: stable,
+      firstCapture: first,
+      secondCapture: second,
+    },
+  };
+}
+
+async function captureRenderParity(shaderObservationRequest = null) {
   if (!strategy || validating || trial.active || trial.resolving) return null;
   validating = true;
   setControlsLocked(true);
   setStatus('Capturing exact color, depth, and object-ID parity…');
   try {
+    if (isFirstInstanceLiveCrossoverStrategy()) {
+      const previousLane = strategy.activeLane;
+      const lanes = {};
+      let snapshotValidation;
+      try {
+        snapshotValidation = await strategy.validateSerialized(
+          renderer,
+          expectedCpuVisible,
+          {
+            shaderObservationRequest: shaderObservationRequest
+              ?? createInteractiveShaderObservationRequest('render-parity'),
+            onLanePrepared: async ({ lane }) => {
+              const parity = await captureExactRenderParity({
+                renderer,
+                camera,
+                strategy,
+                expectedIds: expectedCpuVisible,
+              });
+              const productionBundleOutput = await captureLiveProductionBundleOutput(
+                lane,
+                parity.color,
+              );
+              const combined = {
+                ...parity,
+                pass: parity.pass === true && productionBundleOutput.pass === true,
+                productionBundleOutput,
+              };
+              lanes[lane] = combined;
+              return combined;
+            },
+          },
+        );
+      } finally {
+        strategy.setActiveLane(previousLane);
+      }
+      lastValidation = snapshotValidation;
+      if (snapshotValidation?.pass !== true) {
+        throw new Error('Live render parity refused because paired snapshots failed validation.');
+      }
+      const identities = FIRST_INSTANCE_LIVE_CROSSOVER_LANES.map(
+        (laneId) => parityIdentity(lanes[laneId]),
+      );
+      const crossLaneExact = identities[0] === identities[1];
+      const crossLaneProductionExact = exactReadbackIdentity(
+        lanes[FIRST_INSTANCE_LIVE_CROSSOVER_LANES[0]]?.productionBundleOutput?.color,
+        lanes[FIRST_INSTANCE_LIVE_CROSSOVER_LANES[1]]?.productionBundleOutput?.color,
+      );
+      const result = {
+        schemaVersion: 1,
+        kind: 'first-instance-live-crossover-exact-render-parity',
+        pass: crossLaneExact
+          && crossLaneProductionExact
+          && FIRST_INSTANCE_LIVE_CROSSOVER_LANES.every(
+            (laneId) => lanes[laneId]?.pass === true,
+          ),
+        laneIds: [...FIRST_INSTANCE_LIVE_CROSSOVER_LANES],
+        crossLaneExact,
+        crossLaneProductionExact,
+        lanes,
+        snapshotValidation,
+      };
+      setStatus(result.pass ? 'Render parity captured.' : 'Render parity capture was unstable.');
+      return result;
+    }
     strategy.update(camera, renderer);
     if (strategy.usesCompute) strategy.submitCompute(renderer);
     const snapshotValidation = await strategy.validate(renderer, expectedCpuVisible);
@@ -988,9 +1972,9 @@ async function captureRenderParity() {
   }
 }
 
-async function startTrial(extraContext = {}) {
+async function startTrial(extraContext = {}, shaderObservationRequest = null) {
   if (!strategy || trial.active || trial.resolving) return;
-  const validation = await validateCurrent();
+  const validation = await validateCurrent(shaderObservationRequest);
   if (!validation?.pass) throw new Error('Timing refused because validation did not pass.');
   setControlsLocked(true);
   const config = selectedConfig();
@@ -998,19 +1982,34 @@ async function startTrial(extraContext = {}) {
   const representationDiagnostics = strategy.diagnostics?.() ?? null;
   const depthCrossover = strategy.id === FROZEN_DEPTH_CROSSOVER_MODE;
   const firstInstanceCrossover = strategy.id === FIRST_INSTANCE_CROSSOVER_MODE;
+  const liveFirstInstanceCrossover = strategy.id === FIRST_INSTANCE_LIVE_CROSSOVER_MODE;
   const renderOnlyCrossover = depthCrossover || firstInstanceCrossover;
-  const timingDiagnostics = renderOnlyCrossover
+  const pinnedCrossover = renderOnlyCrossover || liveFirstInstanceCrossover;
+  const timingDiagnostics = pinnedCrossover
     ? strategy.lifecycleDiagnostics?.() ?? representationDiagnostics
     : DEPTH_ORDERING_LAYOUT_IDS.has(config.layout)
     ? strategy.lifecycleDiagnostics?.() ?? representationDiagnostics
     : representationDiagnostics;
   const frontOrder = frozenLaneOrder(FROZEN_DEPTH_CROSSOVER_LANES[0]);
   const reverseOrder = frozenLaneOrder(FROZEN_DEPTH_CROSSOVER_LANES[1]);
-  const cacheAtTimingStart = renderOnlyCrossover ? pinnedRendererCacheDiagnostics() : null;
-  if (renderOnlyCrossover && cacheAtTimingStart?.available !== true) {
-    throw new Error('Render-only crossover requires pinned renderer cache diagnostics.');
+  if (liveFirstInstanceCrossover) {
+    bindLiveFirstInstanceViewportState(firstInstanceCrossoverRenderTarget);
   }
-  const timingRenderTarget = firstInstanceCrossover
+  const liveViewportStateAtTimingStart = liveFirstInstanceCrossover
+    ? captureLiveFirstInstanceViewportState(firstInstanceCrossoverRenderTarget)
+    : null;
+  if (liveFirstInstanceCrossover
+    && !liveFirstInstanceViewportStateIsPinned(
+      liveViewportStateAtTimingStart,
+      firstInstanceCrossoverRenderTarget,
+    )) {
+    throw new Error('Live crossover viewport/scissor state is not exactly pinned.');
+  }
+  const cacheAtTimingStart = pinnedCrossover ? pinnedRendererCacheDiagnostics() : null;
+  if (pinnedCrossover && cacheAtTimingStart?.available !== true) {
+    throw new Error('Pinned crossover requires renderer cache diagnostics.');
+  }
+  const timingRenderTarget = firstInstanceCrossover || liveFirstInstanceCrossover
     ? firstInstanceCrossoverRenderTarget
     : depthCrossover
       ? frozenCrossoverRenderTarget
@@ -1021,6 +2020,39 @@ async function startTrial(extraContext = {}) {
   const firstInstanceLifecycleCommitmentAtTimingStart = firstInstanceCrossover
     ? firstInstanceLifecycleCommitment(timingDiagnostics)
     : null;
+  firstInstanceLiveLifecycleAtTimingStart = liveFirstInstanceCrossover
+    ? structuredClone(firstInstanceLiveStaticLifecycle(timingDiagnostics))
+    : null;
+  const firstInstanceLiveLifecycleCommitmentAtTimingStart = liveFirstInstanceCrossover
+    ? firstInstanceLiveLifecycleCommitment(timingDiagnostics)
+    : null;
+  firstInstanceLiveTimestampPoolsAtTimingStart = liveFirstInstanceCrossover
+    ? structuredClone(timestampPoolDiagnostics(renderer))
+    : null;
+  if (liveFirstInstanceCrossover) {
+    const preprimeAfter = firstInstanceLiveTimestampPreprime?.after;
+    const timingPools = firstInstanceLiveTimestampPoolsAtTimingStart;
+    const preprimeCommitment = timestampPoolStaticCommitment(preprimeAfter);
+    const timingCommitment = timestampPoolStaticCommitment(timingPools);
+    const poolsClean = ['render', 'compute'].every((type) => {
+      const pool = timingPools?.[type];
+      return pool
+        && pool.currentQueryIndex === 0
+        && pool.queryOffsetCount === 0
+        && pool.pendingResolve === false
+        && pool.isDisposed === false
+        && pool.resultBufferMapState === 'unmapped'
+        && pool.maxQueries >= FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES * 2;
+    });
+    if (firstInstanceLiveTimestampPreprime?.kind !== 'three-r185-timestamp-pool-preprime'
+      || firstInstanceLiveTimestampPreprime.addedTimestampUidCount?.render !== 1
+      || firstInstanceLiveTimestampPreprime.addedTimestampUidCount?.compute !== 1
+      || timingPools?.backendTrackingEnabled !== false
+      || JSON.stringify(preprimeCommitment) !== JSON.stringify(timingCommitment)
+      || !poolsClean) {
+      throw new Error('Live crossover timestamp pools were not cleanly pre-primed.');
+    }
+  }
   const trialContext = {
     ...extraContext,
     schemaVersion: 2,
@@ -1035,23 +2067,33 @@ async function startTrial(extraContext = {}) {
     validationKind: validation.kind,
     validationPass: true,
     usesCompute: strategy.usesCompute,
+    configuredDrawCommands: strategy.configuredDrawCommands,
     configuredRenderObjects: strategy.configuredRenderObjects,
     configuredComputeDispatches: strategy.configuredComputeDispatches,
     configuredComputeSubmissions: strategy.configuredComputeSubmissions,
+    configuredSubmittedInstances: strategy.configuredSubmittedInstances,
     bundleRecordCallbackCountAtTimingStart:
       timingDiagnostics?.bundleRecordCallbackCount ?? null,
     timestampAvailable,
-    expectedRenderTimestampUidCount: renderOnlyCrossover ? 1 : null,
+    expectedComputeTimestampUidCount: liveFirstInstanceCrossover ? 1 : null,
+    strictTimestampUidAttribution: liveFirstInstanceCrossover,
+    expectedRenderTimestampUidCount: pinnedCrossover ? 1 : null,
     plannedLaneStorageOrder: depthCrossover
       ? config.laneStorageOrder.join('|')
       : null,
     plannedLaneCommandSegmentOrder: firstInstanceCrossover
       ? config.laneCommandSegmentOrder.join('|')
       : null,
+    plannedLanePhysicalOrder: liveFirstInstanceCrossover
+      ? config.lanePhysicalOrder.join('|')
+      : null,
+    lanePhysicalOrder: liveFirstInstanceCrossover
+      ? config.lanePhysicalOrder.join('|')
+      : null,
     plannedCommandSegments: firstInstanceCrossover
       ? JSON.stringify(strategy.commandSegments)
       : null,
-    superblockOrientationOffset: renderOnlyCrossover
+    superblockOrientationOffset: pinnedCrossover
       ? config.superblockOrientationOffset
       : null,
     frontLaneBase: depthCrossover ? strategy.laneOffsets[frontOrder] : null,
@@ -1060,11 +2102,31 @@ async function startTrial(extraContext = {}) {
       ? frozenSelectorWriteSerial
       : firstInstanceCrossover
         ? firstInstanceSelectorWriteSerial
+        : liveFirstInstanceCrossover
+          ? firstInstanceLiveSelectorWriteSerial
         : null,
     strategySelectionSerialAtTimingStart: firstInstanceCrossover
+      || liveFirstInstanceCrossover
       ? strategy.laneSelectionSerial
       : null,
-    lifecycleCommitmentAtTimingStart: firstInstanceLifecycleCommitmentAtTimingStart,
+    strategyComputeCallSerialAtTimingStart: liveFirstInstanceCrossover
+      ? strategy.computeCallSerial
+      : null,
+    strategyPrepareSerialAtTimingStart: liveFirstInstanceCrossover
+      ? strategy.prepareSerial
+      : null,
+    commandBufferCommitmentsAtTimingStart: liveFirstInstanceCrossover
+      ? JSON.stringify(strategy.commandBufferCommitments)
+      : null,
+    portableCommandBufferIdAtTimingStart: liveFirstInstanceCrossover
+      ? strategy.commandBufferCommitments[FIRST_INSTANCE_LIVE_CROSSOVER_LANES[0]].attributeId
+      : null,
+    featureCommandBufferIdAtTimingStart: liveFirstInstanceCrossover
+      ? strategy.commandBufferCommitments[FIRST_INSTANCE_LIVE_CROSSOVER_LANES[1]].attributeId
+      : null,
+    lifecycleCommitmentAtTimingStart: liveFirstInstanceCrossover
+      ? firstInstanceLiveLifecycleCommitmentAtTimingStart
+      : firstInstanceLifecycleCommitmentAtTimingStart,
     rootUuidAtTimingStart: firstInstanceCrossover ? timingDiagnostics.rootUuid : null,
     rootVersionAtTimingStart: firstInstanceCrossover ? timingDiagnostics.rootVersion : null,
     bundleUuidsAtTimingStart: firstInstanceCrossover
@@ -1122,10 +2184,10 @@ async function startTrial(extraContext = {}) {
     shaderFragmentSha256AtTimingStart: firstInstanceCrossover
       ? timingDiagnostics.shaderEvidence?.fragmentSha256 ?? null
       : null,
-    renderCallSerialAtTimingStart: renderOnlyCrossover
+    renderCallSerialAtTimingStart: pinnedCrossover
       ? renderer.info.render.calls
       : null,
-    computeCallSerialAtTimingStart: renderOnlyCrossover
+    computeCallSerialAtTimingStart: pinnedCrossover
       ? renderer.info.compute.calls
       : null,
     bundleGroupUuidAtTimingStart:
@@ -1152,24 +2214,43 @@ async function startTrial(extraContext = {}) {
     selectorUniformUuidAtTimingStart:
       depthCrossover ? timingDiagnostics.selectorUniformUuid : null,
     renderTargetTextureUuidAtTimingStart:
-      renderOnlyCrossover ? timingRenderTarget.texture.uuid : null,
+      pinnedCrossover ? timingRenderTarget.texture.uuid : null,
     renderTargetWidthAtTimingStart:
-      renderOnlyCrossover ? timingRenderTarget.width : null,
+      pinnedCrossover ? timingRenderTarget.width : null,
     renderTargetHeightAtTimingStart:
-      renderOnlyCrossover ? timingRenderTarget.height : null,
+      pinnedCrossover ? timingRenderTarget.height : null,
     renderTargetSamplesAtTimingStart:
-      renderOnlyCrossover ? timingRenderTarget.samples : null,
+      pinnedCrossover ? timingRenderTarget.samples : null,
     renderTargetDepthBufferAtTimingStart:
-      renderOnlyCrossover ? timingRenderTarget.depthBuffer : null,
+      pinnedCrossover ? timingRenderTarget.depthBuffer : null,
     cameraViewFnv64AtTimingStart:
-      renderOnlyCrossover ? fnv1a64Float32(camera.matrixWorldInverse.elements) : null,
+      pinnedCrossover ? fnv1a64Float32(camera.matrixWorldInverse.elements) : null,
     cameraProjectionFnv64AtTimingStart:
-      renderOnlyCrossover ? fnv1a64Float32(camera.projectionMatrix.elements) : null,
+      pinnedCrossover ? fnv1a64Float32(camera.projectionMatrix.elements) : null,
     totalPipelineCacheEntriesAtTimingStart:
-      renderOnlyCrossover ? cacheAtTimingStart.totalPipelineCacheEntries : null,
+      pinnedCrossover ? cacheAtTimingStart.totalPipelineCacheEntries : null,
     computePipelineCacheEntriesAtTimingStart:
-      renderOnlyCrossover ? cacheAtTimingStart.computePipelineCacheEntries : null,
+      pinnedCrossover ? cacheAtTimingStart.computePipelineCacheEntries : null,
+    computeProgramEntriesAtTimingStart:
+      liveFirstInstanceCrossover ? cacheAtTimingStart.computeProgramEntries : null,
+    rendererMemoryAtTimingStart: liveFirstInstanceCrossover
+      ? JSON.stringify(cacheAtTimingStart.memory)
+      : null,
+    viewportStateAtTimingStart: liveFirstInstanceCrossover
+      ? JSON.stringify(liveViewportStateAtTimingStart)
+      : null,
+    timestampPoolStaticCommitmentAtTimingStart: liveFirstInstanceCrossover
+      ? JSON.stringify(timestampPoolStaticCommitment(firstInstanceLiveTimestampPoolsAtTimingStart))
+      : null,
+    webgpuUncapturedErrorCountAtTimingStart: liveFirstInstanceCrossover
+      ? webgpuUncapturedErrors.length
+      : null,
   };
+  if (liveFirstInstanceCrossover) {
+    firstInstanceLivePreviousLaneId = null;
+    firstInstanceLivePreviousPreviousLaneId = null;
+    firstInstanceLiveWarmupTailSnapshot = null;
+  }
   await trial.start(
     trialContext,
     depthCrossover
@@ -1182,6 +2263,11 @@ async function startTrial(extraContext = {}) {
           warmupFrames: FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES,
           measuredFrames: FIRST_INSTANCE_CROSSOVER_MEASURED_FRAMES,
         }
+        : liveFirstInstanceCrossover
+          ? {
+            warmupFrames: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
+            measuredFrames: FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+          }
         : undefined,
   );
   return {
@@ -1192,7 +2278,135 @@ async function startTrial(extraContext = {}) {
 
 function frame() {
   if (rebuilding || validating || !strategy || trial.resolving) return;
+  // The live candidate has explicit priming, validation, and timed submissions.
+  // Do not let the interactive idle loop add unrecorded compute/render work
+  // between those evidence boundaries.
+  if (isFirstInstanceLiveCrossoverStrategy() && !trial.active) return;
   const frameStart = performance.now();
+  if (isFirstInstanceLiveCrossoverStrategy() && trial.active) {
+    const descriptor = trial.frameDescriptor;
+    if (!descriptor) {
+      throw new Error('Live first-instance crossover lacks an active-frame descriptor.');
+    }
+    const scheduled = firstInstanceLiveCrossoverFrame(
+      descriptor.phaseFrameIndex,
+      trial.context.superblockOrientationOffset,
+    );
+    const previousLaneId = firstInstanceLivePreviousLaneId;
+    const previousPreviousLaneId = firstInstanceLivePreviousPreviousLaneId;
+    const historyMustBeCyclic = descriptor.phase === 'measure'
+      || descriptor.phaseFrameIndex >= 2;
+    if (historyMustBeCyclic
+      && (previousLaneId !== scheduled.previousLaneId
+        || previousPreviousLaneId !== scheduled.previousPreviousLaneId)) {
+      throw new Error(
+        'Live crossover actual lane history differs from its cyclic schedule.',
+      );
+    }
+    const selectionSerialBefore = strategy.laneSelectionSerial;
+    const commonStart = performance.now();
+    const commandBufferId = strategy.setActiveLane(scheduled.laneId);
+    firstInstanceLiveSelectorWriteSerial += 1;
+    const selectorWriteSerial = firstInstanceLiveSelectorWriteSerial;
+    const strategySelectionSerial = strategy.laneSelectionSerial;
+    strategy.update(camera, renderer);
+    const cpuCommonUpdateMs = performance.now() - commonStart;
+    const commandBuffer = strategy.commandBufferCommitments[scheduled.laneId];
+    if (strategySelectionSerial !== selectionSerialBefore + 1) {
+      throw new Error('Live crossover must perform exactly one lane selection per frame.');
+    }
+    if (!commandBuffer
+      || commandBufferId !== commandBuffer.attributeId
+      || strategy.activeCommandBufferId !== commandBuffer.attributeId
+      || commandBuffer.byteOffset !== 0
+      || commandBuffer.firstOffset !== 0) {
+      throw new Error('Live crossover selected an invalid zero-offset command buffer.');
+    }
+    const gpuFrameId = renderer.info.frame;
+    const rendererComputeCallSerialBefore = renderer.info.compute.calls;
+    const strategyComputeCallSerialBefore = strategy.computeCallSerial;
+    const computeStart = performance.now();
+    const computeSubmission = strategy.submitCompute(renderer);
+    const cpuComputeSubmitMs = performance.now() - computeStart;
+    const computeCallSerial = renderer.info.compute.calls;
+    const computeFrameCallIndex = renderer.info.compute.frameCalls;
+    const strategyComputeCallSerial = strategy.computeCallSerial;
+    if (computeCallSerial !== rendererComputeCallSerialBefore + 1
+      || strategyComputeCallSerial !== strategyComputeCallSerialBefore + 1) {
+      throw new Error('Live crossover must issue exactly one top-level compute call per frame.');
+    }
+    const renderCallSerialBefore = renderer.info.render.calls;
+    const renderStart = performance.now();
+    renderBenchmarkScene();
+    const cpuRenderSubmitMs = performance.now() - renderStart;
+    const renderCallSerial = renderer.info.render.calls;
+    const renderFrameCallIndex = renderer.info.render.frameCalls;
+    if (renderCallSerial !== renderCallSerialBefore + 1) {
+      throw new Error('Live crossover must issue exactly one top-level render call per frame.');
+    }
+    const cpuSubmitTotalMs = cpuComputeSubmitMs + cpuRenderSubmitMs;
+    const cpuFrameBodyMs = performance.now() - frameStart;
+    trial.recordFrame({
+      gpuFrameId,
+      phaseFrameIndex: descriptor.phaseFrameIndex,
+      crossoverBlockIndex: scheduled.crossoverBlockIndex,
+      withinBlockPosition: scheduled.withinBlockPosition,
+      crossoverPattern: scheduled.pattern,
+      crossoverPatternIndex: scheduled.patternIndex,
+      previousPreviousLaneId,
+      previousLaneId,
+      laneId: scheduled.laneId,
+      commandBufferId,
+      submittedComputeLaneId: computeSubmission.laneId,
+      computeTimestampContextId: computeSubmission.timestampContextId,
+      computeGroupIdentity: computeSubmission.computeGroupIdentity,
+      computeTimestampRegistrationSerial: computeSubmission.registrationSerial,
+      computeTimestampBackendIdentity: computeSubmission.backendIdentity,
+      computeTimestampBackendWrapperIdentity: computeSubmission.backendWrapperIdentity,
+      submittedComputeNodeIds: JSON.stringify(computeSubmission.computeNodeIds),
+      commandSegmentIndex: 0,
+      commandRecordBase: 0,
+      commandByteBase: 0,
+      commandByteOffset: 0,
+      commandBufferRecordCount: commandBuffer.recordCount,
+      commandBufferByteLength: commandBuffer.byteLength,
+      selectorWriteSerial,
+      strategySelectionSerial,
+      strategyComputeCallSerial,
+      computeCallSerial,
+      computeFrameCallIndex,
+      renderCallSerial,
+      renderFrameCallIndex,
+      cpuCommonUpdateMs,
+      cpuComputeSubmitMs,
+      cpuRenderSubmitMs,
+      cpuSubmitTotalMs,
+      cpuFrameBodyMs,
+      configuredDrawCommands: strategy.configuredDrawCommands,
+      configuredRenderObjects: strategy.configuredRenderObjects,
+      configuredComputeDispatches: strategy.configuredComputeDispatches,
+      configuredComputeSubmissions: strategy.configuredComputeSubmissions,
+      configuredSubmittedInstances: strategy.configuredSubmittedInstances,
+    });
+    firstInstanceLivePreviousPreviousLaneId = previousLaneId;
+    firstInstanceLivePreviousLaneId = scheduled.laneId;
+    if (descriptor.phase === 'warmup'
+      && descriptor.phaseFrameIndex === FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES - 1) {
+      firstInstanceLiveWarmupTailSnapshot = Object.freeze({
+        schemaVersion: 1,
+        kind: 'live-first-instance-post-warmup-state',
+        previousPreviousLaneId: firstInstanceLivePreviousPreviousLaneId,
+        previousLaneId: firstInstanceLivePreviousLaneId,
+        lastWarmupGpuFrameId: gpuFrameId,
+        selectorWriteSerial,
+        strategySelectionSerial,
+        strategyComputeCallSerial,
+        computeCallSerial,
+        renderCallSerial,
+      });
+    }
+    return;
+  }
   if (isFirstInstanceCrossoverStrategy() && trial.active) {
     const descriptor = trial.frameDescriptor;
     if (!descriptor) throw new Error('First-instance crossover lacks an active-frame descriptor.');
@@ -1415,6 +2629,11 @@ const environment = Object.freeze({
     renderer.backend?.device?.limits?.maxStorageBuffersPerShaderStage ?? null,
   timestampAvailable,
   indirectFirstInstanceAvailable: renderer.hasFeature('indirect-first-instance'),
+  get webgpuUncapturedErrorCount() { return webgpuUncapturedErrors.length; },
+  get webgpuValidationErrorCount() {
+    return webgpuUncapturedErrors.filter((error) => error.name === 'GPUValidationError').length;
+  },
+  get webgpuDeviceLossCount() { return webgpuDeviceLosses.length; },
   crossOriginIsolated: globalThis.crossOriginIsolated === true,
   performanceNowQuantumMs: detectPerformanceNowQuantum(),
   viewport: VIEWPORT,
@@ -1426,6 +2645,8 @@ window.__WEBGPU_BENCH__ = {
   selectedConfig,
   configureFrozenCrossover,
   configureFirstInstanceCrossover,
+  configureFirstInstanceLiveCrossover,
+  runFirstInstanceLiveForcedFeatureOffGate,
   rebuild,
   validate: validateCurrent,
   captureRenderParity,
@@ -1437,12 +2658,17 @@ window.__WEBGPU_BENCH__ = {
   get strategyDiagnostics() { return strategy?.diagnostics?.() ?? null; },
   get strategyLifecycle() { return strategy?.lifecycleDiagnostics?.() ?? null; },
   get firstInstanceShaderEvidence() {
-    return isFirstInstanceCrossoverStrategy() ? strategy.shaderEvidence : null;
+    return isAnyFirstInstanceCrossoverStrategy() ? strategy.shaderEvidence : null;
   },
+  get timestampPoolDiagnostics() { return timestampPoolDiagnostics(renderer); },
+  get timestampPoolPreprime() { return firstInstanceLiveTimestampPreprime; },
+  get webgpuUncapturedErrors() { return structuredClone(webgpuUncapturedErrors); },
+  get webgpuDeviceLosses() { return structuredClone(webgpuDeviceLosses); },
   get lastValidation() { return lastValidation; },
   get phase() { return trial.phase; },
   get trialError() { return trial.error?.message ?? null; },
   get rows() { return lastRows; },
+  get summary() { return lastSummary; },
 };
 
 elements.backend.textContent = `${adapterInfo.description ?? adapterInfo.device ?? 'WebGPU'} · ${adapterInfo.backend ?? 'unknown backend'}`;

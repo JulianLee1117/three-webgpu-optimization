@@ -1,10 +1,18 @@
 import { createHash } from 'node:crypto';
-import { readFile, stat } from 'node:fs/promises';
+import {
+  lstat,
+  readFile,
+  readdir,
+  stat,
+} from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { summarizeFrozenCrossoverRows } from './frozen-crossover-summary.mjs';
 import { summarizeFirstInstanceCrossoverRows } from './first-instance-crossover-summary.mjs';
+import {
+  summarizeLiveFirstInstanceCrossoverRows,
+} from './live-first-instance-crossover-summary.mjs';
 import {
   FROZEN_CROSSOVER_BLOCK_SIZE,
   FROZEN_CROSSOVER_MEASURED_BLOCKS,
@@ -23,12 +31,27 @@ import {
   FIRST_INSTANCE_CROSSOVER_WARMUP_FRAMES,
 } from '../src/benchmark/first-instance-crossover-schedule.js';
 import {
+  FIRST_INSTANCE_LIVE_CROSSOVER_BLOCK_SIZE,
+  FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_BLOCKS,
+  FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+  FIRST_INSTANCE_LIVE_CROSSOVER_PATTERNS,
+  FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_BLOCKS,
+  FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
+  firstInstanceLiveCrossoverHistoryCounts,
+} from '../src/benchmark/first-instance-live-crossover-schedule.js';
+import {
   FIRST_INSTANCE_CROSSOVER_COMMAND_SEGMENT_ORDERS,
   FIRST_INSTANCE_CROSSOVER_LANES,
   FIRST_INSTANCE_CROSSOVER_MODE,
   FIRST_INSTANCE_CROSSOVER_ORIENTATION_OFFSETS,
   FIRST_INSTANCE_CROSSOVER_REPETITIONS,
   FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS,
+  FIRST_INSTANCE_LIVE_CROSSOVER_LANE_PHYSICAL_ORDERS,
+  FIRST_INSTANCE_LIVE_CROSSOVER_LANES,
+  FIRST_INSTANCE_LIVE_CROSSOVER_MODE,
+  FIRST_INSTANCE_LIVE_CROSSOVER_ORIENTATION_OFFSETS,
+  FIRST_INSTANCE_LIVE_CROSSOVER_REPETITIONS,
+  FIRST_INSTANCE_LIVE_CROSSOVER_VISIBILITY_LEVELS,
   FROZEN_DEPTH_CROSSOVER_LANES,
   FROZEN_DEPTH_CROSSOVER_MODE,
   FROZEN_DEPTH_CROSSOVER_ORIENTATION_OFFSETS,
@@ -54,10 +77,38 @@ import {
   validateFirstInstanceTrialEvidence,
 } from '../scripts/first-instance-evidence-validation.mjs';
 import {
+  liveFirstInstanceCrossoverScheduleSha256,
+  liveFirstInstanceRenderParityIdentity,
+  liveFirstInstanceValidationSemanticSha256,
+  validateLiveFirstInstanceCrossoverRenderParity,
+  validateLiveFirstInstanceCrossoverValidation,
+  validateLiveFirstInstanceForcedFeatureOffGate,
+  validateLiveFirstInstanceTrialEvidence,
+} from '../scripts/live-first-instance-evidence-validation.mjs';
+import {
   NVIDIA_QUERY_FIELDS,
   TELEMETRY_CSV_FIELDS,
+  compareComputeProcessIdentitySets,
+  createNvidiaTelemetryCoverageAudit,
   summarizeTelemetryRows,
 } from '../scripts/nvidia-telemetry.mjs';
+import {
+  executionDependencyClosuresMatch,
+  validateCandidateViteRuntimeAudit,
+} from '../scripts/execution-dependency-closure.mjs';
+import {
+  createLiveFirstInstanceEnvironmentAudit,
+} from '../scripts/live-first-instance-environment-audit.mjs';
+import {
+  LIVE_PRIVATE_BUNDLE_LABEL,
+  LIVE_PUBLIC_BUNDLE_LABEL,
+  LIVE_PUBLIC_EVIDENCE_POLICY_ID,
+  LIVE_SANITIZER_IMPLEMENTATION_PATHS,
+  resolveLiveSanitizerImplementationAtCommit,
+  validateLivePublicBundleProvenanceShape,
+} from '../scripts/live-evidence-sanitizer-policy.mjs';
+
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const REQUIRED_RUN_ARTIFACTS = Object.freeze([
   'frames.csv',
@@ -66,6 +117,10 @@ const REQUIRED_RUN_ARTIFACTS = Object.freeze([
   'validation-artifacts.json',
   'workload-manifests.json',
   'gpu-telemetry-summary.json',
+]);
+const LIVE_FIRST_INSTANCE_REQUIRED_RUN_ARTIFACTS = Object.freeze([
+  ...REQUIRED_RUN_ARTIFACTS,
+  'forced-feature-off-evidence.json',
 ]);
 
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
@@ -180,6 +235,24 @@ const FIRST_INSTANCE_CROSSOVER_ORDERING =
   'twelve-repetition-two-visibility-eight-frame-crossover-with-pairwise-balanced-command-segment-visibility-order-and-starting-orientation';
 const FIRST_INSTANCE_CROSSOVER_RENDER_PARITY =
   'preflight, timing-start, and postflight paired portable/feature exact validation plus two stable offscreen captures per lane of rgba8 color, depth32float, and encoded object ID';
+const LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX = 'first-instance-live';
+const LIVE_FIRST_INSTANCE_CROSSOVER_LAYOUTS = Object.freeze(['baseline']);
+const LIVE_FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT = 65_536;
+const LIVE_FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT = 32;
+const LIVE_FIRST_INSTANCE_CROSSOVER_MAXIMUM_TIMESTAMP_QUANTUM_NS = 1_000;
+const LIVE_FIRST_INSTANCE_CROSSOVER_VALIDATION_KIND =
+  'first-instance-live-crossover-exact-paired-snapshots';
+const LIVE_FIRST_INSTANCE_CROSSOVER_PATTERNS_AS_STRINGS = Object.freeze(
+  FIRST_INSTANCE_LIVE_CROSSOVER_PATTERNS.map((pattern) => pattern.map(
+    (laneId) => (laneId === FIRST_INSTANCE_LIVE_CROSSOVER_LANES[0] ? 'P' : 'F'),
+  ).join('')),
+);
+const LIVE_FIRST_INSTANCE_CROSSOVER_ORDERING =
+  'twelve-repetition-two-visibility-cyclic-eight-frame-live-crossover-with-exact-transition-history-balance-and-pairwise-balanced-lane-physical-order-visibility-order-and-orientation';
+const LIVE_FIRST_INSTANCE_CROSSOVER_MEASURED_HISTORY =
+  firstInstanceLiveCrossoverHistoryCounts(FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES, 0);
+const LIVE_FIRST_INSTANCE_CROSSOVER_RENDER_PARITY =
+  'preflight, timing-start, and postflight serialized live-compute portable/feature exact validation plus two stable offscreen captures per lane of rgba8 color, depth32float, and encoded object ID';
 const FIRST_INSTANCE_CROSSOVER_BROWSER_ARGS = Object.freeze([
   '--enable-unsafe-webgpu',
   '--enable-webgpu-developer-features',
@@ -526,6 +599,224 @@ const FIRST_INSTANCE_CROSSOVER_NUMBER_COLUMNS = Object.freeze([
   'cpuFrameBodyMs',
   'gpuRenderMs',
   'gpuPassTotalMs',
+]);
+
+const LIVE_FIRST_INSTANCE_CROSSOVER_REQUIRED_COLUMNS = Object.freeze([
+  'schemaVersion',
+  'runId',
+  'trialId',
+  'planIndex',
+  'repetitionIndex',
+  'modeOrderPosition',
+  'visibilityOrderPosition',
+  'layoutOrderPosition',
+  'plannedModeOrder',
+  'plannedVisibilityOrder',
+  'plannedLayoutOrder',
+  'frameIndex',
+  'phaseFrameIndex',
+  'modeId',
+  'objectCount',
+  'bucketCount',
+  'targetVisibilityFraction',
+  'scenarioLayout',
+  'expectedVisibleCount',
+  'protocolWarmupFrames',
+  'protocolMeasuredFrames',
+  'validationKind',
+  'validationPass',
+  'usesCompute',
+  'configuredDrawCommands',
+  'configuredRenderObjects',
+  'configuredComputeDispatches',
+  'configuredComputeSubmissions',
+  'configuredSubmittedInstances',
+  'timestampAvailable',
+  'strictTimestampUidAttribution',
+  'expectedComputeTimestampUidCount',
+  'expectedRenderTimestampUidCount',
+  'plannedLanePhysicalOrder',
+  'lanePhysicalOrder',
+  'plannedScheduleSha256',
+  'superblockOrientationOffset',
+  'lifecycleCommitmentAtTimingStart',
+  'commandBufferCommitmentsAtTimingStart',
+  'portableCommandBufferIdAtTimingStart',
+  'featureCommandBufferIdAtTimingStart',
+  'selectorWriteSerialAtTimingStart',
+  'strategySelectionSerialAtTimingStart',
+  'strategyComputeCallSerialAtTimingStart',
+  'strategyPrepareSerialAtTimingStart',
+  'computeCallSerialAtTimingStart',
+  'renderCallSerialAtTimingStart',
+  'renderTargetTextureUuidAtTimingStart',
+  'renderTargetWidthAtTimingStart',
+  'renderTargetHeightAtTimingStart',
+  'renderTargetSamplesAtTimingStart',
+  'renderTargetDepthBufferAtTimingStart',
+  'cameraViewFnv64AtTimingStart',
+  'cameraProjectionFnv64AtTimingStart',
+  'totalPipelineCacheEntriesAtTimingStart',
+  'computePipelineCacheEntriesAtTimingStart',
+  'computeProgramEntriesAtTimingStart',
+  'rendererMemoryAtTimingStart',
+  'viewportStateAtTimingStart',
+  'timestampPoolStaticCommitmentAtTimingStart',
+  'webgpuUncapturedErrorCountAtTimingStart',
+  'crossoverBlockIndex',
+  'withinBlockPosition',
+  'crossoverPattern',
+  'crossoverPatternIndex',
+  'previousPreviousLaneId',
+  'previousLaneId',
+  'laneId',
+  'commandBufferId',
+  'submittedComputeLaneId',
+  'computeTimestampContextId',
+  'computeGroupIdentity',
+  'computeTimestampRegistrationSerial',
+  'computeTimestampBackendIdentity',
+  'computeTimestampBackendWrapperIdentity',
+  'submittedComputeNodeIds',
+  'commandSegmentIndex',
+  'commandRecordBase',
+  'commandByteBase',
+  'commandByteOffset',
+  'commandBufferRecordCount',
+  'commandBufferByteLength',
+  'selectorWriteSerial',
+  'strategySelectionSerial',
+  'strategyComputeCallSerial',
+  'computeCallSerial',
+  'computeFrameCallIndex',
+  'renderCallSerial',
+  'renderFrameCallIndex',
+  'gpuFrameId',
+  'gpuComputeTimestampUidCount',
+  'gpuComputeTimestampUids',
+  'gpuComputeTimestampRecords',
+  'gpuComputeTimestampDurationValid',
+  'gpuRenderTimestampUidCount',
+  'gpuRenderTimestampUids',
+  'gpuRenderTimestampRecords',
+  'gpuRenderTimestampDurationValid',
+  'cpuCommonUpdateMs',
+  'cpuComputeSubmitMs',
+  'cpuRenderSubmitMs',
+  'cpuSubmitTotalMs',
+  'cpuFrameBodyMs',
+  'gpuComputeMs',
+  'gpuRenderMs',
+  'gpuPassTotalMs',
+]);
+
+const LIVE_FIRST_INSTANCE_CROSSOVER_SAFE_INTEGER_COLUMNS = Object.freeze([
+  'schemaVersion',
+  'planIndex',
+  'repetitionIndex',
+  'modeOrderPosition',
+  'visibilityOrderPosition',
+  'layoutOrderPosition',
+  'frameIndex',
+  'phaseFrameIndex',
+  'objectCount',
+  'bucketCount',
+  'expectedVisibleCount',
+  'protocolWarmupFrames',
+  'protocolMeasuredFrames',
+  'configuredDrawCommands',
+  'configuredRenderObjects',
+  'configuredComputeDispatches',
+  'configuredComputeSubmissions',
+  'configuredSubmittedInstances',
+  'expectedComputeTimestampUidCount',
+  'expectedRenderTimestampUidCount',
+  'superblockOrientationOffset',
+  'portableCommandBufferIdAtTimingStart',
+  'featureCommandBufferIdAtTimingStart',
+  'selectorWriteSerialAtTimingStart',
+  'strategySelectionSerialAtTimingStart',
+  'strategyComputeCallSerialAtTimingStart',
+  'strategyPrepareSerialAtTimingStart',
+  'computeCallSerialAtTimingStart',
+  'renderCallSerialAtTimingStart',
+  'renderTargetWidthAtTimingStart',
+  'renderTargetHeightAtTimingStart',
+  'renderTargetSamplesAtTimingStart',
+  'totalPipelineCacheEntriesAtTimingStart',
+  'computePipelineCacheEntriesAtTimingStart',
+  'computeProgramEntriesAtTimingStart',
+  'webgpuUncapturedErrorCountAtTimingStart',
+  'crossoverBlockIndex',
+  'withinBlockPosition',
+  'crossoverPatternIndex',
+  'commandBufferId',
+  'computeTimestampContextId',
+  'computeGroupIdentity',
+  'computeTimestampRegistrationSerial',
+  'computeTimestampBackendIdentity',
+  'computeTimestampBackendWrapperIdentity',
+  'commandSegmentIndex',
+  'commandRecordBase',
+  'commandByteBase',
+  'commandByteOffset',
+  'commandBufferRecordCount',
+  'commandBufferByteLength',
+  'selectorWriteSerial',
+  'strategySelectionSerial',
+  'strategyComputeCallSerial',
+  'computeCallSerial',
+  'computeFrameCallIndex',
+  'renderCallSerial',
+  'renderFrameCallIndex',
+  'gpuFrameId',
+  'gpuComputeTimestampUidCount',
+  'gpuRenderTimestampUidCount',
+]);
+
+const LIVE_FIRST_INSTANCE_CROSSOVER_NUMBER_COLUMNS = Object.freeze([
+  'targetVisibilityFraction',
+  'cpuCommonUpdateMs',
+  'cpuComputeSubmitMs',
+  'cpuRenderSubmitMs',
+  'cpuSubmitTotalMs',
+  'cpuFrameBodyMs',
+  'gpuComputeMs',
+  'gpuRenderMs',
+  'gpuPassTotalMs',
+]);
+
+const LIVE_FIRST_INSTANCE_CROSSOVER_TIMING_FIELDS = FIRST_INSTANCE_CROSSOVER_TIMING_FIELDS;
+const LIVE_FIRST_INSTANCE_CROSSOVER_TIMING_SCHEMA = FIRST_INSTANCE_CROSSOVER_TIMING_SCHEMA;
+const LIVE_FIRST_INSTANCE_CROSSOVER_TIMESTAMP_SUMMARY_SCHEMA = Object.freeze([
+  'accepted',
+  'available',
+  'rowCount',
+  'warmupRowCount',
+  'missingWarmupRenderFrames',
+  'invalidWarmupRenderTimestampUidCountFrames',
+  'invalidWarmupRenderTimestampDurationFrames',
+  'missingWarmupComputeFrames',
+  'invalidWarmupComputeTimestampUidCountFrames',
+  'invalidWarmupComputeTimestampDurationFrames',
+  'missingRenderFrames',
+  'missingComputeFrames',
+  'expectedRenderTimestampUidCount',
+  'invalidRenderTimestampUidCountFrames',
+  'expectedComputeTimestampUidCount',
+  'invalidComputeTimestampUidCountFrames',
+  'invalidComputeTimestampDurationFrames',
+  'invalidRenderTimestampDurationFrames',
+  'renderTimestampPoolQualityValid',
+  'computeTimestampPoolQualityValid',
+  'warmupRenderTimestampPoolQualityValid',
+  'warmupComputeTimestampPoolQualityValid',
+  'warmupTimestampFrameCountValid',
+  'measurementTimestampFrameCountValid',
+  'timestampResolutions',
+  'timestampPhases',
+  'quantumNs',
+  'classification',
 ]);
 
 function csvError(message, line) {
@@ -1169,12 +1460,239 @@ function parseFrozenCrossoverRecords(parsed) {
   return normalized;
 }
 
+function isLiveFirstInstanceCrossoverCsv(parsed) {
+  const headers = new Set(parsed.headers);
+  return parsed.records.some(
+    (record) => record.modeId === FIRST_INSTANCE_LIVE_CROSSOVER_MODE,
+  )
+    || headers.has('plannedLanePhysicalOrder')
+    || headers.has('portableCommandBufferIdAtTimingStart')
+    || headers.has('gpuComputeTimestampUidCount');
+}
+
+function requireCanonicalJsonObjectColumn(record, field, recordNumber) {
+  const raw = record[field];
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    throw new Error(`Record ${recordNumber} has no ${field}.`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Record ${recordNumber} has invalid JSON in ${field}.`);
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)
+    || JSON.stringify(parsed) !== raw) {
+    throw new Error(
+      `Record ${recordNumber} has a non-canonical JSON object in ${field}.`,
+    );
+  }
+}
+
+function requireCanonicalJsonArrayColumn(record, field, recordNumber) {
+  const raw = record[field];
+  if (typeof raw !== 'string' || raw.trim() === '') {
+    throw new Error(`Record ${recordNumber} has no ${field}.`);
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error(`Record ${recordNumber} has invalid JSON in ${field}.`);
+  }
+  if (!Array.isArray(parsed) || JSON.stringify(parsed) !== raw) {
+    throw new Error(
+      `Record ${recordNumber} has a non-canonical JSON array in ${field}.`,
+    );
+  }
+}
+
+function validateParsedLiveTimestampRecord(record, {
+  type,
+  frameId,
+  callIndex,
+  contextId,
+  durationMs,
+  recordNumber,
+}) {
+  const label = `Record ${recordNumber} ${type} timestamp`;
+  const keys = ['uid', 'type', 'callIndex', 'contextId', 'frameId', 'durationMs'];
+  if (record === null || typeof record !== 'object' || Array.isArray(record)
+    || JSON.stringify(Object.keys(record).sort()) !== JSON.stringify([...keys].sort())) {
+    throw new Error(`${label} has fields outside the exact UID-record schema.`);
+  }
+  if (record.type !== type
+    || !Number.isSafeInteger(record.callIndex) || record.callIndex <= 0
+    || record.callIndex !== callIndex
+    || !Number.isSafeInteger(record.contextId) || record.contextId < 0
+    || (contextId !== undefined && record.contextId !== contextId)
+    || record.frameId !== frameId
+    || !Number.isFinite(record.durationMs) || record.durationMs <= 0
+    || !Object.is(record.durationMs, durationMs)) {
+    throw new Error(`${label} contextId/type/call/frame/duration binding failed.`);
+  }
+  const prefix = type === 'compute' ? 'c' : 'r';
+  const expectedUid = `${prefix}:${record.callIndex}:${record.contextId}:f${record.frameId}`;
+  if (record.uid !== expectedUid) {
+    throw new Error(`${label} UID is ${JSON.stringify(record.uid)}; expected ${expectedUid}.`);
+  }
+}
+
+function validateParsedLiveTimestampRow(row, recordNumber) {
+  if (row.strictTimestampUidAttribution !== true
+    || row.gpuComputeTimestampDurationValid !== true
+    || row.gpuRenderTimestampDurationValid !== true
+    || row.submittedComputeLaneId !== row.laneId
+    || !Number.isSafeInteger(row.computeTimestampContextId)
+    || row.computeTimestampContextId <= 0
+    || row.computeFrameCallIndex !== 1
+    || row.renderFrameCallIndex !== 1) {
+    throw new Error(`Record ${recordNumber} lacks exact live timestamp attribution.`);
+  }
+  for (const field of [
+    'computeGroupIdentity', 'computeTimestampRegistrationSerial',
+    'computeTimestampBackendIdentity', 'computeTimestampBackendWrapperIdentity',
+  ]) {
+    if (!Number.isSafeInteger(row[field]) || row[field] <= 0) {
+      throw new Error(`Record ${recordNumber} has invalid ${field}.`);
+    }
+  }
+  const nodeIds = JSON.parse(row.submittedComputeNodeIds);
+  if (nodeIds.length !== 2 || nodeIds.some(
+    (value) => !((typeof value === 'string' && value.length > 0)
+      || (Number.isSafeInteger(value) && value >= 0)),
+  )) throw new Error(`Record ${recordNumber} has invalid submitted compute-node IDs.`);
+  for (const type of ['compute', 'render']) {
+    const title = type === 'compute' ? 'Compute' : 'Render';
+    const uids = JSON.parse(row[`gpu${title}TimestampUids`]);
+    const records = JSON.parse(row[`gpu${title}TimestampRecords`]);
+    if (uids.length !== 1 || records.length !== 1 || uids[0] !== records[0]?.uid) {
+      throw new Error(`Record ${recordNumber} ${type} timestamp UID join is not exact.`);
+    }
+    validateParsedLiveTimestampRecord(records[0], {
+      type,
+      frameId: row.gpuFrameId,
+      callIndex: row[`${type}FrameCallIndex`],
+      contextId: type === 'compute' ? row.computeTimestampContextId : undefined,
+      durationMs: row[`gpu${title}Ms`],
+      recordNumber,
+    });
+  }
+}
+
+function parseLiveFirstInstanceCrossoverRecords(parsed) {
+  const headers = new Set(parsed.headers);
+  const missing = LIVE_FIRST_INSTANCE_CROSSOVER_REQUIRED_COLUMNS.filter(
+    (column) => !headers.has(column),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `Live first-instance crossover CSV is missing required columns: ${missing.join(', ')}.`,
+    );
+  }
+  if (parsed.records.some(
+    (record) => record.modeId !== FIRST_INSTANCE_LIVE_CROSSOVER_MODE,
+  )) {
+    throw new Error(
+      'Live first-instance crossover CSV cannot mix crossover and non-crossover modes.',
+    );
+  }
+
+  return parsed.records.map((record, index) => {
+    const recordNumber = index + 2;
+    const row = { ...record };
+    for (const field of LIVE_FIRST_INSTANCE_CROSSOVER_SAFE_INTEGER_COLUMNS) {
+      const value = Number(record[field]);
+      if (record[field]?.trim() === '' || !Number.isSafeInteger(value) || value < 0) {
+        throw new Error(
+          `Record ${recordNumber} has invalid safe integer ${field}: ${JSON.stringify(record[field])}.`,
+        );
+      }
+      row[field] = value;
+    }
+    for (const field of LIVE_FIRST_INSTANCE_CROSSOVER_NUMBER_COLUMNS) {
+      row[field] = finiteNumber(record[field], field, recordNumber, { minimum: 0 });
+    }
+    for (const field of [
+      'validationPass',
+      'usesCompute',
+      'timestampAvailable',
+      'strictTimestampUidAttribution',
+      'gpuComputeTimestampDurationValid',
+      'gpuRenderTimestampDurationValid',
+    ]) {
+      const value = optionalBoolean(record[field], field, recordNumber);
+      if (value === null) throw new Error(`Record ${recordNumber} has no ${field}.`);
+      row[field] = value;
+    }
+    const depthBuffer = optionalBoolean(
+      record.renderTargetDepthBufferAtTimingStart,
+      'renderTargetDepthBufferAtTimingStart',
+      recordNumber,
+    );
+    if (depthBuffer === null) {
+      throw new Error(
+        `Record ${recordNumber} has no renderTargetDepthBufferAtTimingStart.`,
+      );
+    }
+    row.renderTargetDepthBufferAtTimingStart = depthBuffer;
+    for (const field of [
+      'runId',
+      'trialId',
+      'plannedModeOrder',
+      'plannedVisibilityOrder',
+      'plannedLayoutOrder',
+      'scenarioLayout',
+      'validationKind',
+      'plannedLanePhysicalOrder',
+      'lanePhysicalOrder',
+      'plannedScheduleSha256',
+      'lifecycleCommitmentAtTimingStart',
+      'commandBufferCommitmentsAtTimingStart',
+      'rendererMemoryAtTimingStart',
+      'viewportStateAtTimingStart',
+      'renderTargetTextureUuidAtTimingStart',
+      'cameraViewFnv64AtTimingStart',
+      'cameraProjectionFnv64AtTimingStart',
+      'timestampPoolStaticCommitmentAtTimingStart',
+      'crossoverPattern',
+      'previousPreviousLaneId',
+      'previousLaneId',
+      'laneId',
+      'submittedComputeLaneId',
+      'submittedComputeNodeIds',
+      'gpuComputeTimestampUids',
+      'gpuComputeTimestampRecords',
+      'gpuRenderTimestampUids',
+      'gpuRenderTimestampRecords',
+    ]) {
+      if (typeof record[field] !== 'string' || record[field].trim() === '') {
+        throw new Error(`Record ${recordNumber} has no ${field}.`);
+      }
+    }
+    for (const field of [
+      'rendererMemoryAtTimingStart',
+      'viewportStateAtTimingStart',
+    ]) requireCanonicalJsonObjectColumn(record, field, recordNumber);
+    for (const field of [
+      'submittedComputeNodeIds',
+      'gpuComputeTimestampUids',
+      'gpuComputeTimestampRecords',
+      'gpuRenderTimestampUids',
+      'gpuRenderTimestampRecords',
+    ]) requireCanonicalJsonArrayColumn(record, field, recordNumber);
+    validateParsedLiveTimestampRow(row, recordNumber);
+    return row;
+  });
+}
+
 function isFirstInstanceCrossoverCsv(parsed) {
   const headers = new Set(parsed.headers);
-  return parsed.records.some((record) => record.modeId === FIRST_INSTANCE_CROSSOVER_MODE)
-    || headers.has('plannedLaneCommandSegmentOrder')
-    || headers.has('commandSegmentIndex')
-    || headers.has('strategySelectionSerial');
+  return !isLiveFirstInstanceCrossoverCsv(parsed)
+    && (parsed.records.some((record) => record.modeId === FIRST_INSTANCE_CROSSOVER_MODE)
+      || headers.has('plannedLaneCommandSegmentOrder')
+      || headers.has('commandSegmentIndex')
+      || headers.has('strategySelectionSerial'));
 }
 
 function parseFirstInstanceCrossoverRecords(parsed) {
@@ -1817,8 +2335,12 @@ function requireSafeArtifactName(name, label) {
   return name;
 }
 
-async function readOptionalFile(filename) {
+async function readOptionalRegularFile(filename, label) {
   try {
+    const fileStat = await lstat(filename);
+    if (!fileStat.isFile() || fileStat.isSymbolicLink()) {
+      failVerification(`${label} must be a regular non-symbolic-link file.`);
+    }
     return await readFile(filename);
   } catch (error) {
     if (error?.code === 'ENOENT') return null;
@@ -1826,12 +2348,67 @@ async function readOptionalFile(filename) {
   }
 }
 
-async function loadVerifiedArtifactContents(runDirectory) {
+async function verifyCommittedSanitizerImplementation(
+  repositoryRoot,
+  candidateSource,
+  files,
+) {
+  const expectedPaths = files.map((entry) => entry.repositoryPath);
+  if (JSON.stringify(expectedPaths) !== JSON.stringify(LIVE_SANITIZER_IMPLEMENTATION_PATHS)) {
+    failVerification('public bundle sanitizer implementation closure has the wrong paths.');
+  }
+  let committed;
+  try {
+    committed = await resolveLiveSanitizerImplementationAtCommit(
+      repositoryRoot,
+      candidateSource,
+    );
+  } catch (error) {
+    failVerification(
+      `public bundle candidate Git-object verification failed: ${
+        error instanceof Error ? error.message : String(error)
+      }.`,
+    );
+  }
+  if (JSON.stringify(committed.files) !== JSON.stringify(files)) {
+    failVerification(
+      'public bundle sanitizer implementation hashes do not match the recorded candidate commit.',
+    );
+  }
+}
+
+async function loadVerifiedArtifactContents(runDirectory, repositoryRoot) {
   const manifestPath = path.join(runDirectory, 'artifact-manifest.json');
-  const manifestBytes = await readOptionalFile(manifestPath);
+  const manifestBytes = await readOptionalRegularFile(
+    manifestPath,
+    'artifact-manifest.json',
+  );
   if (manifestBytes === null) failVerification('artifact-manifest.json is missing.');
   const manifest = requireRecord(
     parseJsonArtifact(manifestBytes, 'artifact-manifest.json'),
+    'artifact-manifest.json',
+  );
+  const publicDerived = Object.hasOwn(manifest, 'bundleProvenance');
+  requireExactRecordKeys(
+    manifest,
+    publicDerived
+      ? [
+        'schemaVersion',
+        'runId',
+        'hashAlgorithm',
+        'requiredFiles',
+        'optionalFiles',
+        'files',
+        'bundleProvenance',
+      ]
+      : [
+        'schemaVersion',
+        'runId',
+        'hashAlgorithm',
+        'requiredFiles',
+        'optionalFiles',
+        'files',
+      ],
     'artifact-manifest.json',
   );
   if (manifest.schemaVersion !== 2) {
@@ -1846,11 +2423,16 @@ async function loadVerifiedArtifactContents(runDirectory) {
     manifest.requiredFiles,
     'artifact-manifest.json requiredFiles',
   );
-  const expectedNames = [...REQUIRED_RUN_ARTIFACTS].sort();
-  if (requiredNames.length !== expectedNames.length
-    || requiredNames.some((name, index) => name !== expectedNames[index])) {
+  const allowedRequiredSets = [
+    REQUIRED_RUN_ARTIFACTS,
+    LIVE_FIRST_INSTANCE_REQUIRED_RUN_ARTIFACTS,
+  ].map((names) => [...names].sort());
+  if (!allowedRequiredSets.some((expectedNames) => (
+    requiredNames.length === expectedNames.length
+      && requiredNames.every((name, index) => name === expectedNames[index])
+  ))) {
     failVerification(
-      `artifact-manifest.json requiredFiles must be exactly ${REQUIRED_RUN_ARTIFACTS.join(', ')}.`,
+      'artifact-manifest.json requiredFiles do not match a supported benchmark matrix.',
     );
   }
 
@@ -1860,7 +2442,11 @@ async function loadVerifiedArtifactContents(runDirectory) {
   );
   const optionalByName = new Map();
   for (const [index, optional] of optionalRecords.entries()) {
-    requireRecord(optional, `artifact-manifest.json optionalFiles[${index}]`);
+    requireExactRecordKeys(
+      optional,
+      ['name', 'present', 'evidenceAvailable', 'absenceReason'],
+      `artifact-manifest.json optionalFiles[${index}]`,
+    );
     const name = requireSafeArtifactName(
       optional.name,
       `artifact-manifest.json optionalFiles[${index}].name`,
@@ -1893,7 +2479,11 @@ async function loadVerifiedArtifactContents(runDirectory) {
   const entries = requireArray(manifest.files, 'artifact-manifest.json files');
   const entriesByName = new Map();
   for (const [index, entry] of entries.entries()) {
-    requireRecord(entry, `artifact-manifest.json files[${index}]`);
+    requireExactRecordKeys(
+      entry,
+      ['name', 'role', 'required', 'present', 'bytes', 'sha256', 'absenceReason'],
+      `artifact-manifest.json files[${index}]`,
+    );
     const name = requireSafeArtifactName(entry.name, `artifact-manifest.json files[${index}].name`);
     if (entriesByName.has(name)) {
       failVerification(`artifact-manifest.json has duplicate file entry ${JSON.stringify(name)}.`);
@@ -1936,7 +2526,10 @@ async function loadVerifiedArtifactContents(runDirectory) {
 
   const contentsByName = new Map();
   for (const [name, entry] of entriesByName) {
-    const contents = await readOptionalFile(path.join(runDirectory, name));
+    const contents = await readOptionalRegularFile(
+      path.join(runDirectory, name),
+      `artifact ${name}`,
+    );
     if (!entry.present) {
       if (contents !== null) {
         failVerification(`artifact ${name} exists but is marked absent in artifact-manifest.json.`);
@@ -1958,7 +2551,85 @@ async function loadVerifiedArtifactContents(runDirectory) {
     contentsByName.set(name, contents);
   }
 
-  return { manifest, contentsByName };
+  const expectedDirectoryNames = [
+    'artifact-manifest.json',
+    ...contentsByName.keys(),
+  ].sort();
+  const actualDirectoryNames = (await readdir(runDirectory)).sort();
+  if (JSON.stringify(actualDirectoryNames) !== JSON.stringify(expectedDirectoryNames)) {
+    failVerification(
+      'run directory contains undeclared or non-artifact entries outside artifact-manifest.json.',
+    );
+  }
+
+  let bundleIntegrity;
+  if (publicDerived) {
+    const provenanceReasons = validateLivePublicBundleProvenanceShape(
+      manifest.bundleProvenance,
+    );
+    if (provenanceReasons.length > 0) {
+      failVerification(`public bundle provenance is invalid: ${provenanceReasons.join('; ')}.`);
+    }
+    await verifyCommittedSanitizerImplementation(
+      repositoryRoot,
+      manifest.bundleProvenance.candidateSource,
+      manifest.bundleProvenance.sanitizer.files,
+    );
+    bundleIntegrity = {
+      schemaVersion: 1,
+      status: 'consistent',
+      bundleLabel: LIVE_PUBLIC_BUNDLE_LABEL,
+      sourceBundleLabel: LIVE_PRIVATE_BUNDLE_LABEL,
+      policyId: LIVE_PUBLIC_EVIDENCE_POLICY_ID,
+      artifactManifestSha256: sha256Bytes(manifestBytes),
+      privateArtifactManifestSha256:
+        manifest.bundleProvenance.privateArtifactManifest.sha256,
+      sanitizerImplementationKind:
+        manifest.bundleProvenance.sanitizer.implementationKind,
+      sanitizerImplementation: structuredClone(
+        manifest.bundleProvenance.sanitizer.files,
+      ),
+      candidateCommitObjectVerified: true,
+      candidateTreeObjectVerified: true,
+      sanitizerImplementationCandidateCommitMatch: true,
+      candidateSource: structuredClone(manifest.bundleProvenance.candidateSource),
+      candidateMetadataBindingVerified: null,
+      redactionPolicyValidated: true,
+      declaredArtifactsIntegrityVerified: true,
+      undeclaredDirectoryEntriesRejected: true,
+      privateSourceRelationshipVerified: false,
+      authenticityVerified: false,
+    };
+  } else {
+    bundleIntegrity = {
+      schemaVersion: 1,
+      status: 'consistent',
+      bundleLabel: LIVE_PRIVATE_BUNDLE_LABEL,
+      sourceBundleLabel: null,
+      policyId: null,
+      artifactManifestSha256: sha256Bytes(manifestBytes),
+      privateArtifactManifestSha256: null,
+      sanitizerImplementationKind: null,
+      sanitizerImplementation: null,
+      candidateCommitObjectVerified: null,
+      candidateTreeObjectVerified: null,
+      sanitizerImplementationCandidateCommitMatch: null,
+      candidateSource: null,
+      candidateMetadataBindingVerified: null,
+      redactionPolicyValidated: null,
+      declaredArtifactsIntegrityVerified: true,
+      undeclaredDirectoryEntriesRejected: true,
+      privateSourceRelationshipVerified: null,
+      authenticityVerified: false,
+    };
+  }
+
+  return {
+    manifest,
+    contentsByName,
+    requiredNames,
+    bundleIntegrity,
+  };
 }
 
 function validateCandidateProvenance(metadata) {
@@ -2008,6 +2679,143 @@ function validateCandidateProvenance(metadata) {
       failVerification(`candidate source provenance changed at field ${field}.`);
     }
   }
+}
+
+export function validateLiveCandidateReservationAndDependencies(metadata) {
+  if (metadata.protocol?.matrixKind !== LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX
+    || metadata.evidenceStatus !== 'candidate') return;
+  const reservation = requireExactRecordKeys(
+    metadata.candidateSeriesReservation,
+    [
+      'schemaVersion',
+      'kind',
+      'seriesId',
+      'reservationEventSha256',
+      'attemptOrdinal',
+      'matrixOrdinal',
+      'sourceCommit',
+      'sourceTree',
+      'executionDependencyClosureSha256',
+    ],
+    'metadata candidateSeriesReservation',
+  );
+  if (reservation.schemaVersion !== 1
+    || reservation.kind !== 'first-instance-live-candidate-series-reservation') {
+    failVerification('live candidate reservation has an unsupported identity.');
+  }
+  requireNonemptyString(reservation.seriesId, 'candidate reservation seriesId');
+  requireSha256(
+    reservation.reservationEventSha256,
+    'candidate reservation reservationEventSha256',
+  );
+  requireInteger(reservation.attemptOrdinal, 'candidate reservation attemptOrdinal', {
+    minimum: 1,
+  });
+  requireInteger(reservation.matrixOrdinal, 'candidate reservation matrixOrdinal', {
+    minimum: 1,
+  });
+  if (reservation.matrixOrdinal > 2) {
+    failVerification('candidate reservation matrixOrdinal must be 1 or 2.');
+  }
+  if (!/^[0-9a-f]{40,64}$/.test(reservation.sourceCommit ?? '')
+    || !/^[0-9a-f]{40,64}$/.test(reservation.sourceTree ?? '')) {
+    failVerification('candidate reservation lacks Git source object IDs.');
+  }
+  requireSha256(
+    reservation.executionDependencyClosureSha256,
+    'candidate reservation executionDependencyClosureSha256',
+  );
+  const envelope = requireExactRecordKeys(
+    metadata.executionDependencyClosure,
+    ['start', 'end', 'stable'],
+    'metadata executionDependencyClosure',
+  );
+  if (envelope.stable !== true) {
+    failVerification('candidate execution-dependency closure is not stable.');
+  }
+  const validateClosure = (value, label) => {
+    const closure = requireExactRecordKeys(
+      value,
+      [
+        'schemaVersion',
+        'kind',
+        'root',
+        'format',
+        'hashAlgorithm',
+        'exclusions',
+        'fileCount',
+        'totalBytes',
+        'sha256',
+      ],
+      label,
+    );
+    if (closure.schemaVersion !== 1
+      || closure.kind !== 'installed-execution-dependency-closure'
+      || closure.root !== 'node_modules'
+      || closure.format !== 'node-modules-sorted-path-size-content-sha256-v1'
+      || closure.hashAlgorithm !== 'sha256'
+      || JSON.stringify(closure.exclusions) !== JSON.stringify(['.bin/**', '.vite*/**'])) {
+      failVerification(`${label} has an unsupported closure definition.`);
+    }
+    requireInteger(closure.fileCount, `${label}.fileCount`, { minimum: 1 });
+    requireInteger(closure.totalBytes, `${label}.totalBytes`, { minimum: 1 });
+    requireSha256(closure.sha256, `${label}.sha256`);
+    return closure;
+  };
+  const start = validateClosure(envelope.start, 'executionDependencyClosure.start');
+  const end = validateClosure(envelope.end, 'executionDependencyClosure.end');
+  if (!executionDependencyClosuresMatch(start, end)) {
+    failVerification('candidate execution-dependency start/end closures differ.');
+  }
+  const provenanceStart = metadata.sourceProvenance.start;
+  if (reservation.sourceCommit !== provenanceStart.commit
+    || reservation.sourceTree !== provenanceStart.tree
+    || reservation.executionDependencyClosureSha256 !== start.sha256) {
+    failVerification('candidate reservation differs from executed source/dependency bytes.');
+  }
+}
+
+export async function validateLiveCandidateViteRuntime(metadata, repositoryRoot) {
+  if (metadata.protocol?.matrixKind !== LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX
+    || metadata.evidenceStatus !== 'candidate') return;
+  const validation = await validateCandidateViteRuntimeAudit(
+    metadata.candidateViteRuntimeAudit,
+    repositoryRoot,
+  );
+  if (!validation.pass) {
+    failVerification(
+      `candidate Vite runtime audit is invalid: ${validation.reasons.join('; ')}.`,
+    );
+  }
+}
+
+function validatePublicBundleCandidateBinding(bundleIntegrity, metadata) {
+  if (bundleIntegrity.bundleLabel !== LIVE_PUBLIC_BUNDLE_LABEL) return;
+  if (metadata.evidenceStatus !== 'candidate'
+    || metadata.protocol?.matrixKind !== LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    failVerification(
+      'public-derived live evidence must be a first-instance-live candidate run.',
+    );
+  }
+  const candidate = bundleIntegrity.candidateSource;
+  const start = metadata.sourceProvenance?.start;
+  const end = metadata.sourceProvenance?.end;
+  if (candidate.commit !== start?.commit
+    || candidate.commit !== end?.commit
+    || candidate.tree !== start?.tree
+    || candidate.tree !== end?.tree
+    || candidate.trackedFilesSha256 !== start?.trackedFilesSha256
+    || candidate.trackedFilesSha256 !== end?.trackedFilesSha256
+    || candidate.packageLockSha256 !== start?.packageLockSha256
+    || candidate.packageLockSha256 !== end?.packageLockSha256
+    || start?.dirty !== false
+    || end?.dirty !== false
+    || metadata.sourceProvenance?.stable !== true) {
+    failVerification(
+      'public bundle candidateSource does not match clean, stable run source provenance.',
+    );
+  }
+  bundleIntegrity.candidateMetadataBindingVerified = true;
 }
 
 function requireExactRecordKeys(value, expectedKeys, label) {
@@ -2143,7 +2951,20 @@ function validateComputeProcessSnapshot(snapshot, expectedLabel, label) {
   if (snapshot === null) return;
   requireExactRecordKeys(
     snapshot,
-    ['label', 'status', 'capturedAtIso', 'runElapsedMs', 'reason', 'processes'],
+    [
+      'label',
+      'status',
+      'capturedAtIso',
+      'runElapsedMs',
+      'reason',
+      'rawNonemptyLineCount',
+      'parsedRecordCount',
+      'malformedLineCount',
+      'stdoutByteCount',
+      'stdoutTruncated',
+      'stderrByteCount',
+      'processes',
+    ],
     label,
   );
   if (snapshot.label !== expectedLabel
@@ -2152,10 +2973,35 @@ function validateComputeProcessSnapshot(snapshot, expectedLabel, label) {
   }
   requireIsoTimestamp(snapshot.capturedAtIso, `${label}.capturedAtIso`);
   requireFiniteNumber(snapshot.runElapsedMs, `${label}.runElapsedMs`, { minimum: 0 });
+  for (const field of [
+    'rawNonemptyLineCount',
+    'parsedRecordCount',
+    'malformedLineCount',
+    'stdoutByteCount',
+    'stderrByteCount',
+  ]) {
+    requireInteger(snapshot[field], `${label}.${field}`);
+  }
+  if (typeof snapshot.stdoutTruncated !== 'boolean') {
+    failVerification(`${label}.stdoutTruncated must be boolean.`);
+  }
+  if (snapshot.parsedRecordCount + snapshot.malformedLineCount
+      !== snapshot.rawNonemptyLineCount
+    || snapshot.stdoutTruncated !== (snapshot.stdoutByteCount > 1_000_000)
+    || (snapshot.parsedRecordCount > 0 && snapshot.stdoutByteCount === 0)) {
+    failVerification(`${label} has contradictory parser byte/record diagnostics.`);
+  }
   const processes = requireArray(snapshot.processes, `${label}.processes`);
   if (snapshot.status === 'available') {
     if (snapshot.reason !== null) {
       failVerification(`${label} available snapshot has a reason.`);
+    }
+    if (snapshot.stdoutTruncated !== false
+      || snapshot.stderrByteCount !== 0
+      || snapshot.malformedLineCount !== 0
+      || snapshot.parsedRecordCount !== snapshot.rawNonemptyLineCount
+      || snapshot.parsedRecordCount !== processes.length) {
+      failVerification(`${label} available snapshot has invalid parser diagnostics.`);
     }
   } else {
     requireNonemptyString(snapshot.reason, `${label}.reason`);
@@ -2170,14 +3016,116 @@ function validateComputeProcessSnapshot(snapshot, expectedLabel, label) {
       ['gpuUuid', 'pid', 'processName', 'usedMemoryMiB'],
       processLabel,
     );
-    requireNullableNonemptyString(processRecord.gpuUuid, `${processLabel}.gpuUuid`);
-    if (processRecord.pid !== null) requireInteger(processRecord.pid, `${processLabel}.pid`);
-    requireNullableNonemptyString(processRecord.processName, `${processLabel}.processName`);
+    requireNonemptyString(processRecord.gpuUuid, `${processLabel}.gpuUuid`);
+    requireInteger(processRecord.pid, `${processLabel}.pid`, { minimum: 1 });
+    requireNonemptyString(processRecord.processName, `${processLabel}.processName`);
     if (processRecord.usedMemoryMiB !== null) {
       requireFiniteNumber(processRecord.usedMemoryMiB, `${processLabel}.usedMemoryMiB`, {
         minimum: 0,
       });
     }
+  }
+}
+
+function validateTelemetryCoverageAudit(audit, summary, sampling) {
+  requireExactRecordKeys(audit, [
+    'schemaVersion',
+    'kind',
+    'requestedIntervalMs',
+    'livenessToleranceMultiplier',
+    'livenessToleranceMs',
+    'sampleGroupingGapMs',
+    'collectorStartedRunElapsedMs',
+    'collectorStopRequestedRunElapsedMs',
+    'activeDurationMs',
+    'sampleCount',
+    'sampleCycleCount',
+    'gpuIdentities',
+    'constantGpuIdentitySet',
+    'initialMaximumGapMs',
+    'internalMaximumGapMs',
+    'finalMaximumGapMs',
+    'pass',
+    'failureCodes',
+    'reasons',
+  ], 'gpu-telemetry-summary.json coverageAudit');
+  if (audit.schemaVersion !== 1
+    || audit.kind !== 'nvidia-telemetry-collector-coverage'
+    || audit.requestedIntervalMs !== 250
+    || audit.livenessToleranceMultiplier !== 8
+    || audit.livenessToleranceMs !== 2_000
+    || audit.sampleGroupingGapMs !== 125) {
+    failVerification('gpu telemetry coverage audit changes the frozen liveness contract.');
+  }
+  for (const field of [
+    'collectorStartedRunElapsedMs',
+    'collectorStopRequestedRunElapsedMs',
+    'activeDurationMs',
+    'initialMaximumGapMs',
+    'internalMaximumGapMs',
+    'finalMaximumGapMs',
+  ]) {
+    if (audit[field] !== null) {
+      requireFiniteNumber(audit[field], `gpu telemetry coverageAudit.${field}`, {
+        minimum: 0,
+      });
+    }
+  }
+  for (const field of ['sampleCount', 'sampleCycleCount']) {
+    requireInteger(audit[field], `gpu telemetry coverageAudit.${field}`);
+  }
+  if (audit.sampleCycleCount > audit.sampleCount) {
+    failVerification('gpu telemetry coverage audit has more cycles than samples.');
+  }
+  if (audit.sampleCount !== summary.sampleCount
+    || audit.collectorStartedRunElapsedMs !== sampling.collectorStartedRunElapsedMs
+    || audit.collectorStopRequestedRunElapsedMs !== sampling.collectorStopRequestedRunElapsedMs) {
+    failVerification('gpu telemetry coverage audit is not bound to sampling bounds and rows.');
+  }
+  const identities = requireArray(
+    audit.gpuIdentities,
+    'gpu telemetry coverageAudit.gpuIdentities',
+  );
+  const identityKeys = [];
+  for (const [index, identity] of identities.entries()) {
+    const label = `gpu telemetry coverageAudit.gpuIdentities[${index}]`;
+    requireExactRecordKeys(identity, ['gpuIndex', 'gpuName', 'gpuUuid'], label);
+    requireInteger(identity.gpuIndex, `${label}.gpuIndex`);
+    requireNonemptyString(identity.gpuName, `${label}.gpuName`);
+    requireNonemptyString(identity.gpuUuid, `${label}.gpuUuid`);
+    identityKeys.push(JSON.stringify([identity.gpuIndex, identity.gpuName, identity.gpuUuid]));
+  }
+  if (new Set(identityKeys).size !== identityKeys.length
+    || JSON.stringify([...identityKeys].sort()) !== JSON.stringify(identityKeys)) {
+    failVerification('gpu telemetry coverage identities are duplicated or unsorted.');
+  }
+  if (typeof audit.constantGpuIdentitySet !== 'boolean' || typeof audit.pass !== 'boolean') {
+    failVerification('gpu telemetry coverage disposition fields must be boolean.');
+  }
+  const boundsValid = audit.collectorStartedRunElapsedMs !== null
+    && audit.collectorStopRequestedRunElapsedMs !== null
+    && audit.collectorStopRequestedRunElapsedMs >= audit.collectorStartedRunElapsedMs;
+  const expectedActiveDuration = boundsValid
+    ? audit.collectorStopRequestedRunElapsedMs - audit.collectorStartedRunElapsedMs
+    : null;
+  if (audit.activeDurationMs !== expectedActiveDuration) {
+    failVerification('gpu telemetry coverage active duration contradicts collector bounds.');
+  }
+  if (audit.constantGpuIdentitySet
+    && (audit.sampleCycleCount === 0 || identityKeys.length === 0)) {
+    failVerification('gpu telemetry coverage claims a constant empty identity set.');
+  }
+  for (const field of ['failureCodes', 'reasons']) {
+    const values = requireArray(audit[field], `gpu telemetry coverageAudit.${field}`);
+    if (values.some((value) => typeof value !== 'string' || value === '')
+      || new Set(values).size !== values.length) {
+      failVerification(`gpu telemetry coverageAudit.${field} is invalid.`);
+    }
+  }
+  if (audit.pass !== (audit.failureCodes.length === 0)
+    || (audit.pass && audit.reasons.length !== 0)
+    || (!audit.pass && audit.reasons.length === 0)) {
+    failVerification('gpu telemetry coverage audit disposition is internally inconsistent.');
   }
 }
 
@@ -2257,6 +3205,7 @@ function validateNvidiaTelemetryReport(report, metadata, manifest, contentsByNam
     'command',
     'sampling',
     'summary',
+    'coverageAudit',
     'computeProcesses',
     'acceptanceBoundary',
   ], 'gpu-telemetry-summary.json');
@@ -2284,6 +3233,8 @@ function validateNvidiaTelemetryReport(report, metadata, manifest, contentsByNam
     'requestedIntervalMs',
     'queryFields',
     'outputFile',
+    'collectorStartedRunElapsedMs',
+    'collectorStopRequestedRunElapsedMs',
     'malformedLineCount',
     'stderrByteCount',
     'exit',
@@ -2296,6 +3247,24 @@ function validateNvidiaTelemetryReport(report, metadata, manifest, contentsByNam
   }
   requireInteger(sampling.malformedLineCount, 'gpu telemetry malformedLineCount');
   requireInteger(sampling.stderrByteCount, 'gpu telemetry stderrByteCount');
+  for (const field of [
+    'collectorStartedRunElapsedMs',
+    'collectorStopRequestedRunElapsedMs',
+  ]) {
+    if (sampling[field] !== null) {
+      requireFiniteNumber(sampling[field], `gpu telemetry sampling.${field}`, {
+        minimum: 0,
+      });
+    }
+  }
+  if (sampling.collectorStartedRunElapsedMs !== null
+    && sampling.collectorStartedRunElapsedMs > metadata.elapsedMs) {
+    failVerification('gpu telemetry collector start exceeds the recorded run duration.');
+  }
+  if (sampling.collectorStopRequestedRunElapsedMs !== null
+    && sampling.collectorStopRequestedRunElapsedMs > metadata.elapsedMs) {
+    failVerification('gpu telemetry collector stop request exceeds the recorded run duration.');
+  }
   if (sampling.exit !== null) {
     requireExactRecordKeys(sampling.exit, ['code', 'signal'], 'gpu telemetry sampling.exit');
     if (sampling.exit.code !== null) {
@@ -2307,6 +3276,7 @@ function validateNvidiaTelemetryReport(report, metadata, manifest, contentsByNam
     }
   }
   validateTelemetrySummarySchema(report.summary, report.status);
+  validateTelemetryCoverageAudit(report.coverageAudit, report.summary, sampling);
   const computeProcesses = requireExactRecordKeys(
     report.computeProcesses,
     ['pre', 'post'],
@@ -2376,6 +3346,118 @@ function validateNvidiaTelemetryReport(report, metadata, manifest, contentsByNam
     if (JSON.stringify(recomputed) !== JSON.stringify(report.summary)) {
       failVerification('gpu-telemetry.csv does not reconstruct gpu-telemetry-summary.json.');
     }
+    const recomputedCoverage = createNvidiaTelemetryCoverageAudit(rows, {
+      collectorStartedRunElapsedMs: sampling.collectorStartedRunElapsedMs,
+      collectorStopRequestedRunElapsedMs: sampling.collectorStopRequestedRunElapsedMs,
+      requestedIntervalMs: sampling.requestedIntervalMs,
+    });
+    if (JSON.stringify(recomputedCoverage) !== JSON.stringify(report.coverageAudit)) {
+      failVerification('gpu-telemetry.csv does not reconstruct telemetry coverage audit.');
+    }
+  }
+}
+
+export function validateLiveFirstInstanceEnvironmentAudit(report, metadata) {
+  const comparison = compareComputeProcessIdentitySets(
+    report.computeProcesses?.pre,
+    report.computeProcesses?.post,
+  );
+  const audit = requireExactRecordKeys(
+    metadata.liveFirstInstanceEnvironmentAudit,
+    [
+      'schemaVersion',
+      'kind',
+      'telemetryStatus',
+      'telemetryMalformedLineCount',
+      'telemetryStderrByteCount',
+      'telemetrySampleCount',
+      'telemetryCoveragePass',
+      'adapterTelemetryAssociation',
+      'computeProcessIdentityComparison',
+      'candidateEnvironmentGate',
+      'overallEvidenceDecision',
+    ],
+    'metadata.json liveFirstInstanceEnvironmentAudit',
+  );
+  const expectedAudit = createLiveFirstInstanceEnvironmentAudit({
+    evidenceStatus: metadata.evidenceStatus,
+    telemetryReport: report,
+    adapterInfo: metadata.environment?.benchmarkPage?.adapterInfo,
+    computeProcessIdentityComparison: comparison,
+    preregisteredNumericalDecision:
+      metadata.liveFirstInstanceAnalysisAudit?.preregisteredNumericalDecision ?? null,
+  });
+  if (JSON.stringify(audit) !== JSON.stringify(expectedAudit)) {
+    failVerification(
+      'metadata.json liveFirstInstanceEnvironmentAudit does not reconstruct from telemetry evidence.',
+    );
+  }
+  if (metadata.evidenceStatus === 'candidate'
+    && expectedAudit.candidateEnvironmentGate.retryable === true) {
+    failVerification(
+      'first-instance-live completed candidate contains a retryable telemetry collector failure.',
+    );
+  }
+  return {
+    adapterTelemetryAssociation: audit.adapterTelemetryAssociation,
+    candidateEnvironmentGate: audit.candidateEnvironmentGate,
+    overallEvidenceDecision: audit.overallEvidenceDecision,
+  };
+}
+
+function validateLiveFirstInstanceEnvironmentEvidence(
+  report,
+  metadata,
+  contentsByName,
+) {
+  validateLiveFirstInstanceEnvironmentAudit(report, metadata);
+
+  const gateLink = requireExactRecordKeys(
+    metadata.liveForcedFeatureOffGate,
+    ['artifact', 'accepted', 'sha256'],
+    'metadata.json liveForcedFeatureOffGate',
+  );
+  if (gateLink.artifact !== 'forced-feature-off-evidence.json'
+    || gateLink.accepted !== true) {
+    failVerification(
+      'metadata.json does not accept the required forced-feature-off deployment gate.',
+    );
+  }
+  const gateArtifact = requireRecord(
+    parseJsonArtifact(
+      contentsByName.get('forced-feature-off-evidence.json'),
+      'forced-feature-off-evidence.json',
+    ),
+    'forced-feature-off-evidence.json',
+  );
+  requireSha256(gateLink.sha256, 'metadata.json liveForcedFeatureOffGate.sha256');
+  if (sha256Json(gateArtifact) !== gateLink.sha256) {
+    failVerification(
+      'forced-feature-off-evidence.json does not match its metadata SHA-256.',
+    );
+  }
+  if (gateArtifact.accepted !== true
+    || requireArray(
+      gateArtifact.rejectionReasons,
+      'forced-feature-off-evidence.json rejectionReasons',
+    ).length !== 0
+    || requireArray(
+      gateArtifact.pageErrors,
+      'forced-feature-off-evidence.json pageErrors',
+    ).length !== 0
+    || requireArray(
+      gateArtifact.webgpuUncapturedErrors,
+      'forced-feature-off-evidence.json webgpuUncapturedErrors',
+    ).length !== 0) {
+    failVerification('forced-feature-off-evidence.json is not cleanly accepted.');
+  }
+  const gateReasons = validateLiveFirstInstanceForcedFeatureOffGate(
+    gateArtifact.evidence,
+  );
+  if (gateReasons.length !== 0) {
+    failVerification(
+      `forced-feature-off-evidence.json payload failed: ${gateReasons.join('; ')}.`,
+    );
   }
 }
 
@@ -2383,6 +3465,14 @@ function orderedValuesMatch(actual, expected) {
   return Array.isArray(actual)
     && actual.length === expected.length
     && actual.every((value, index) => value === expected[index]);
+}
+
+function exactScalarRecordMatch(actual, expected) {
+  if (actual === null || typeof actual !== 'object' || Array.isArray(actual)) return false;
+  const actualKeys = Object.keys(actual).sort();
+  const expectedKeys = Object.keys(expected).sort();
+  return orderedValuesMatch(actualKeys, expectedKeys)
+    && expectedKeys.every((key) => actual[key] === expected[key]);
 }
 
 export function validateProtocolMatrix(protocol) {
@@ -2431,6 +3521,145 @@ export function validateProtocolMatrix(protocol) {
       : 'primary-one-versus-b-mesh-render-object-representation-ablation';
     if (protocol.representationScaleRole !== expectedScaleRole) {
       failVerification('fixed-slice-representation scale role does not match its bucket count.');
+    }
+    return;
+  }
+
+  if (protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    if (!orderedValuesMatch(protocol.modes, [FIRST_INSTANCE_LIVE_CROSSOVER_MODE])
+      || !orderedValuesMatch(protocol.layouts, LIVE_FIRST_INSTANCE_CROSSOVER_LAYOUTS)
+      || !orderedValuesMatch(
+        protocol.visibilityLevels,
+        FIRST_INSTANCE_LIVE_CROSSOVER_VISIBILITY_LEVELS,
+      )) {
+      failVerification(
+        'first-instance-live protocol has the wrong mode, layout, or visibility levels.',
+      );
+    }
+    if (protocol.repetitions !== FIRST_INSTANCE_LIVE_CROSSOVER_REPETITIONS
+      || protocol.warmupFrames !== FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES
+      || protocol.measuredFrames !== FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES) {
+      failVerification(
+        'first-instance-live protocol has the wrong repetitions or frame counts.',
+      );
+    }
+    if (protocol.objectCount !== LIVE_FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT
+      || protocol.bucketCount !== LIVE_FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT
+      || protocol.depthBinCount !== null) {
+      failVerification(
+        'first-instance-live protocol must use 65536 objects, 32 buckets, and no depth bins.',
+      );
+    }
+    if (!orderedValuesMatch(
+      protocol.allowedObjectCounts,
+      FIXED_SLICE_REPRESENTATION_OBJECT_COUNTS,
+    )
+      || !orderedValuesMatch(
+        protocol.allowedBucketCounts,
+        FIXED_SLICE_REPRESENTATION_BUCKET_COUNTS,
+      )
+      || !orderedValuesMatch(
+        protocol.allowedHeterogeneousComparators,
+        ['coalesced-v11', 'historical-v10'],
+      )) {
+      failVerification(
+        'first-instance-live protocol changes the runner workload/comparator domain.',
+      );
+    }
+    if (protocol.matrix
+      !== `${LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX}-o${LIVE_FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT}-b${LIVE_FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT}`) {
+      failVerification(
+        'first-instance-live matrix identifier does not match its exact workload.',
+      );
+    }
+    if (protocol.reversedDepthBuffer !== true
+      || protocol.minimumStorageBuffersPerShaderStage !== 8
+      || protocol.heterogeneousComparator !== null
+      || protocol.representationScaleRole !== null
+      || protocol.threeBlocksScheduling !== null) {
+      failVerification(
+        'first-instance-live protocol has the wrong renderer, storage, or comparator contract.',
+      );
+    }
+    if (protocol.maximumCpuTimerQuantumMs !== 0.01
+      || protocol.ordering !== LIVE_FIRST_INSTANCE_CROSSOVER_ORDERING
+      || protocol.renderParity !== LIVE_FIRST_INSTANCE_CROSSOVER_RENDER_PARITY) {
+      failVerification(
+        'first-instance-live protocol has the wrong timer, ordering, or parity contract.',
+      );
+    }
+    const crossover = requireRecord(
+      protocol.firstInstanceLiveCrossover,
+      'metadata.json protocol.firstInstanceLiveCrossover',
+    );
+    const crossoverKeys = [
+      'requiredFeature',
+      'lanes',
+      'blockSize',
+      'warmupBlocks',
+      'measuredBlocks',
+      'patterns',
+      'scheduleDesign',
+      'expectedMeasuredRowsPerLane',
+      'expectedMeasuredTransitionCounts',
+      'expectedMeasuredHistoryTripleCounts',
+      'expectedComputeCallsPerFrame',
+      'expectedRenderCallsPerFrame',
+      'expectedComputeTimestampUidCount',
+      'expectedRenderTimestampUidCount',
+      'commandBuffers',
+      'commandBufferByteOffset',
+      'commandRecordsPerBuffer',
+      'scheduleSha256ByOrientation',
+    ];
+    if (Object.keys(crossover).length !== crossoverKeys.length
+      || crossoverKeys.some((key) => !Object.hasOwn(crossover, key))) {
+      failVerification(
+        'first-instance-live firstInstanceLiveCrossover has an unexpected schema.',
+      );
+    }
+    if (crossover.requiredFeature !== 'indirect-first-instance'
+      || !orderedValuesMatch(crossover.lanes, FIRST_INSTANCE_LIVE_CROSSOVER_LANES)
+      || crossover.blockSize !== FIRST_INSTANCE_LIVE_CROSSOVER_BLOCK_SIZE
+      || crossover.warmupBlocks !== FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_BLOCKS
+      || crossover.measuredBlocks !== FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_BLOCKS
+      || !orderedValuesMatch(
+        crossover.patterns,
+        LIVE_FIRST_INSTANCE_CROSSOVER_PATTERNS_AS_STRINGS,
+      )
+      || crossover.scheduleDesign
+        !== 'cyclic-binary-de-bruijn-order-three-with-complementary-orientation'
+      || crossover.expectedMeasuredRowsPerLane
+        !== FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES / 2
+      || !exactScalarRecordMatch(
+        crossover.expectedMeasuredTransitionCounts,
+        LIVE_FIRST_INSTANCE_CROSSOVER_MEASURED_HISTORY.transitionCounts,
+      )
+      || !exactScalarRecordMatch(
+        crossover.expectedMeasuredHistoryTripleCounts,
+        LIVE_FIRST_INSTANCE_CROSSOVER_MEASURED_HISTORY.historyTripleCounts,
+      )
+      || crossover.expectedComputeCallsPerFrame !== 1
+      || crossover.expectedRenderCallsPerFrame !== 1
+      || crossover.expectedComputeTimestampUidCount !== 1
+      || crossover.expectedRenderTimestampUidCount !== 1
+      || crossover.commandBuffers !== FIRST_INSTANCE_LIVE_CROSSOVER_LANES.length
+      || crossover.commandBufferByteOffset !== 0
+      || crossover.commandRecordsPerBuffer !== LIVE_FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT) {
+      failVerification(
+        'first-instance-live crossover constants differ from the preregistration.',
+      );
+    }
+    const scheduleDigests = requireRecord(
+      crossover.scheduleSha256ByOrientation,
+      'metadata.json protocol.firstInstanceLiveCrossover.scheduleSha256ByOrientation',
+    );
+    if (Object.keys(scheduleDigests).length !== 2
+      || scheduleDigests['0'] !== liveFirstInstanceCrossoverScheduleSha256(0)
+      || scheduleDigests['1'] !== liveFirstInstanceCrossoverScheduleSha256(1)) {
+      failVerification(
+        'first-instance-live schedule commitments are incomplete or inconsistent.',
+      );
     }
     return;
   }
@@ -2760,13 +3989,15 @@ function requireMetadataCompleteness(metadata, manifest) {
   validateProtocolMatrix(protocol);
   if (protocol.matrixKind === DEPTH_ORDERING_MATRIX
     || protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
-    || protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    || protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
+    || protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
     const benchmarkPage = requireRecord(
       metadata.environment.benchmarkPage,
       'metadata.json environment.benchmarkPage',
     );
     if ((protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
-      || protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX)
+      || protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
+      || protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX)
       && benchmarkPage.reversedDepth !== true) {
       failVerification(
         `${protocol.matrixKind} metadata does not prove camera reversed-depth operation.`,
@@ -2775,7 +4006,10 @@ function requireMetadataCompleteness(metadata, manifest) {
     if (benchmarkPage.rendererReversedDepthBuffer !== true) {
       failVerification('depth-ordering metadata does not prove renderer reversed-depth operation.');
     }
-    if (protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    if (protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
+      || protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      const isLive = protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX;
+      const matrixLabel = isLive ? 'first-instance-live' : 'first-instance-render-only';
       const browser = requireRecord(
         metadata.environment.browser,
         'metadata.json environment.browser',
@@ -2784,7 +4018,7 @@ function requireMetadataCompleteness(metadata, manifest) {
       if (Object.keys(browser).length !== browserKeys.length
         || browserKeys.some((key) => !Object.hasOwn(browser, key))) {
         failVerification(
-          'first-instance-render-only browser metadata has an unexpected schema.',
+          `${matrixLabel} browser metadata has an unexpected schema.`,
         );
       }
       requireNonemptyString(
@@ -2798,7 +4032,7 @@ function requireMetadataCompleteness(metadata, manifest) {
       if (browser.headless !== true
         || !orderedValuesMatch(browser.args, FIRST_INSTANCE_CROSSOVER_BROWSER_ARGS)) {
         failVerification(
-          'first-instance-render-only browser launch identity differs from the runner.',
+          `${matrixLabel} browser launch identity differs from the runner.`,
         );
       }
       const browserViewport = requireRecord(
@@ -2810,34 +4044,34 @@ function requireMetadataCompleteness(metadata, manifest) {
         || browserViewport.height !== 900
         || browserViewport.deviceScaleFactor !== 1) {
         failVerification(
-          'first-instance-render-only browser viewport differs from the runner.',
+          `${matrixLabel} browser viewport differs from the runner.`,
         );
       }
       if (benchmarkPage.indirectFirstInstanceAvailable !== true) {
         failVerification(
-          'first-instance-render-only metadata does not prove indirect-first-instance availability.',
+          `${matrixLabel} metadata does not prove indirect-first-instance availability.`,
         );
       }
       if (benchmarkPage.timestampAvailable !== true) {
         failVerification(
-          'first-instance-render-only metadata does not prove GPU timestamp availability.',
+          `${matrixLabel} metadata does not prove GPU timestamp availability.`,
         );
       }
       if (benchmarkPage.crossOriginIsolated !== true) {
         failVerification(
-          'first-instance-render-only metadata does not prove cross-origin isolation.',
+          `${matrixLabel} metadata does not prove cross-origin isolation.`,
         );
       }
       if (!Number.isFinite(benchmarkPage.performanceNowQuantumMs)
         || benchmarkPage.performanceNowQuantumMs <= 0
         || benchmarkPage.performanceNowQuantumMs > protocol.maximumCpuTimerQuantumMs) {
         failVerification(
-          'first-instance-render-only metadata does not prove the preregistered CPU timer quantum.',
+          `${matrixLabel} metadata does not prove the preregistered CPU timer quantum.`,
         );
       }
       if (benchmarkPage.threeRevision !== '185') {
         failVerification(
-          'first-instance-render-only metadata does not prove the pinned Three.js revision.',
+          `${matrixLabel} metadata does not prove the pinned Three.js revision.`,
         );
       }
       const pageViewport = requireRecord(
@@ -2849,13 +4083,13 @@ function requireMetadataCompleteness(metadata, manifest) {
         || pageViewport.height !== 720
         || pageViewport.devicePixelRatio !== 1) {
         failVerification(
-          'first-instance-render-only page viewport differs from the pinned render target.',
+          `${matrixLabel} page viewport differs from the pinned render target.`,
         );
       }
       if (benchmarkPage.rendererBackend !== 'WebGPUBackend'
         || benchmarkPage.coordinateSystem !== 2001) {
         failVerification(
-          'first-instance-render-only metadata does not prove the pinned WebGPU renderer identity.',
+          `${matrixLabel} metadata does not prove the pinned WebGPU renderer identity.`,
         );
       }
       requireNonemptyString(
@@ -2871,35 +4105,69 @@ function requireMetadataCompleteness(metadata, manifest) {
           (field) => !Object.hasOwn(adapterInfo, field),
         )) {
         failVerification(
-          'first-instance-render-only adapterInfo has an unexpected schema.',
+          `${matrixLabel} adapterInfo has an unexpected schema.`,
         );
       }
       for (const field of FIRST_INSTANCE_CROSSOVER_ADAPTER_INFO_FIELDS.slice(0, -1)) {
         if (adapterInfo[field] !== null
           && (typeof adapterInfo[field] !== 'string' || adapterInfo[field].trim() === '')) {
           failVerification(
-            `first-instance-render-only adapterInfo.${field} must be null or a non-empty string.`,
+            `${matrixLabel} adapterInfo.${field} must be null or a non-empty string.`,
           );
         }
       }
       if (adapterInfo.isFallbackAdapter !== null
         && typeof adapterInfo.isFallbackAdapter !== 'boolean') {
         failVerification(
-          'first-instance-render-only adapterInfo.isFallbackAdapter must be null or boolean.',
+          `${matrixLabel} adapterInfo.isFallbackAdapter must be null or boolean.`,
         );
       }
       if (!['vendor', 'architecture', 'device', 'description'].some(
         (field) => typeof adapterInfo[field] === 'string',
       )) {
         failVerification(
-          'first-instance-render-only adapterInfo lacks a non-empty adapter identity.',
+          `${matrixLabel} adapterInfo lacks a non-empty adapter identity.`,
         );
       }
       const expectedBackend = `${adapterInfo.description ?? adapterInfo.device ?? 'WebGPU'} · ${adapterInfo.backend ?? 'unknown backend'}`;
       if (metadata.environment.backend !== expectedBackend) {
         failVerification(
-          'first-instance-render-only runner backend identity differs from page adapterInfo.',
+          `${matrixLabel} runner backend identity differs from page adapterInfo.`,
         );
+      }
+      if (isLive) {
+        requireInteger(
+          benchmarkPage.maxStorageBuffersPerShaderStage,
+          'metadata.json environment.benchmarkPage.maxStorageBuffersPerShaderStage',
+        );
+        if (benchmarkPage.maxStorageBuffersPerShaderStage < 8) {
+          failVerification(
+            'first-instance-live metadata reports fewer than eight storage buffers per shader stage.',
+          );
+        }
+        for (const field of [
+          'webgpuUncapturedErrorCount',
+          'webgpuValidationErrorCount',
+          'webgpuDeviceLossCount',
+        ]) {
+          if (benchmarkPage[field] !== 0) {
+            failVerification(`first-instance-live benchmarkPage.${field} must be zero.`);
+          }
+        }
+        const benchmarkPageAtEnd = requireRecord(
+          metadata.environment.benchmarkPageAtEnd,
+          'metadata.json environment.benchmarkPageAtEnd',
+        );
+        if (JSON.stringify(benchmarkPageAtEnd) !== JSON.stringify(benchmarkPage)) {
+          failVerification('first-instance-live page environment changed during the matrix.');
+        }
+        const uncapturedErrors = requireArray(
+          metadata.webgpuUncapturedErrors,
+          'metadata.json webgpuUncapturedErrors',
+        );
+        if (uncapturedErrors.length !== 0) {
+          failVerification('first-instance-live metadata contains uncaptured WebGPU errors.');
+        }
       }
     } else {
       requireInteger(
@@ -2926,6 +4194,7 @@ function requireMetadataCompleteness(metadata, manifest) {
   const layoutCount = protocol.matrixKind === DEPTH_ORDERING_MATRIX
     || protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
     || protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
+    || protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX
     ? requireArray(protocol.layouts, 'metadata.json protocol.layouts').length
     : 1;
   const protocolTrialCount = protocol.repetitions
@@ -2940,6 +4209,7 @@ function requireMetadataCompleteness(metadata, manifest) {
     failVerification('metadata.json does not report every expected trial as completed and accepted.');
   }
   validateCandidateProvenance(metadata);
+  validateLiveCandidateReservationAndDependencies(metadata);
   return { plan, protocol };
 }
 
@@ -2975,7 +4245,10 @@ export function validateBenchmarkPlan(plan, metadata) {
   const isFrozenCrossover = metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX;
   const isFirstInstanceCrossover =
     metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX;
-  const hasLayouts = isDepthOrdering || isFrozenCrossover || isFirstInstanceCrossover;
+  const isLiveFirstInstanceCrossover =
+    metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX;
+  const hasLayouts = isDepthOrdering || isFrozenCrossover || isFirstInstanceCrossover
+    || isLiveFirstInstanceCrossover;
   const byTrialId = new Map();
   const byPlanIndex = new Map();
   const matrixCells = new Set();
@@ -3079,6 +4352,27 @@ export function validateBenchmarkPlan(plan, metadata) {
         );
       }
     }
+    if (isLiveFirstInstanceCrossover) {
+      const lanePhysicalOrder = requireExactPermutation(
+        item.lanePhysicalOrder,
+        FIRST_INSTANCE_LIVE_CROSSOVER_LANES,
+        `metadata.json plan[${arrayIndex}].lanePhysicalOrder`,
+      );
+      requireInteger(
+        item.superblockOrientationOffset,
+        `metadata.json plan[${arrayIndex}].superblockOrientationOffset`,
+        { minimum: 0, maximum: 1 },
+      );
+      if (!orderedValuesMatch(
+        lanePhysicalOrder,
+        FIRST_INSTANCE_LIVE_CROSSOVER_LANE_PHYSICAL_ORDERS[item.repetitionIndex],
+      ) || item.superblockOrientationOffset
+        !== FIRST_INSTANCE_LIVE_CROSSOVER_ORIENTATION_OFFSETS[item.repetitionIndex]) {
+        failVerification(
+          `metadata.json plan[${arrayIndex}] changes a preregistered live first-instance crossover factor.`,
+        );
+      }
+    }
     if (item.runId !== metadata.runId) failVerification(`metadata.json plan[${arrayIndex}] has the wrong runId.`);
     requireInteger(item.objectCount, `metadata.json plan[${arrayIndex}].objectCount`, { minimum: 1 });
     requireInteger(item.bucketCount, `metadata.json plan[${arrayIndex}].bucketCount`, { minimum: 1 });
@@ -3093,7 +4387,7 @@ export function validateBenchmarkPlan(plan, metadata) {
     if (item.planIndex !== arrayIndex) {
       failVerification('metadata.json plan indexes are not contiguous and ordered from zero.');
     }
-    if (isFirstInstanceCrossover
+    if ((isFirstInstanceCrossover || isLiveFirstInstanceCrossover)
       && trialId !== `${metadata.runId}-t${String(arrayIndex + 1).padStart(2, '0')}`) {
       failVerification(
         `metadata.json plan[${arrayIndex}] changes the exact first-instance trial identity.`,
@@ -3238,6 +4532,46 @@ export function validateBenchmarkPlan(plan, metadata) {
             !== FIRST_INSTANCE_CROSSOVER_ORIENTATION_OFFSETS[repetition]) {
           failVerification(
             'metadata.json first-instance crossover plan execution order is not repetition-contiguous and visibility-paired.',
+          );
+        }
+        executionIndex += 1;
+      }
+      continue;
+    }
+    if (isLiveFirstInstanceCrossover) {
+      const expectedVisibilityOrder = repetition % 2 === 0
+        ? [...FIRST_INSTANCE_LIVE_CROSSOVER_VISIBILITY_LEVELS]
+        : [...FIRST_INSTANCE_LIVE_CROSSOVER_VISIBILITY_LEVELS].reverse();
+      if (!orderedValuesMatch(orderRecord.modeOrder, [FIRST_INSTANCE_LIVE_CROSSOVER_MODE])
+        || !orderedValuesMatch(orderRecord.visibilityOrder, expectedVisibilityOrder)
+        || !orderedValuesMatch(
+          orderRecord.layoutOrder,
+          LIVE_FIRST_INSTANCE_CROSSOVER_LAYOUTS,
+        )) {
+        failVerification(
+          'first-instance-live plan changes its exact mode, visibility, or layout order.',
+        );
+      }
+      for (let visibilityPosition = 0;
+        visibilityPosition < expectedVisibilityOrder.length;
+        visibilityPosition += 1) {
+        const item = plan[executionIndex];
+        if (item.repetitionIndex !== repetition
+          || item.planIndex !== executionIndex
+          || item.layoutOrderPosition !== 0
+          || item.layout !== LIVE_FIRST_INSTANCE_CROSSOVER_LAYOUTS[0]
+          || item.visibilityOrderPosition !== visibilityPosition
+          || item.visibilityFraction !== expectedVisibilityOrder[visibilityPosition]
+          || item.modeOrderPosition !== 0
+          || item.modeId !== FIRST_INSTANCE_LIVE_CROSSOVER_MODE
+          || !orderedValuesMatch(
+            item.lanePhysicalOrder,
+            FIRST_INSTANCE_LIVE_CROSSOVER_LANE_PHYSICAL_ORDERS[repetition],
+          )
+          || item.superblockOrientationOffset
+            !== FIRST_INSTANCE_LIVE_CROSSOVER_ORIENTATION_OFFSETS[repetition]) {
+          failVerification(
+            'metadata.json live first-instance crossover plan execution order is not repetition-contiguous and visibility-paired.',
           );
         }
         executionIndex += 1;
@@ -3413,7 +4747,8 @@ function validateTrialSummaries(trialSummaries, metadata, planIndex) {
     }
     if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX
       || metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX
-      || metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      || metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
+      || metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
       requireRecord(
         summary.completionInvariant,
         `trial-summaries.json trial ${JSON.stringify(trialId)} completionInvariant`,
@@ -3526,6 +4861,97 @@ function validateTrialSummaries(trialSummaries, metadata, planIndex) {
       if (semanticSha256 !== validation.firstInstanceSemanticSha256) {
         failVerification(
           `trial-summaries.json trial ${JSON.stringify(trialId)} has an invalid first-instance semantic commitment.`,
+        );
+      }
+    }
+    if (metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      requireExactRecordKeys(
+        timestamps,
+        LIVE_FIRST_INSTANCE_CROSSOVER_TIMESTAMP_SUMMARY_SCHEMA,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} timestamps`,
+      );
+      const plannedScheduleSha256 = metadata.protocol.firstInstanceLiveCrossover
+        .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)];
+      const semanticSha256 = requireSha256(
+        validation.liveFirstInstanceSemanticSha256,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} validation liveFirstInstanceSemanticSha256`,
+      );
+      if (validation.kind !== LIVE_FIRST_INSTANCE_CROSSOVER_VALIDATION_KIND
+        || !orderedValuesMatch(summary.modeOrder, planned.modeOrder)
+        || !orderedValuesMatch(summary.visibilityOrder, planned.visibilityOrder)
+        || !orderedValuesMatch(summary.layoutOrder, planned.layoutOrder)
+        || !orderedValuesMatch(summary.lanePhysicalOrder, planned.lanePhysicalOrder)
+        || summary.superblockOrientationOffset !== planned.superblockOrientationOffset
+        || summary.plannedScheduleSha256 !== plannedScheduleSha256) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} changes its live first-instance plan commitments.`,
+        );
+      }
+      if (timestamps.expectedComputeTimestampUidCount !== 1
+        || timestamps.invalidComputeTimestampUidCountFrames !== 0
+        || timestamps.invalidComputeTimestampDurationFrames !== 0
+        || timestamps.expectedRenderTimestampUidCount !== 1
+        || timestamps.invalidRenderTimestampUidCountFrames !== 0
+        || timestamps.invalidRenderTimestampDurationFrames !== 0
+        || timestamps.warmupRowCount !== metadata.protocol.warmupFrames
+        || timestamps.missingWarmupComputeFrames !== 0
+        || timestamps.missingWarmupRenderFrames !== 0
+        || timestamps.invalidWarmupComputeTimestampUidCountFrames !== 0
+        || timestamps.invalidWarmupRenderTimestampUidCountFrames !== 0
+        || timestamps.invalidWarmupComputeTimestampDurationFrames !== 0
+        || timestamps.invalidWarmupRenderTimestampDurationFrames !== 0
+        || timestamps.renderTimestampPoolQualityValid !== true
+        || timestamps.computeTimestampPoolQualityValid !== true
+        || timestamps.warmupRenderTimestampPoolQualityValid !== true
+        || timestamps.warmupComputeTimestampPoolQualityValid !== true
+        || timestamps.warmupTimestampFrameCountValid !== true
+        || timestamps.measurementTimestampFrameCountValid !== true
+        || timestamps.classification !== 'fine'
+        || !Number.isFinite(timestamps.quantumNs)
+        || timestamps.quantumNs <= 0
+        || timestamps.quantumNs > LIVE_FIRST_INSTANCE_CROSSOVER_MAXIMUM_TIMESTAMP_QUANTUM_NS) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} violates the live first-instance timestamp contract.`,
+        );
+      }
+      const selected = requireRecord(
+        summary.selectedConfig,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} selectedConfig`,
+      );
+      if (selected.strategyId !== planned.modeId
+        || selected.objectCount !== planned.objectCount
+        || selected.bucketCount !== planned.bucketCount
+        || selected.visibilityFraction !== planned.visibilityFraction
+        || selected.layout !== planned.layout
+        || !orderedValuesMatch(selected.lanePhysicalOrder, planned.lanePhysicalOrder)
+        || selected.superblockOrientationOffset !== planned.superblockOrientationOffset) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} selectedConfig differs from its live first-instance plan.`,
+        );
+      }
+      const timing = requireRecord(
+        summary.timing,
+        `trial-summaries.json trial ${JSON.stringify(trialId)} timing`,
+      );
+      const timingKeys = Object.keys(timing);
+      if (timingKeys.length !== LIVE_FIRST_INSTANCE_CROSSOVER_TIMING_SCHEMA.length
+        || LIVE_FIRST_INSTANCE_CROSSOVER_TIMING_SCHEMA.some(
+          (key) => !Object.hasOwn(timing, key),
+        )) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} timing has an unexpected schema.`,
+        );
+      }
+      for (const key of LIVE_FIRST_INSTANCE_CROSSOVER_TIMING_SCHEMA) {
+        requireFiniteNumber(
+          timing[key],
+          `trial-summaries.json trial ${JSON.stringify(trialId)} timing ${key}`,
+          { minimum: 0 },
+        );
+      }
+      if (semanticSha256 !== validation.liveFirstInstanceSemanticSha256) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} has an invalid live first-instance semantic commitment.`,
         );
       }
     }
@@ -3703,7 +5129,18 @@ function validateWorkloadManifests(catalog, metadata) {
   if (geometries[metadataGeometrySha256] === undefined) {
     failVerification('metadata geometry digest is absent from workload-manifests.json.');
   }
-  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
+    || metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    const isLive = metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX;
+    const firstInstanceVisibilities = isLive
+      ? FIRST_INSTANCE_LIVE_CROSSOVER_VISIBILITY_LEVELS
+      : FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS;
+    const firstInstanceObjectCount = isLive
+      ? LIVE_FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT
+      : FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT;
+    const firstInstanceBucketCount = isLive
+      ? LIVE_FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT
+      : FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT;
     if (metadata.workload.scenarioGenerator !== 'createFixedSubsetScenario') {
       failVerification('first-instance workload uses an unexpected scenario generator.');
     }
@@ -3718,7 +5155,7 @@ function validateWorkloadManifests(catalog, metadata) {
     }
     const geometryReasons = validateGeometryFixtureManifest(
       geometries[metadataGeometrySha256],
-      { bucketCount: FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT, tier: 'medium' },
+      { bucketCount: firstInstanceBucketCount, tier: 'medium' },
     );
     if (geometryReasons.length !== 0) {
       failVerification(
@@ -3737,7 +5174,7 @@ function validateWorkloadManifests(catalog, metadata) {
       metadata.workload.renderParitySha256ByCell,
       'metadata.json workload.renderParitySha256ByCell',
     );
-    const visibilityKeys = FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS.map(String);
+    const visibilityKeys = firstInstanceVisibilities.map(String);
     const cellKeys = visibilityKeys.map((visibility) => `baseline|${visibility}`);
     const hasExactKeys = (record, expected) => {
       const actual = Object.keys(record);
@@ -3761,7 +5198,7 @@ function validateWorkloadManifests(catalog, metadata) {
       );
     }
     const linkedScenarioDigests = new Set();
-    for (const visibility of FIRST_INSTANCE_CROSSOVER_VISIBILITY_LEVELS) {
+    for (const visibility of firstInstanceVisibilities) {
       const visibilityKey = String(visibility);
       const cellKey = `baseline|${visibilityKey}`;
       const digest = requireSha256(
@@ -3780,8 +5217,8 @@ function validateWorkloadManifests(catalog, metadata) {
         );
       }
       const scenarioReasons = validateScenarioManifest(manifest, {
-        objectCount: FIRST_INSTANCE_CROSSOVER_OBJECT_COUNT,
-        bucketCount: FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT,
+        objectCount: firstInstanceObjectCount,
+        bucketCount: firstInstanceBucketCount,
         visibilityFraction: visibility,
         seed: scenarioSeedValue,
         layout: 'baseline',
@@ -4019,6 +5456,22 @@ async function validateValidationArtifacts(
         `validation artifact ${JSON.stringify(trialId)} selectedConfig differs from the first-instance plan.`,
       );
     }
+    if (metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX
+      && (selectedConfig.strategyId !== planned.modeId
+        || selectedConfig.objectCount !== planned.objectCount
+        || selectedConfig.bucketCount !== planned.bucketCount
+        || selectedConfig.visibilityFraction !== planned.visibilityFraction
+        || selectedConfig.layout !== planned.layout
+        || !orderedValuesMatch(
+          selectedConfig.lanePhysicalOrder,
+          planned.lanePhysicalOrder,
+        )
+        || selectedConfig.superblockOrientationOffset
+          !== planned.superblockOrientationOffset)) {
+      failVerification(
+        `validation artifact ${JSON.stringify(trialId)} selectedConfig differs from the live first-instance plan.`,
+      );
+    }
     if (metadata.protocol.matrixKind === FROZEN_DEPTH_CROSSOVER_MATRIX) {
       const plannedScheduleSha256 = metadata.protocol.frozenCrossover
         .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)];
@@ -4039,6 +5492,17 @@ async function validateValidationArtifacts(
         || artifact.plannedScheduleSha256 !== plannedScheduleSha256) {
         failVerification(
           `validation artifact ${JSON.stringify(trialId)} changes its first-instance plan commitments.`,
+        );
+      }
+    }
+    if (metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      const plannedScheduleSha256 = metadata.protocol.firstInstanceLiveCrossover
+        .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)];
+      if (!orderedValuesMatch(artifact.lanePhysicalOrder, planned.lanePhysicalOrder)
+        || artifact.superblockOrientationOffset !== planned.superblockOrientationOffset
+        || artifact.plannedScheduleSha256 !== plannedScheduleSha256) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} changes its live first-instance plan commitments.`,
         );
       }
     }
@@ -4280,6 +5744,174 @@ async function validateValidationArtifacts(
         );
       }
     }
+    if (metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+      const phaseSemanticDigests = [];
+      const phaseParityDigests = [];
+      const environment = metadata.environment.benchmarkPage;
+      for (const captureName of ['pre', 'timingStart', 'post']) {
+        const capture = artifact[captureName];
+        const uncapturedErrors = requireArray(
+          capture.webgpuUncapturedErrors,
+          `validation artifact ${JSON.stringify(trialId)} ${captureName} webgpuUncapturedErrors`,
+        );
+        if (uncapturedErrors.length !== 0) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} contains uncaptured WebGPU errors.`,
+          );
+        }
+        const validationReasons = await validateLiveFirstInstanceCrossoverValidation(
+          capture.validation.payload,
+          { spec: planned, environment, scenarioManifest, geometryManifest },
+        );
+        if (validationReasons.length !== 0) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} live first-instance payload failed: ${validationReasons.join('; ')}.`,
+          );
+        }
+        const semanticSha256 = liveFirstInstanceValidationSemanticSha256(
+          capture.validation.payload,
+        );
+        if (capture.validation.semanticSha256 !== semanticSha256) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} live first-instance semantic SHA-256 is inconsistent.`,
+          );
+        }
+        const parityReasons = validateLiveFirstInstanceCrossoverRenderParity(
+          capture.renderParity,
+          {
+            spec: planned,
+            validation: capture.validation.payload,
+            scenarioManifest,
+          },
+        );
+        if (parityReasons.length !== 0) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} live first-instance render parity failed: ${parityReasons.join('; ')}.`,
+          );
+        }
+        const paritySha256 = liveFirstInstanceRenderParityIdentity(capture.renderParity);
+        if (capture.renderParitySemanticSha256 !== paritySha256
+          || capture.renderParityOutputSha256 !== paritySha256) {
+          failVerification(
+            `validation artifact ${JSON.stringify(trialId)} ${captureName} live first-instance render-parity SHA-256 is inconsistent.`,
+          );
+        }
+        phaseSemanticDigests.push(semanticSha256);
+        phaseParityDigests.push(paritySha256);
+      }
+      if (phaseSemanticDigests.some((digest) => digest !== phaseSemanticDigests[0])) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} changes live first-instance validation semantics across phases.`,
+        );
+      }
+      if (phaseParityDigests.some((digest) => digest !== phaseParityDigests[0])) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} changes live first-instance render output across phases.`,
+        );
+      }
+      const expectedParitySha256 = renderParityDigestForTrial(metadata, artifact);
+      if (phaseParityDigests[0] !== expectedParitySha256) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} live first-instance render parity differs from its visibility cell.`,
+        );
+      }
+      const rows = firstInstanceRowsByTrial?.get(trialId);
+      if (!Array.isArray(rows)
+        || rows.length !== FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} lacks its exact live retained row set.`,
+        );
+      }
+      const pageSummary = {
+        accepted: summary.timestamps.accepted,
+        timestampAvailable: summary.timestamps.available,
+        rowCount: summary.timestamps.rowCount,
+        warmupRowCount: summary.timestamps.warmupRowCount,
+        missingWarmupRenderFrames: summary.timestamps.missingWarmupRenderFrames,
+        invalidWarmupRenderTimestampUidCountFrames:
+          summary.timestamps.invalidWarmupRenderTimestampUidCountFrames,
+        invalidWarmupRenderTimestampDurationFrames:
+          summary.timestamps.invalidWarmupRenderTimestampDurationFrames,
+        missingWarmupComputeFrames: summary.timestamps.missingWarmupComputeFrames,
+        invalidWarmupComputeTimestampUidCountFrames:
+          summary.timestamps.invalidWarmupComputeTimestampUidCountFrames,
+        invalidWarmupComputeTimestampDurationFrames:
+          summary.timestamps.invalidWarmupComputeTimestampDurationFrames,
+        missingRenderFrames: summary.timestamps.missingRenderFrames,
+        missingComputeFrames: summary.timestamps.missingComputeFrames,
+        expectedComputeTimestampUidCount:
+          summary.timestamps.expectedComputeTimestampUidCount,
+        invalidComputeTimestampUidCountFrames:
+          summary.timestamps.invalidComputeTimestampUidCountFrames,
+        invalidComputeTimestampDurationFrames:
+          summary.timestamps.invalidComputeTimestampDurationFrames,
+        expectedRenderTimestampUidCount:
+          summary.timestamps.expectedRenderTimestampUidCount,
+        invalidRenderTimestampUidCountFrames:
+          summary.timestamps.invalidRenderTimestampUidCountFrames,
+        invalidRenderTimestampDurationFrames:
+          summary.timestamps.invalidRenderTimestampDurationFrames,
+        renderTimestampPoolQualityValid:
+          summary.timestamps.renderTimestampPoolQualityValid,
+        computeTimestampPoolQualityValid:
+          summary.timestamps.computeTimestampPoolQualityValid,
+        warmupRenderTimestampPoolQualityValid:
+          summary.timestamps.warmupRenderTimestampPoolQualityValid,
+        warmupComputeTimestampPoolQualityValid:
+          summary.timestamps.warmupComputeTimestampPoolQualityValid,
+        warmupTimestampFrameCountValid:
+          summary.timestamps.warmupTimestampFrameCountValid,
+        measurementTimestampFrameCountValid:
+          summary.timestamps.measurementTimestampFrameCountValid,
+        timestampResolutions: summary.timestamps.timestampResolutions,
+        timestampPhases: summary.timestamps.timestampPhases,
+        classification: summary.timestamps.classification,
+        quantumNs: summary.timestamps.quantumNs,
+        completionInvariant: summary.completionInvariant,
+      };
+      const evidence = await validateLiveFirstInstanceTrialEvidence({
+        spec: planned,
+        environment,
+        preflightValidation: artifact.pre.validation.payload,
+        preflightRenderParity: artifact.pre.renderParity,
+        validation: artifact.timingStart.validation.payload,
+        renderParity: artifact.timingStart.renderParity,
+        postflightValidation: artifact.post.validation.payload,
+        postflightRenderParity: artifact.post.renderParity,
+        shaderObservationChallenges: artifact.shaderObservationChallenges,
+        rows,
+        summary: pageSummary,
+        protocol: {
+          schemaVersion: 2,
+          warmupFrames: FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES,
+          measuredFrames: FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+          plannedScheduleSha256: artifact.plannedScheduleSha256,
+        },
+        scenarioManifest,
+        geometryManifest,
+      });
+      const persisted = requireRecord(
+        artifact.liveFirstInstanceTrialEvidence,
+        `validation artifact ${JSON.stringify(trialId)} liveFirstInstanceTrialEvidence`,
+      );
+      const persistedKeys = Object.keys(persisted);
+      if (persistedKeys.length !== 4
+        || !['pass', 'rejectionReasons', 'semanticSha256', 'historyBalance'].every(
+          (key) => Object.hasOwn(persisted, key),
+        )
+        || persisted.pass !== true
+        || !Array.isArray(persisted.rejectionReasons)
+        || persisted.rejectionReasons.length !== 0
+        || persisted.semanticSha256 !== phaseSemanticDigests[0]
+        || persisted.semanticSha256 !== summary.validation.liveFirstInstanceSemanticSha256
+        || JSON.stringify(persisted) !== JSON.stringify(evidence)
+        || evidence.pass !== true
+        || evidence.rejectionReasons.length !== 0) {
+        failVerification(
+          `validation artifact ${JSON.stringify(trialId)} persisted live first-instance trial evidence is absent or inconsistent.`,
+        );
+      }
+    }
     if (metadata.protocol.matrixKind === DEPTH_ORDERING_MATRIX) {
       for (const captureName of ['pre', 'timingStart', 'post']) {
         const capture = artifact[captureName];
@@ -4367,6 +5999,7 @@ async function validateValidationArtifacts(
     }
     if (artifact.modeId !== 'three-blocks-historical'
       && metadata.protocol.matrixKind !== FIRST_INSTANCE_CROSSOVER_MATRIX
+      && metadata.protocol.matrixKind !== LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX
       && captures.some((capture) => capture.payloadSha256 !== captures[0].payloadSha256)) {
       failVerification(`validation artifact ${JSON.stringify(trialId)} changed its exact payload.`);
     }
@@ -4520,6 +6153,196 @@ function validateVerifiedFrozenFrames(
   }
 }
 
+function liveTimestampPoolStaticCommitment(timestampPools) {
+  return Object.fromEntries(['render', 'compute'].map((type) => {
+    const pool = timestampPools?.[type];
+    return [type, pool ? {
+      poolIdentity: pool.poolIdentity,
+      querySetIdentity: pool.querySetIdentity,
+      resolveBufferIdentity: pool.resolveBufferIdentity,
+      resultBufferIdentity: pool.resultBufferIdentity,
+      maxQueries: pool.maxQueries,
+      isDisposed: pool.isDisposed,
+    } : null];
+  }));
+}
+
+function validateVerifiedLiveFirstInstanceFrames(
+  parsed,
+  metadata,
+  planIndex,
+  summariesByTrialId,
+  workloadCatalog,
+) {
+  let rows;
+  try {
+    rows = parseLiveFirstInstanceCrossoverRecords(parsed);
+  } catch (error) {
+    failVerification(error instanceof Error ? error.message : String(error));
+  }
+  const expectedTrialCount = FIRST_INSTANCE_LIVE_CROSSOVER_REPETITIONS
+    * FIRST_INSTANCE_LIVE_CROSSOVER_VISIBILITY_LEVELS.length;
+  const expectedRows = expectedTrialCount
+    * FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES;
+  if (metadata.expectedTrialCount !== expectedTrialCount
+    || metadata.completedTrialCount !== expectedTrialCount
+    || metadata.acceptedTrialCount !== expectedTrialCount
+    || metadata.validationArtifactCount !== expectedTrialCount
+    || metadata.frameRowCount !== expectedRows
+    || rows.length !== expectedRows) {
+    failVerification(
+      'first-instance-live run must contain exactly 24 accepted trials and 11,520 retained rows.',
+    );
+  }
+  let analysis;
+  try {
+    analysis = summarizeLiveFirstInstanceCrossoverRows(rows);
+  } catch (error) {
+    failVerification(error instanceof Error ? error.message : String(error));
+  }
+  const audit = requireRecord(
+    metadata.liveFirstInstanceAnalysisAudit,
+    'metadata.json liveFirstInstanceAnalysisAudit',
+  );
+  const expectedAudit = {
+    schemaVersion: analysis.schemaVersion,
+    kind: analysis.kind,
+    nTrials: analysis.nTrials,
+    nRows: analysis.nRows,
+    preregisteredDecision: analysis.preregisteredDecision,
+    preregisteredNumericalDecision: analysis.preregisteredNumericalDecision,
+    sha256: sha256Json(analysis),
+  };
+  if (JSON.stringify(audit) !== JSON.stringify(expectedAudit)) {
+    failVerification(
+      'metadata.json liveFirstInstanceAnalysisAudit does not exactly match the reconstructed analysis.',
+    );
+  }
+
+  const rowsByTrial = new Map();
+  for (const [index, row] of rows.entries()) {
+    const label = `frames.csv record ${index + 2}`;
+    const planned = planIndex.byTrialId.get(row.trialId);
+    const summary = summariesByTrialId.get(row.trialId);
+    if (row.runId !== metadata.runId || planned === undefined || summary === undefined) {
+      failVerification(`${label} has an unknown run or trial identity.`);
+    }
+    const scenarioSha256 = scenarioDigestForTrial(metadata, planned);
+    const scenario = workloadCatalog.scenarios[scenarioSha256];
+    if (scenario === undefined
+      || row.expectedVisibleCount !== scenario.expectedVisibleCount) {
+      failVerification(`${label} differs from its signed live first-instance scenario.`);
+    }
+    if (row.planIndex !== planned.planIndex
+      || row.repetitionIndex !== planned.repetitionIndex
+      || row.modeId !== planned.modeId
+      || row.modeOrderPosition !== planned.modeOrderPosition
+      || row.visibilityOrderPosition !== planned.visibilityOrderPosition
+      || row.layoutOrderPosition !== planned.layoutOrderPosition
+      || row.targetVisibilityFraction !== planned.visibilityFraction
+      || row.scenarioLayout !== planned.layout
+      || row.plannedModeOrder !== planned.modeOrder.join('|')
+      || row.plannedVisibilityOrder !== planned.visibilityOrder.join('|')
+      || row.plannedLayoutOrder !== planned.layoutOrder.join('|')
+      || row.plannedLanePhysicalOrder !== planned.lanePhysicalOrder.join('|')
+      || row.lanePhysicalOrder !== planned.lanePhysicalOrder.join('|')
+      || row.superblockOrientationOffset !== planned.superblockOrientationOffset
+      || row.plannedScheduleSha256 !== metadata.protocol.firstInstanceLiveCrossover
+        .scheduleSha256ByOrientation[String(planned.superblockOrientationOffset)]) {
+      failVerification(`${label} differs from its live first-instance plan commitment.`);
+    }
+    const completion = summary.completionInvariant;
+    const commandCommitments = completion.commandBufferCommitments;
+    if (row.lifecycleCommitmentAtTimingStart
+        !== completion.lifecycleCommitmentAtTimingStart
+      || row.commandBufferCommitmentsAtTimingStart
+        !== JSON.stringify(completion.commandBufferCommitments)
+      || row.portableCommandBufferIdAtTimingStart
+        !== commandCommitments?.[FIRST_INSTANCE_LIVE_CROSSOVER_LANES[0]]?.attributeId
+      || row.featureCommandBufferIdAtTimingStart
+        !== commandCommitments?.[FIRST_INSTANCE_LIVE_CROSSOVER_LANES[1]]?.attributeId
+      || row.selectorWriteSerialAtTimingStart
+        !== completion.selectorWriteSerialAtTimingStart
+      || row.strategySelectionSerialAtTimingStart
+        !== completion.strategySelectionSerialAtTimingStart
+      || row.strategyComputeCallSerialAtTimingStart
+        !== completion.strategyComputeCallSerialAtTimingStart
+      || row.strategyPrepareSerialAtTimingStart
+        !== completion.strategyPrepareSerialAtTimingStart
+      || row.computeCallSerialAtTimingStart !== completion.computeCallSerialAtTimingStart
+      || row.renderCallSerialAtTimingStart !== completion.renderCallSerialAtTimingStart
+      || row.renderTargetTextureUuidAtTimingStart
+        !== completion.renderTargetTextureUuidAtTimingStart
+      || row.renderTargetWidthAtTimingStart !== completion.renderTargetWidthAtTimingStart
+      || row.renderTargetHeightAtTimingStart !== completion.renderTargetHeightAtTimingStart
+      || row.renderTargetSamplesAtTimingStart !== completion.renderTargetSamplesAtTimingStart
+      || row.renderTargetDepthBufferAtTimingStart
+        !== completion.renderTargetDepthBufferAtTimingStart
+      || row.cameraViewFnv64AtTimingStart !== completion.cameraViewFnv64AtTimingStart
+      || row.cameraProjectionFnv64AtTimingStart
+        !== completion.cameraProjectionFnv64AtTimingStart
+      || row.totalPipelineCacheEntriesAtTimingStart
+        !== completion.totalPipelineCacheEntriesAtTimingStart
+      || row.computePipelineCacheEntriesAtTimingStart
+        !== completion.computePipelineCacheEntriesAtTimingStart
+      || row.webgpuUncapturedErrorCountAtTimingStart
+        !== completion.webgpuUncapturedErrorCountAtTimingStart
+      || row.webgpuUncapturedErrorCountAtTimingStart !== 0
+      || row.timestampPoolStaticCommitmentAtTimingStart !== JSON.stringify(
+        liveTimestampPoolStaticCommitment(completion.timestampPoolsAtTimingStart),
+      )) {
+      failVerification(
+        `${label} differs from its live first-instance timing-start lifecycle commitment.`,
+      );
+    }
+    const serialOffset = FIRST_INSTANCE_LIVE_CROSSOVER_WARMUP_FRAMES
+      + row.frameIndex + 1;
+    if (row.strategyComputeCallSerial
+      !== completion.strategyComputeCallSerialAtTimingStart + serialOffset) {
+      failVerification(`${label} changes the live strategy-compute serial stream.`);
+    }
+    if (row.commandSegmentIndex !== 0
+      || row.commandRecordBase !== 0
+      || row.commandByteBase !== 0
+      || row.commandByteOffset !== 0
+      || row.commandBufferRecordCount !== LIVE_FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT
+      || row.commandBufferByteLength !== LIVE_FIRST_INSTANCE_CROSSOVER_BUCKET_COUNT * 20) {
+      failVerification(`${label} changes the zero-offset live command-buffer shape.`);
+    }
+    let trialRows = rowsByTrial.get(row.trialId);
+    if (trialRows === undefined) {
+      trialRows = [];
+      rowsByTrial.set(row.trialId, trialRows);
+    }
+    trialRows.push(row);
+  }
+  if (rowsByTrial.size !== expectedTrialCount
+    || [...planIndex.byTrialId.keys()].some(
+      (trialId) => rowsByTrial.get(trialId)?.length
+        !== FIRST_INSTANCE_LIVE_CROSSOVER_MEASURED_FRAMES,
+    )) {
+    failVerification(
+      'first-instance-live frames.csv does not contain exactly 480 rows for every planned trial.',
+    );
+  }
+  for (const [trialId, trialRows] of rowsByTrial) {
+    const timing = summariesByTrialId.get(trialId).timing;
+    for (const [rowField, [p50Field, p95Field]] of Object.entries(
+      LIVE_FIRST_INSTANCE_CROSSOVER_TIMING_FIELDS,
+    )) {
+      const values = trialRows.map((row) => row[rowField]);
+      const expectedP50 = nearestRank(values, 0.5);
+      const expectedP95 = nearestRank(values, 0.95);
+      if (timing[p50Field] !== expectedP50 || timing[p95Field] !== expectedP95) {
+        failVerification(
+          `trial-summaries.json trial ${JSON.stringify(trialId)} timing ${p50Field}/${p95Field} differs from its retained rows.`,
+        );
+      }
+    }
+  }
+  return { rows, rowsByTrial, analysis };
+}
+
 function validateVerifiedFirstInstanceFrames(
   parsed,
   metadata,
@@ -4645,6 +6468,15 @@ function validateVerifiedFrames(
   summariesByTrialId,
   workloadCatalog,
 ) {
+  if (metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    return validateVerifiedLiveFirstInstanceFrames(
+      parsed,
+      metadata,
+      planIndex,
+      summariesByTrialId,
+      workloadCatalog,
+    );
+  }
   if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
     return validateVerifiedFirstInstanceFrames(
       parsed,
@@ -4819,11 +6651,22 @@ function validateVerifiedFrames(
   return null;
 }
 
-export async function verifyRunDirectory(runDirectory) {
+export async function verifyRunDirectory(
+  runDirectory,
+  { repositoryRoot = PROJECT_ROOT } = {},
+) {
   const absoluteDirectory = path.resolve(runDirectory);
-  const inputStat = await stat(absoluteDirectory);
-  if (!inputStat.isDirectory()) failVerification('run-directory input is not a directory.');
-  const { manifest, contentsByName } = await loadVerifiedArtifactContents(absoluteDirectory);
+  const candidateRepositoryRoot = path.resolve(repositoryRoot);
+  const inputStat = await lstat(absoluteDirectory);
+  if (!inputStat.isDirectory() || inputStat.isSymbolicLink()) {
+    failVerification('run-directory input must be a non-symbolic-link directory.');
+  }
+  const {
+    manifest,
+    contentsByName,
+    requiredNames,
+    bundleIntegrity,
+  } = await loadVerifiedArtifactContents(absoluteDirectory, candidateRepositoryRoot);
   const metadata = parseJsonArtifact(contentsByName.get('metadata.json'), 'metadata.json');
   const trialSummaries = parseJsonArtifact(
     contentsByName.get('trial-summaries.json'),
@@ -4845,14 +6688,35 @@ export async function verifyRunDirectory(runDirectory) {
     'gpu-telemetry-summary.json',
   );
   const { plan } = requireMetadataCompleteness(metadata, manifest);
+  await validateLiveCandidateViteRuntime(metadata, candidateRepositoryRoot);
+  validatePublicBundleCandidateBinding(bundleIntegrity, metadata);
+  const expectedRequiredNames = [...(
+    metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX
+      ? LIVE_FIRST_INSTANCE_REQUIRED_RUN_ARTIFACTS
+      : REQUIRED_RUN_ARTIFACTS
+  )].sort();
+  if (requiredNames.length !== expectedRequiredNames.length
+    || requiredNames.some((name, index) => name !== expectedRequiredNames[index])) {
+    failVerification(
+      'artifact-manifest.json requiredFiles do not match metadata protocol.matrixKind.',
+    );
+  }
   if (JSON.stringify(metadata.environment.gpuTelemetry) !== JSON.stringify(telemetrySummary)) {
     failVerification('metadata GPU telemetry summary differs from gpu-telemetry-summary.json.');
   }
-  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX
+    || metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
     validateNvidiaTelemetryReport(
       telemetrySummary,
       metadata,
       manifest,
+      contentsByName,
+    );
+  }
+  if (metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    validateLiveFirstInstanceEnvironmentEvidence(
+      telemetrySummary,
+      metadata,
       contentsByName,
     );
   }
@@ -4865,7 +6729,13 @@ export async function verifyRunDirectory(runDirectory) {
   const workloadCatalog = validateWorkloadManifests(workloadManifests, metadata);
   const csvText = contentsByName.get('frames.csv').toString('utf8');
   const parsed = parseCsv(csvText);
-  if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
+  if (metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX) {
+    try {
+      parseLiveFirstInstanceCrossoverRecords(parsed);
+    } catch (error) {
+      failVerification(error instanceof Error ? error.message : String(error));
+    }
+  } else if (metadata.protocol.matrixKind === FIRST_INSTANCE_CROSSOVER_MATRIX) {
     try {
       parseFirstInstanceCrossoverRecords(parsed);
     } catch (error) {
@@ -4898,6 +6768,18 @@ export async function verifyRunDirectory(runDirectory) {
 
   return {
     csvText,
+    bundleIntegrity,
+    liveFirstInstanceEvidenceDecision:
+      metadata.protocol.matrixKind === LIVE_FIRST_INSTANCE_CROSSOVER_MATRIX
+        ? {
+          adapterTelemetryAssociation:
+            metadata.liveFirstInstanceEnvironmentAudit.adapterTelemetryAssociation,
+          candidateEnvironmentGate:
+            metadata.liveFirstInstanceEnvironmentAudit.candidateEnvironmentGate,
+          overallEvidenceDecision:
+            metadata.liveFirstInstanceEnvironmentAudit.overallEvidenceDecision,
+        }
+        : null,
     artifactVerification: {
       status: 'consistent',
       scope: 'artifact-integrity-and-schema-only',
@@ -4907,7 +6789,7 @@ export async function verifyRunDirectory(runDirectory) {
       evidenceStatus: metadata.evidenceStatus,
       manifestSchemaVersion: manifest.schemaVersion,
       verifiedArtifactCount: [...contentsByName.keys()].length,
-      requiredArtifactCount: REQUIRED_RUN_ARTIFACTS.length,
+      requiredArtifactCount: expectedRequiredNames.length,
       completedTrialCount: metadata.completedTrialCount,
       acceptedTrialCount: metadata.acceptedTrialCount,
       sourceProvenanceStable: metadata.sourceProvenance.stable,
@@ -4917,6 +6799,21 @@ export async function verifyRunDirectory(runDirectory) {
 
 export function summarizeCsv(text) {
   const parsed = parseCsv(text);
+  if (isLiveFirstInstanceCrossoverCsv(parsed)) {
+    return {
+      ...summarizeLiveFirstInstanceCrossoverRows(
+        parseLiveFirstInstanceCrossoverRecords(parsed),
+      ),
+      artifactVerification: {
+        status: 'unverified',
+        scope: 'artifact-integrity-and-schema-only',
+        authenticityVerified: false,
+        inputKind: 'raw-csv-content',
+        evidenceStatus: null,
+        reason: 'Raw CSV is not bound to a consistent run artifact manifest.',
+      },
+    };
+  }
   if (isFirstInstanceCrossoverCsv(parsed)) {
     return {
       ...summarizeFirstInstanceCrossoverRows(
@@ -5017,6 +6914,12 @@ export async function summarizeInput(inputPath) {
     const verified = await verifyRunDirectory(absoluteInput);
     return {
       ...summarizeCsv(verified.csvText),
+      bundleIntegrity: verified.bundleIntegrity,
+      ...(verified.liveFirstInstanceEvidenceDecision === null
+        ? {}
+        : {
+          liveFirstInstanceEvidenceDecision: verified.liveFirstInstanceEvidenceDecision,
+        }),
       artifactVerification: verified.artifactVerification,
     };
   }

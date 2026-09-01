@@ -21,10 +21,26 @@ import { createIndexedIndirectCommands } from '../culling/indexed-command-layout
 import {
   STORAGE_TRANSFORM_ADDRESS_MODES,
   createStorageTransformMaterial,
+  validateStorageTransformAddressMode,
 } from '../materials/storage-transform.js';
-import { createMergedIndexedBucketGeometry } from '../render/indexed-bucket-geometry.js';
+import {
+  createMergedIndexedBucketGeometry,
+  createSharedGeometryShell,
+} from '../render/indexed-bucket-geometry.js';
 import { compareMembership, validateIndexedCommands } from '../validation/membership.js';
-import { createMembershipDigestEvidence } from '../validation/membership-digests.js';
+import {
+  createMembershipDigestEvidence,
+  sha256CanonicalUint32,
+} from '../validation/membership-digests.js';
+
+export const FIXED_SLICE_LANES = Object.freeze(['portable', 'feature']);
+
+const [PORTABLE_LANE, FEATURE_LANE] = FIXED_SLICE_LANES;
+
+export const FIXED_SLICE_ADDRESS_MODE_BY_LANE = Object.freeze({
+  [PORTABLE_LANE]: STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE,
+  [FEATURE_LANE]: STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
+});
 
 function sphereInsideNode(sphere, planeUniforms) {
   let inside = dot(planeUniforms[0].xyz, sphere.xyz)
@@ -41,56 +57,137 @@ function sphereInsideNode(sphere, planeUniforms) {
 }
 
 function asUint32(buffer) {
-  return new Uint32Array(buffer instanceof ArrayBuffer ? buffer : buffer.buffer);
+  if (buffer instanceof ArrayBuffer) return new Uint32Array(buffer);
+  if (ArrayBuffer.isView(buffer)) {
+    return new Uint32Array(buffer.buffer, buffer.byteOffset, buffer.byteLength / 4);
+  }
+  throw new TypeError('GPU readback must be an ArrayBuffer or ArrayBuffer view.');
 }
 
 function freezeStaticTransform(object) {
-  // Fixed-slice roots stay at identity; every instance transform comes from storage.
   object.matrixAutoUpdate = false;
   object.matrixWorldAutoUpdate = false;
 }
 
-function buildFixedSliceRepresentation(
+function validateSharedInputs({ scenario, sourceGeometries }) {
+  if (!Number.isInteger(scenario?.objectCount) || scenario.objectCount <= 0) {
+    throw new RangeError('scenario.objectCount must be a positive integer.');
+  }
+  if (!Number.isInteger(scenario?.bucketCount) || scenario.bucketCount <= 0) {
+    throw new RangeError('scenario.bucketCount must be a positive integer.');
+  }
+  if (!Array.isArray(sourceGeometries)
+    || sourceGeometries.length !== scenario.bucketCount) {
+    throw new RangeError('sourceGeometries length must equal scenario.bucketCount.');
+  }
+  const typedInputs = [
+    ['matrices', Float32Array, scenario.objectCount * 16],
+    ['bounds', Float32Array, scenario.objectCount * 4],
+    ['objectBuckets', Uint32Array, scenario.objectCount],
+    ['bucketBases', Uint32Array, scenario.bucketCount],
+    ['bucketCounts', Uint32Array, scenario.bucketCount],
+    ['cullOrder', Uint32Array, scenario.objectCount],
+  ];
+  for (const [name, Type, length] of typedInputs) {
+    if (!(scenario[name] instanceof Type) || scenario[name].length !== length) {
+      throw new RangeError(`scenario.${name} must be a ${Type.name} of length ${length}.`);
+    }
+  }
+  for (let bucket = 0; bucket < sourceGeometries.length; bucket += 1) {
+    if (!sourceGeometries[bucket]?.index) {
+      throw new Error(`Geometry bucket ${bucket} must be indexed.`);
+    }
+  }
+}
+
+function validateAddressModes(addressModes) {
+  if (!Array.isArray(addressModes) || addressModes.length === 0) {
+    throw new RangeError('addressModes must be a nonempty array.');
+  }
+  for (const addressMode of addressModes) validateStorageTransformAddressMode(addressMode);
+  if (new Set(addressModes).size !== addressModes.length) {
+    throw new RangeError('addressModes must not contain duplicates.');
+  }
+}
+
+export function validateFixedSliceLane(lane, label = 'lane') {
+  if (!FIXED_SLICE_LANES.includes(lane)) {
+    throw new RangeError(`${label} must be portable or feature.`);
+  }
+  return lane;
+}
+
+export function validateFixedSliceLanePhysicalOrder(value, label = 'lanePhysicalOrder') {
+  if (!Array.isArray(value)
+    || value.length !== FIXED_SLICE_LANES.length
+    || new Set(value).size !== FIXED_SLICE_LANES.length
+    || FIXED_SLICE_LANES.some((lane) => !value.includes(lane))) {
+    throw new RangeError(`${label} must be the exact portable/feature lane permutation.`);
+  }
+  return value;
+}
+
+/** Allocates all common cull resources and the common merged geometry payload. */
+export function createFixedSliceSharedResources(
   { scenario, sourceGeometries },
-  {
-    id,
-    perBucketRenderObjects,
-    addressMode = STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE,
-  },
+  { addressModes = [STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE] } = {},
 ) {
-  const indirectFirstInstance =
-    addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE;
-  const { geometry, firstIndexes } = createMergedIndexedBucketGeometry(
+  validateSharedInputs({ scenario, sourceGeometries });
+  validateAddressModes(addressModes);
+
+  const includesPortable = addressModes.includes(STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE);
+  const merged = createMergedIndexedBucketGeometry(
     sourceGeometries,
     scenario.bucketBases,
     scenario.bucketCounts,
-    { includeBucketBase: !indirectFirstInstance },
+    { includeBucketBase: includesPortable },
   );
-  const commandLayout = createIndexedIndirectCommands(
+  const geometriesByAddressMode = {};
+  if (includesPortable) {
+    merged.geometry.name = 'fixed-slice-portable-merged-indexed-fixtures';
+    geometriesByAddressMode[STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE] = merged.geometry;
+  }
+  if (addressModes.includes(STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE)) {
+    if (includesPortable) {
+      const featureGeometry = createSharedGeometryShell(merged.geometry, {
+        omitAttributes: ['bucketBase'],
+      });
+      featureGeometry.name = 'fixed-slice-feature-merged-indexed-fixtures';
+      geometriesByAddressMode[STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE]
+        = featureGeometry;
+    } else {
+      merged.geometry.name = 'fixed-slice-feature-merged-indexed-fixtures';
+      geometriesByAddressMode[STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE]
+        = merged.geometry;
+    }
+  }
+
+  const commandTemplate = createIndexedIndirectCommands(
     sourceGeometries,
     scenario.bucketCounts,
     null,
-    firstIndexes,
-    indirectFirstInstance ? scenario.bucketBases : null,
+    merged.firstIndexes,
   );
-  const matrixAttribute = new StorageBufferAttribute(scenario.matrices, 16);
-  const boundsAttribute = new StorageBufferAttribute(scenario.bounds, 4);
-  const bucketAttribute = new StorageBufferAttribute(scenario.objectBuckets, 1);
-  const baseAttribute = new StorageBufferAttribute(scenario.bucketBases, 1);
-  const capacityAttribute = new StorageBufferAttribute(commandLayout.capacities, 1);
-  const cullOrderAttribute = new StorageBufferAttribute(scenario.cullOrder, 1);
-  const visibleIdsAttribute = new StorageBufferAttribute(new Uint32Array(scenario.objectCount), 1);
-  const overflowAttribute = new StorageBufferAttribute(new Uint32Array(1), 1);
-  const indirectAttribute = new IndirectStorageBufferAttribute(commandLayout.commands, 5);
+  const attributes = Object.freeze({
+    matrix: new StorageBufferAttribute(scenario.matrices, 16),
+    bounds: new StorageBufferAttribute(scenario.bounds, 4),
+    objectBucket: new StorageBufferAttribute(scenario.objectBuckets, 1),
+    bucketBase: new StorageBufferAttribute(scenario.bucketBases, 1),
+    bucketCapacity: new StorageBufferAttribute(commandTemplate.capacities, 1),
+    cullOrder: new StorageBufferAttribute(scenario.cullOrder, 1),
+    visibleIds: new StorageBufferAttribute(new Uint32Array(scenario.objectCount), 1),
+    overflow: new StorageBufferAttribute(new Uint32Array(1), 1),
+  });
   const planeState = createFrustumPlaneState();
-
-  const boundsRead = storage(boundsAttribute, 'vec4', scenario.objectCount).toReadOnly();
-  const bucketRead = storage(bucketAttribute, 'uint', scenario.objectCount).toReadOnly();
-  const baseRead = storage(baseAttribute, 'uint', scenario.bucketCount).toReadOnly();
-  const capacityRead = storage(capacityAttribute, 'uint', scenario.bucketCount).toReadOnly();
-  const orderRead = storage(cullOrderAttribute, 'uint', scenario.objectCount).toReadOnly();
-  const visibleWrite = storage(visibleIdsAttribute, 'uint', scenario.objectCount);
-  const overflowAtomic = storage(overflowAttribute, 'uint', 1).toAtomic();
+  const storageNodes = Object.freeze({
+    boundsRead: storage(attributes.bounds, 'vec4', scenario.objectCount).toReadOnly(),
+    bucketRead: storage(attributes.objectBucket, 'uint', scenario.objectCount).toReadOnly(),
+    baseRead: storage(attributes.bucketBase, 'uint', scenario.bucketCount).toReadOnly(),
+    capacityRead: storage(attributes.bucketCapacity, 'uint', scenario.bucketCount).toReadOnly(),
+    orderRead: storage(attributes.cullOrder, 'uint', scenario.objectCount).toReadOnly(),
+    visibleWrite: storage(attributes.visibleIds, 'uint', scenario.objectCount),
+    overflowAtomic: storage(attributes.overflow, 'uint', 1).toAtomic(),
+  });
   const drawStruct = struct({
     indexCount: 'uint',
     instanceCount: { type: 'uint', atomic: true },
@@ -98,48 +195,106 @@ function buildFixedSliceRepresentation(
     baseVertex: 'int',
     firstInstance: 'uint',
   }, 'FixedSliceIndexedDraw');
-  const drawStorage = storage(indirectAttribute, drawStruct, commandLayout.recordCount);
 
+  return {
+    kind: 'fixed-slice-shared-resources',
+    scenario,
+    sourceGeometries,
+    firstIndexes: merged.firstIndexes,
+    commandCapacities: commandTemplate.capacities,
+    commandRecordCount: commandTemplate.recordCount,
+    geometriesByAddressMode,
+    ownedGeometries: Object.values(geometriesByAddressMode),
+    attributes,
+    storageAttributes: Object.values(attributes),
+    storageNodes,
+    drawStruct,
+    planeState,
+  };
+}
+
+function createFixedSliceComputeNodes(shared, indirectAttribute, commandRecordCount) {
+  const { scenario, storageNodes, planeState, drawStruct } = shared;
+  const drawStorage = storage(indirectAttribute, drawStruct, commandRecordCount);
   const reset = Fn(() => {
     If(instanceIndex.lessThan(uint(scenario.bucketCount)), () => {
       atomicStore(drawStorage.element(instanceIndex).get('instanceCount'), uint(0));
       If(instanceIndex.equal(uint(0)), () => {
-        atomicStore(overflowAtomic.element(uint(0)), uint(0));
+        atomicStore(storageNodes.overflowAtomic.element(uint(0)), uint(0));
       });
     });
   })().compute(scenario.bucketCount);
 
   const cull = Fn(() => {
     If(instanceIndex.lessThan(uint(scenario.objectCount)), () => {
-      const objectId = orderRead.element(instanceIndex).toVar('cullObjectId');
-      const sphere = boundsRead.element(objectId).toVar('worldSphere');
+      const objectId = storageNodes.orderRead.element(instanceIndex).toVar('cullObjectId');
+      const sphere = storageNodes.boundsRead.element(objectId).toVar('worldSphere');
       If(sphereInsideNode(sphere, planeState.uniforms), () => {
-        const bucket = bucketRead.element(objectId).toVar('objectBucket');
+        const bucket = storageNodes.bucketRead.element(objectId).toVar('objectBucket');
         const draw = drawStorage.element(bucket);
         const slot = atomicAdd(draw.get('instanceCount'), uint(1)).toVar('visibleSlot');
-        If(slot.lessThan(capacityRead.element(bucket)), () => {
-          visibleWrite.element(baseRead.element(bucket).add(slot)).assign(objectId);
+        If(slot.lessThan(storageNodes.capacityRead.element(bucket)), () => {
+          storageNodes.visibleWrite
+            .element(storageNodes.baseRead.element(bucket).add(slot))
+            .assign(objectId);
         }).Else(() => {
-          atomicStore(overflowAtomic.element(uint(0)), uint(1));
+          atomicStore(storageNodes.overflowAtomic.element(uint(0)), uint(1));
         });
       });
     });
   })().compute(scenario.objectCount);
+  return [reset, cull];
+}
 
+/** Creates the only lane-specific state used by paired and standalone paths. */
+export function createFixedSliceLane(
+  shared,
+  {
+    lane = PORTABLE_LANE,
+    id = lane === FEATURE_LANE
+      ? 'fixed-slice-indirect-first-instance'
+      : 'fixed-slice',
+    perBucketRenderObjects = false,
+  } = {},
+) {
+  validateFixedSliceLane(lane);
+  if (!shared || shared.kind !== 'fixed-slice-shared-resources') {
+    throw new TypeError('createFixedSliceLane requires fixed-slice shared resources.');
+  }
+  const { scenario, sourceGeometries, firstIndexes } = shared;
+  const addressMode = FIXED_SLICE_ADDRESS_MODE_BY_LANE[lane];
+  const geometry = shared.geometriesByAddressMode[addressMode];
+  if (!geometry) {
+    throw new Error(`Shared fixed-slice resources do not include the ${lane} geometry.`);
+  }
+  const indirectFirstInstance = lane === FEATURE_LANE;
+  const commandLayout = createIndexedIndirectCommands(
+    sourceGeometries,
+    scenario.bucketCounts,
+    null,
+    firstIndexes,
+    indirectFirstInstance ? scenario.bucketBases : null,
+  );
+  const indirectAttribute = new IndirectStorageBufferAttribute(commandLayout.commands, 5);
+  const computeNodes = createFixedSliceComputeNodes(
+    shared,
+    indirectAttribute,
+    commandLayout.recordCount,
+  );
   const material = createStorageTransformMaterial({
-    matrixAttribute,
+    matrixAttribute: shared.attributes.matrix,
     objectCount: scenario.objectCount,
-    visibleIdsAttribute,
+    visibleIdsAttribute: shared.attributes.visibleIds,
     addressMode,
   });
   const root = new BundleGroup();
   freezeStaticTransform(root);
   root.name = perBucketRenderObjects
     ? 'fixed-slice-per-bucket-merged-indexed-indirect-bundle'
-    : 'fixed-slice-merged-indexed-indirect-bundle';
+    : `${id}-merged-indexed-indirect-bundle`;
 
-  let geometries;
   let bundleRecordCallbackCount = 0;
+  const meshes = [];
   if (perBucketRenderObjects) {
     geometry.setIndirect(indirectAttribute, 0);
     for (let bucket = 0; bucket < scenario.bucketCount; bucket += 1) {
@@ -154,9 +309,9 @@ function buildFixedSliceRepresentation(
           bundleRecordCallbackCount += 1;
         }
       };
+      meshes.push(mesh);
       root.add(mesh);
     }
-    geometries = [geometry];
   } else {
     geometry.setIndirect(indirectAttribute, Array.from(commandLayout.offsets));
     const mesh = new Mesh(geometry, material);
@@ -168,32 +323,175 @@ function buildFixedSliceRepresentation(
         bundleRecordCallbackCount += 1;
       }
     };
+    meshes.push(mesh);
     root.add(mesh);
-    geometries = [geometry];
   }
+
+  return {
+    kind: 'fixed-slice-lane',
+    id,
+    lane,
+    addressMode,
+    root,
+    bundle: root,
+    meshes,
+    geometry,
+    material,
+    indirectAttribute,
+    commandLayout,
+    computeNodes,
+    get bundleRecordCallbackCount() {
+      return bundleRecordCallbackCount;
+    },
+    commandBufferCommitment() {
+      return {
+        lane,
+        attributeId: indirectAttribute.id,
+        attributeVersion: indirectAttribute.version,
+        byteOffset: 0,
+        byteLength: commandLayout.commands.byteLength,
+        recordCount: commandLayout.recordCount,
+        drawCommandCount: scenario.bucketCount,
+        firstOffset: commandLayout.offsets[0],
+        allOffsets: Array.from(commandLayout.offsets),
+      };
+    },
+  };
+}
+
+function expectedCountsForIds(scenario, expectedIds) {
+  if (!(expectedIds instanceof Uint32Array)) {
+    throw new TypeError('expectedIds must be a Uint32Array.');
+  }
+  const counts = new Uint32Array(scenario.bucketCount);
+  for (const objectId of expectedIds) {
+    if (objectId >= scenario.objectCount) {
+      throw new RangeError(`Expected visible object ID ${objectId} is out of range.`);
+    }
+    counts[scenario.objectBuckets[objectId]] += 1;
+  }
+  return counts;
+}
+
+export async function readFixedSliceLaneSnapshot(renderer, shared, lane) {
+  if (typeof renderer?.getArrayBufferAsync !== 'function') {
+    throw new TypeError('Fixed-slice validation requires renderer.getArrayBufferAsync().');
+  }
+  const [commandBuffer, visibleBuffer, overflowBuffer] = await Promise.all([
+    renderer.getArrayBufferAsync(lane.indirectAttribute),
+    renderer.getArrayBufferAsync(shared.attributes.visibleIds),
+    renderer.getArrayBufferAsync(shared.attributes.overflow),
+  ]);
+  return {
+    commands: asUint32(commandBuffer).slice(),
+    visibleIds: asUint32(visibleBuffer).slice(),
+    overflow: asUint32(overflowBuffer)[0],
+  };
+}
+
+export async function validateFixedSliceLaneSnapshot({
+  shared,
+  lane,
+  expectedIds,
+  snapshot,
+}) {
+  if (!shared || shared.kind !== 'fixed-slice-shared-resources') {
+    throw new TypeError('validateFixedSliceLaneSnapshot requires shared resources.');
+  }
+  if (!lane || lane.kind !== 'fixed-slice-lane') {
+    throw new TypeError('validateFixedSliceLaneSnapshot requires a fixed-slice lane.');
+  }
+  if (!(snapshot?.commands instanceof Uint32Array)
+    || !(snapshot.visibleIds instanceof Uint32Array)) {
+    throw new TypeError('Fixed-slice validation snapshot must contain Uint32Array data.');
+  }
+  const { scenario, sourceGeometries, firstIndexes } = shared;
+  const expectedCounts = expectedCountsForIds(scenario, expectedIds);
+  const actualCounts = new Uint32Array(scenario.bucketCount);
+  for (let bucket = 0; bucket < scenario.bucketCount; bucket += 1) {
+    actualCounts[bucket] = snapshot.commands[bucket * 5 + 1];
+  }
+  const membership = compareMembership({
+    expectedIds,
+    actualIds: snapshot.visibleIds,
+    actualCounts,
+    objectBuckets: scenario.objectBuckets,
+    bucketBases: scenario.bucketBases,
+    capacities: scenario.bucketCounts,
+    objectCount: scenario.objectCount,
+  });
+  const commandValidation = validateIndexedCommands({
+    commands: snapshot.commands,
+    geometries: sourceGeometries,
+    expectedCounts,
+    expectedFirstIndexes: firstIndexes,
+    expectedFirstInstances: lane.lane === FEATURE_LANE ? scenario.bucketBases : null,
+  });
+  const membershipDigests = await createMembershipDigestEvidence({
+    expectedIds,
+    actualIds: snapshot.visibleIds,
+    actualCounts,
+    objectBuckets: scenario.objectBuckets,
+    bucketBases: scenario.bucketBases,
+    capacities: scenario.bucketCounts,
+  });
+  const [commandSha256, survivorSha256] = await Promise.all([
+    sha256CanonicalUint32(snapshot.commands),
+    sha256CanonicalUint32(snapshot.visibleIds),
+  ]);
+  return {
+    pass: membership.pass
+      && membershipDigests.pass
+      && commandValidation.pass
+      && snapshot.overflow === 0,
+    kind: `${lane.id}-exact-membership`,
+    lane: lane.lane,
+    membership,
+    membershipDigests,
+    commandValidation,
+    overflow: snapshot.overflow,
+    actualCounts,
+    commandSha256,
+    survivorSha256,
+  };
+}
+
+function buildFixedSliceRepresentation(options, {
+  id,
+  lane = PORTABLE_LANE,
+  perBucketRenderObjects,
+}) {
+  const addressMode = FIXED_SLICE_ADDRESS_MODE_BY_LANE[lane];
+  const shared = createFixedSliceSharedResources(options, { addressModes: [addressMode] });
+  const laneState = createFixedSliceLane(shared, {
+    id,
+    lane,
+    perBucketRenderObjects,
+  });
+  const { scenario } = shared;
 
   const diagnostics = () => {
     if (perBucketRenderObjects) return {
       kind: 'shared-merged-geometry-per-bucket-render-objects',
-      bundleRecordCallbackCount,
-      geometryIdentityCount: new Set(root.children.map((child) => child.geometry)).size,
-      materialIdentityCount: new Set(root.children.map((child) => child.material)).size,
-      meshCount: root.children.length,
-      geometryInstanceCount: geometry.instanceCount,
+      bundleRecordCallbackCount: laneState.bundleRecordCallbackCount,
+      geometryIdentityCount: new Set(laneState.meshes.map((child) => child.geometry)).size,
+      materialIdentityCount: new Set(laneState.meshes.map((child) => child.material)).size,
+      meshCount: laneState.meshes.length,
+      geometryInstanceCount: laneState.geometry.instanceCount,
     };
-    if (indirectFirstInstance) return {
+    if (lane === FEATURE_LANE) return {
       kind: 'single-merged-geometry-indirect-first-instance',
       addressMode,
-      hasBucketBaseAttribute: geometry.getAttribute('bucketBase') !== undefined,
+      hasBucketBaseAttribute: laneState.geometry.getAttribute('bucketBase') !== undefined,
       nonzeroFirstInstanceCount: Array.from(
         { length: scenario.bucketCount },
-        (_, bucket) => commandLayout.commands[bucket * 5 + 4],
+        (_, bucket) => laneState.commandLayout.commands[bucket * 5 + 4],
       ).filter((value) => value !== 0).length,
-      bundleRecordCallbackCount,
+      bundleRecordCallbackCount: laneState.bundleRecordCallbackCount,
       geometryIdentityCount: 1,
       materialIdentityCount: 1,
-      meshCount: root.children.length,
-      geometryInstanceCount: geometry.instanceCount,
+      meshCount: laneState.meshes.length,
+      geometryInstanceCount: laneState.geometry.instanceCount,
     };
     return null;
   };
@@ -202,86 +500,49 @@ function buildFixedSliceRepresentation(
     ? null
     : {
       kind: 'single-merged-geometry-atomic-fixed-slice-lifecycle',
-      bundleGroupStatic: root.static === true,
-      bundleRecordCallbackCount,
-      geometryIdentityCount: new Set(root.children.map((child) => child.geometry)).size,
-      materialIdentityCount: new Set(root.children.map((child) => child.material)).size,
-      meshCount: root.children.length,
+      bundleGroupStatic: laneState.root.static === true,
+      bundleRecordCallbackCount: laneState.bundleRecordCallbackCount,
+      geometryIdentityCount: new Set(laneState.meshes.map((child) => child.geometry)).size,
+      materialIdentityCount: new Set(laneState.meshes.map((child) => child.material)).size,
+      meshCount: laneState.meshes.length,
     });
 
   return {
     id,
-    root,
-    geometries,
-    materials: [material],
+    root: laneState.root,
+    geometries: shared.ownedGeometries,
+    materials: [laneState.material],
     parityResources: Object.freeze({
-      matrixAttribute,
-      visibleIdsAttribute,
+      matrixAttribute: shared.attributes.matrix,
+      visibleIdsAttribute: shared.attributes.visibleIds,
       objectCount: scenario.objectCount,
       addressMode,
     }),
-    storageAttributes: [
-      matrixAttribute,
-      boundsAttribute,
-      bucketAttribute,
-      baseAttribute,
-      capacityAttribute,
-      cullOrderAttribute,
-      visibleIdsAttribute,
-      overflowAttribute,
-      indirectAttribute,
-    ],
-    computeNodes: [reset, cull],
+    storageAttributes: [...shared.storageAttributes, laneState.indirectAttribute],
+    computeNodes: laneState.computeNodes,
     usesCompute: true,
     configuredDrawCommands: scenario.bucketCount,
     configuredRenderObjects: perBucketRenderObjects ? scenario.bucketCount : 1,
     configuredComputeDispatches: 2,
     configuredComputeSubmissions: 1,
     configuredSubmittedInstances: null,
+    sharedResources: shared,
+    laneState,
     diagnostics,
     lifecycleDiagnostics,
     update(camera, renderer) {
-      updateFrustumPlaneState(planeState, camera, renderer);
+      updateFrustumPlaneState(shared.planeState, camera, renderer);
     },
     submitCompute(renderer) {
-      renderer.compute([reset, cull]);
+      renderer.compute(laneState.computeNodes);
     },
     async validate(renderer, expectedIds) {
-      const [commandBuffer, visibleBuffer, overflowBuffer] = await Promise.all([
-        renderer.getArrayBufferAsync(indirectAttribute),
-        renderer.getArrayBufferAsync(visibleIdsAttribute),
-        renderer.getArrayBufferAsync(overflowAttribute),
-      ]);
-      const commands = asUint32(commandBuffer);
-      const visibleIds = asUint32(visibleBuffer);
-      const overflow = asUint32(overflowBuffer)[0];
-      const actualCounts = new Uint32Array(scenario.bucketCount);
-      for (let bucket = 0; bucket < scenario.bucketCount; bucket += 1) {
-        actualCounts[bucket] = commands[bucket * 5 + 1];
-      }
-      const membership = compareMembership({
+      const snapshot = await readFixedSliceLaneSnapshot(renderer, shared, laneState);
+      const validation = await validateFixedSliceLaneSnapshot({
+        shared,
+        lane: laneState,
         expectedIds,
-        actualIds: visibleIds,
-        actualCounts,
-        objectBuckets: scenario.objectBuckets,
-        bucketBases: scenario.bucketBases,
-        capacities: scenario.bucketCounts,
-        objectCount: scenario.objectCount,
-      });
-      const commandValidation = validateIndexedCommands({
-        commands,
-        geometries: sourceGeometries,
-        expectedCounts: scenario.visibleCounts,
-        expectedFirstIndexes: firstIndexes,
-        expectedFirstInstances: indirectFirstInstance ? scenario.bucketBases : null,
-      });
-      const membershipDigests = await createMembershipDigestEvidence({
-        expectedIds,
-        actualIds: visibleIds,
-        actualCounts,
-        objectBuckets: scenario.objectBuckets,
-        bucketBases: scenario.bucketBases,
-        capacities: scenario.bucketCounts,
+        snapshot,
       });
       const representation = diagnostics();
       const representationPass = !perBucketRenderObjects || (
@@ -294,16 +555,8 @@ function buildFixedSliceRepresentation(
           === Math.ceil(scenario.objectCount / scenario.bucketCount)
       );
       return {
-        pass: membership.pass
-          && membershipDigests.pass
-          && commandValidation.pass
-          && overflow === 0
-          && representationPass,
-        kind: `${id}-exact-membership`,
-        membership,
-        membershipDigests,
-        commandValidation,
-        overflow,
+        ...validation,
+        pass: validation.pass && representationPass,
         representation,
       };
     },
@@ -313,6 +566,7 @@ function buildFixedSliceRepresentation(
 export function buildFixedSliceStrategy(options) {
   return buildFixedSliceRepresentation(options, {
     id: 'fixed-slice',
+    lane: PORTABLE_LANE,
     perBucketRenderObjects: false,
   });
 }
@@ -320,6 +574,7 @@ export function buildFixedSliceStrategy(options) {
 export function buildFixedSlicePerBucketStrategy(options) {
   return buildFixedSliceRepresentation(options, {
     id: 'fixed-slice-per-bucket',
+    lane: PORTABLE_LANE,
     perBucketRenderObjects: true,
   });
 }
@@ -332,7 +587,33 @@ export function buildIndirectFirstInstanceStrategy(options) {
   }
   return buildFixedSliceRepresentation(options, {
     id: 'fixed-slice-indirect-first-instance',
+    lane: FEATURE_LANE,
     perBucketRenderObjects: false,
-    addressMode: STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
   });
+}
+
+/** Selects one standalone lane without constructing the other lane. */
+export function selectFixedSliceDeployment({ renderer, featureAvailable } = {}) {
+  if (featureAvailable !== undefined && typeof featureAvailable !== 'boolean') {
+    throw new TypeError('featureAvailable must be a boolean when supplied.');
+  }
+  const available = featureAvailable
+    ?? (renderer?.hasFeature?.('indirect-first-instance') === true);
+  return Object.freeze({
+    lane: available ? FEATURE_LANE : PORTABLE_LANE,
+    strategyId: available
+      ? 'fixed-slice-indirect-first-instance'
+      : 'fixed-slice',
+    featureAvailable: available,
+  });
+}
+
+export function buildFixedSliceDeploymentStrategy(options, { featureAvailable } = {}) {
+  const selection = selectFixedSliceDeployment({
+    renderer: options?.renderer,
+    featureAvailable,
+  });
+  return selection.lane === FEATURE_LANE
+    ? buildIndirectFirstInstanceStrategy(options)
+    : buildFixedSliceStrategy(options);
 }

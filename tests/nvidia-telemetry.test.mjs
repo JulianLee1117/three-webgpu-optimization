@@ -1,11 +1,44 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  compareComputeProcessIdentitySets,
+  createNvidiaTelemetryCoverageAudit,
   parseComputeProcessCsv,
   parseNvidiaSmiLine,
   summarizeTelemetryRows,
   telemetryRowsToCsv,
 } from '../scripts/nvidia-telemetry.mjs';
+
+function availableComputeSnapshot(processes, overrides = {}) {
+  return {
+    status: 'available',
+    rawNonemptyLineCount: processes.length,
+    parsedRecordCount: processes.length,
+    malformedLineCount: 0,
+    stdoutByteCount: processes.length === 0 ? 0 : 1,
+    stdoutTruncated: false,
+    stderrByteCount: 0,
+    processes,
+    ...overrides,
+  };
+}
+
+function coverageRow(runElapsedMs, {
+  gpuIndex = 0,
+  gpuName = 'Fixture GPU',
+  gpuUuid = 'GPU-fixture',
+  pstate = 'P8',
+  gpuUtilizationPercent = 0,
+} = {}) {
+  return {
+    runElapsedMs,
+    gpuIndex,
+    gpuName,
+    gpuUuid,
+    pstate,
+    gpuUtilizationPercent,
+  };
+}
 
 test('NVIDIA telemetry parsing supports quoted GPU names and unavailable values', () => {
   const sample = parseNvidiaSmiLine(
@@ -28,15 +61,164 @@ test('NVIDIA telemetry parsing supports quoted GPU names and unavailable values'
   assert.equal(parseNvidiaSmiLine('malformed event line'), null);
 });
 
+test('compute-process identity comparison ignores memory but binds GPU, PID, and basename', () => {
+  const pre = availableComputeSnapshot([
+      { gpuUuid: 'GPU-b', pid: 9, processName: 'python.exe', usedMemoryMiB: 100 },
+      { gpuUuid: 'GPU-a', pid: 4, processName: 'chrome.exe', usedMemoryMiB: 200 },
+  ]);
+  const post = availableComputeSnapshot([
+      { gpuUuid: 'GPU-a', pid: 4, processName: 'chrome.exe', usedMemoryMiB: 500 },
+      { gpuUuid: 'GPU-b', pid: 9, processName: 'python.exe', usedMemoryMiB: 300 },
+  ]);
+  const equal = compareComputeProcessIdentitySets(pre, post);
+  assert.equal(equal.pass, true);
+  assert.deepEqual(equal.identityFields, ['gpuUuid', 'pid', 'processName']);
+  const changedProcesses = [...post.processes, {
+      gpuUuid: 'GPU-a', pid: 10, processName: 'worker.exe', usedMemoryMiB: 1,
+  }];
+  const changed = compareComputeProcessIdentitySets(
+    pre,
+    availableComputeSnapshot(changedProcesses),
+  );
+  assert.equal(changed.pass, false);
+  assert.match(changed.reasons.join('; '), /identity sets differ/);
+});
+
 test('compute-process snapshots retain basenames but discard private paths', () => {
   const output = [
     'GPU-abc, 1234, "C:\\Users\\person\\tools\\python.exe", 8192',
     'GPU-def, 5678, /opt/workloads/render, [N/A]',
   ].join('\n');
-  assert.deepEqual(parseComputeProcessCsv(output), [
-    { gpuUuid: 'GPU-abc', pid: 1234, processName: 'python.exe', usedMemoryMiB: 8192 },
-    { gpuUuid: 'GPU-def', pid: 5678, processName: 'render', usedMemoryMiB: null },
-  ]);
+  assert.deepEqual(parseComputeProcessCsv(output), {
+    processes: [
+      { gpuUuid: 'GPU-abc', pid: 1234, processName: 'python.exe', usedMemoryMiB: 8192 },
+      { gpuUuid: 'GPU-def', pid: 5678, processName: 'render', usedMemoryMiB: null },
+    ],
+    rawNonemptyLineCount: 2,
+    parsedRecordCount: 2,
+    malformedLineCount: 0,
+  });
+});
+
+test('compute-process parser distinguishes a valid empty set from malformed output', () => {
+  assert.deepEqual(parseComputeProcessCsv('\r\n  \n'), {
+    processes: [],
+    rawNonemptyLineCount: 0,
+    parsedRecordCount: 0,
+    malformedLineCount: 0,
+  });
+  const parsed = parseComputeProcessCsv([
+    'GPU-a, 10, chrome.exe, 100',
+    'GPU-b, not-a-pid, worker.exe, 20',
+    'GPU-c, 12, "unterminated, 30',
+    ', 13, missing-gpu.exe, 40',
+    'GPU-d, 14, missing-memory.exe, invalid',
+    'GPU-e, 0, zero-pid.exe, 50',
+    'GPU-f, 15, bad"quote.exe, 60',
+  ].join('\n'));
+  assert.deepEqual(parsed, {
+    processes: [
+      { gpuUuid: 'GPU-a', pid: 10, processName: 'chrome.exe', usedMemoryMiB: 100 },
+    ],
+    rawNonemptyLineCount: 7,
+    parsedRecordCount: 1,
+    malformedLineCount: 6,
+  });
+});
+
+test('compute-process identity comparison rejects malformed or truncated snapshot diagnostics', () => {
+  const empty = availableComputeSnapshot([]);
+  const malformed = availableComputeSnapshot([], {
+    rawNonemptyLineCount: 1,
+    malformedLineCount: 1,
+  });
+  const truncated = availableComputeSnapshot([], {
+    stdoutByteCount: 1_048_577,
+    stdoutTruncated: true,
+  });
+  assert.equal(compareComputeProcessIdentitySets(malformed, malformed).pass, false);
+  assert.equal(compareComputeProcessIdentitySets(truncated, empty).pass, false);
+});
+
+test('telemetry coverage allows jitter within the frozen 2000 ms liveness tolerance', () => {
+  const audit = createNvidiaTelemetryCoverageAudit([
+    coverageRow(100),
+    coverageRow(350),
+    coverageRow(900),
+  ], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 1_000,
+    requestedIntervalMs: 250,
+  });
+  assert.equal(audit.pass, true);
+  assert.equal(audit.livenessToleranceMs, 2_000);
+  assert.equal(audit.initialMaximumGapMs, 100);
+  assert.equal(audit.internalMaximumGapMs, 550);
+  assert.equal(audit.finalMaximumGapMs, 100);
+});
+
+test('telemetry coverage rejects sparse collection and internal liveness gaps', () => {
+  const delayedStart = createNvidiaTelemetryCoverageAudit([coverageRow(2_001)], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 2_100,
+  });
+  assert.equal(delayedStart.pass, false);
+  assert.ok(delayedStart.failureCodes.includes('telemetry-initial-gap-exceeded'));
+
+  const single = createNvidiaTelemetryCoverageAudit([coverageRow(100)], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 120_000,
+  });
+  assert.equal(single.pass, false);
+  assert.ok(single.failureCodes.includes('telemetry-final-gap-exceeded'));
+
+  const stalled = createNvidiaTelemetryCoverageAudit([
+    coverageRow(100),
+    coverageRow(2_101),
+  ], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 2_200,
+  });
+  assert.equal(stalled.pass, false);
+  assert.ok(stalled.failureCodes.includes('telemetry-internal-gap-exceeded'));
+});
+
+test('telemetry coverage rejects samples outside the recorded collector bounds', () => {
+  const audit = createNvidiaTelemetryCoverageAudit([
+    coverageRow(99),
+    coverageRow(301),
+  ], {
+    collectorStartedRunElapsedMs: 100,
+    collectorStopRequestedRunElapsedMs: 300,
+  });
+  assert.equal(audit.pass, false);
+  assert.ok(audit.failureCodes.includes('telemetry-sample-outside-collector-bounds'));
+});
+
+test('telemetry coverage requires a constant GPU identity set per sampling cycle', () => {
+  const rows = [
+    coverageRow(100, { gpuIndex: 0, gpuName: 'GPU A', gpuUuid: 'GPU-a' }),
+    coverageRow(101, { gpuIndex: 1, gpuName: 'GPU B', gpuUuid: 'GPU-b' }),
+    coverageRow(350, { gpuIndex: 0, gpuName: 'GPU A', gpuUuid: 'GPU-a' }),
+  ];
+  const audit = createNvidiaTelemetryCoverageAudit(rows, {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 400,
+  });
+  assert.equal(audit.pass, false);
+  assert.equal(audit.constantGpuIdentitySet, false);
+  assert.ok(audit.failureCodes.includes('telemetry-gpu-identity-set-changed'));
+});
+
+test('telemetry coverage does not gate observed performance or power-state values', () => {
+  const audit = createNvidiaTelemetryCoverageAudit([
+    coverageRow(100, { pstate: 'P8', gpuUtilizationPercent: 0 }),
+    coverageRow(350, { pstate: 'P0', gpuUtilizationPercent: 100 }),
+  ], {
+    collectorStartedRunElapsedMs: 0,
+    collectorStopRequestedRunElapsedMs: 400,
+  });
+  assert.equal(audit.pass, true);
 });
 
 test('telemetry summary reports per-GPU ranges, medians, states, phases, and gaps', () => {

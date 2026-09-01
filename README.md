@@ -42,9 +42,49 @@ Each paired trial alternates the two lanes inside complementary eight-frame supe
 
 ## Indirect `firstInstance` addressing crossover
 
-The latest experiment isolates one redundant address operation in the fixed-slice render path. The portable lane supplies a per-vertex `bucketBase` attribute and reads `visibleIds[bucketBase + instanceIndex]`, with zero in the fifth indirect-command word. The feature lane removes that vertex input and integer addition, places the bucket-slice base in the command's `firstInstance`, and reads `visibleIds[instanceIndex]`. It is enabled only when the adapter exposes WebGPU's optional `indirect-first-instance` feature; the portable lane remains the fallback.
+The render-only experiment isolates one redundant address operation in the fixed-slice render path. The portable lane supplies a per-vertex `bucketBase` attribute and reads `visibleIds[bucketBase + instanceIndex]`, with zero in the fifth indirect-command word. The feature lane removes that vertex input and integer addition, places the bucket-slice base in the command's `firstInstance`, and reads `visibleIds[instanceIndex]`. It is enabled only when the adapter exposes WebGPU's optional `indirect-first-instance` feature; the portable lane remains the fallback.
 
-Both lanes share the immutable survivor list, matrix and indirect allocations, common geometry attributes, material behavior, output, 32 native draws, and one selected static bundle per frame. The harness alternates the already-built lanes inside balanced eight-frame blocks and proves every survivor address with an untimed RGBA8 oracle in addition to full-frame color, depth, and object-ID parity. The exact design and claim boundary are in the [indirect `firstInstance` crossover protocol](docs/INDIRECT_FIRST_INSTANCE_CROSSOVER_PROTOCOL.md).
+Both lanes share the immutable survivor list, matrix and indirect allocations, common geometry attributes, material behavior, output, 32 native draws, and one selected static bundle per frame. The harness alternates the already-built lanes inside balanced eight-frame blocks and exhaustively verifies every survivor address with an untimed RGBA8 oracle in addition to full-frame color, depth, and object-ID parity. The exact design and claim boundary are in the [indirect `firstInstance` crossover protocol](docs/INDIRECT_FIRST_INSTANCE_CROSSOVER_PROTOCOL.md).
+
+## Live indirect `firstInstance` crossover
+
+The live follow-up places the normal fixed-slice cull pass back inside every
+frame and evaluates timestamped compute plus render cost. The lanes share all
+object inputs, frustum state, survivor output, overflow state, common geometry,
+camera, target, and material output. Each owns a natural zero-offset indirect
+command buffer and a pre-recorded static bundle. Every frame submits one reset
+and one cull dispatch, selects one lane, and renders its 32 indexed indirect
+commands.
+
+Three.js r185 assigns the two required command buffers different generated WGSL
+symbols. The harness retains both raw compute shaders, resolves the lane-local
+command binding from runtime evidence, and verifies byte equality after a
+single-binding/two-identifier alpha-renaming. The binding shape, command struct,
+dispatch dimensions, storage-resource identities, command fields, survivor
+membership, every active and padding address, and exact color/depth/object-ID
+output are independently gated. The primary endpoint is timestamped compute
+plus render pass duration, with render also retained as a mandatory secondary
+endpoint. Its cyclic eight-frame schedule balances all four current/previous
+lane transitions and all eight two-frame-history cells exactly. The estimator
+first contrasts feature with portable inside each previous-lane stratum, then
+weights the two strata equally; a separate high-visibility gate requires both
+predecessor-specific medians to favor the feature and bounds their interaction.
+Candidate acceptance also binds each submitted compute-group `Array` to a
+globally unique lane context and retains the exact raw compute/render
+UID-duration record for every warmup and measured frame. Durations must be
+strictly positive, and the compute and render pools must each reconstruct a
+timestamp quantum no greater than 1,000 ns in both phases. A compact 320-frame
+warmup audit records the actual null startup history and joins its executed tail
+to measurement frame zero. The live candidate suppresses the generic idle
+animation path between evidence phases, so no unrecorded compute or render
+submission can advance the frozen execution counters. Untimed parity
+additionally renders the production
+scene through each lane's existing timed `BundleGroup` twice into the existing
+target: both RGBA8 readbacks must be stable, equal across lanes, and equal to
+the direct diagnostic oracle while bundle/resource commitments remain fixed
+and renderer call counters prove exactly two render submissions with no compute
+or lane-preparation work.
+The frozen design is in the [live indirect `firstInstance` protocol](docs/INDIRECT_FIRST_INSTANCE_LIVE_PROTOCOL.md).
 
 ## Current status
 
@@ -57,6 +97,11 @@ Two coarse depth-ordering candidates each completed all 36 trials and passed the
 Two subsequent frozen render-order candidates removed compaction from timing and alternated front-to-back and reverse inside balanced eight-frame blocks. Both accepted all 24 trials and passed exact evidence, low-overlap equivalence, telemetry, and drift gates. Their high-overlap front-to-back-minus-reverse estimates were +0.000886 ms and +0.001014 ms, with only 5 of 12 front-to-back wins in each run. The controlled result therefore finds no material render-order benefit for this workload and does not justify a scalable sorting pipeline. Exact completed comparisons and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
 
 Two indirect-`firstInstance` render-only candidates then accepted all 24 trials and 11,520 rows from the same frozen commit. Their 99%-visibility feature-minus-portable estimates were -0.346 ms (-17.56%) and -0.338 ms (-17.12%), with all 12 repetition estimates negative in each run. The first matrix failed two preregistered nuisance-factor gates even though both levels of every stratum favored the feature lane; the second passed every numerical gate. The aggregate high-visibility direction and magnitude recurred across both sessions, but the required two-matrix confirmatory decision was not met. A normal live compute-plus-render evaluation is required before treating the feature lane as a deployable total-GPU optimization. Exact outcomes and limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
+
+The live compute-plus-render implementation, strict post-hoc verifier, and
+deterministic public-evidence sanitizer are complete. Candidate outcomes are
+reported only after two full matrices from one clean frozen implementation
+commit.
 
 The core techniques, including GPU frustum culling, survivor compaction, indirect drawing, and retained command submission, are established prior art. The research question is whether a narrower Three.js integration or fixed-ownership specialization produces a material, reproducible difference.
 
@@ -142,13 +187,95 @@ Its exact browser correctness gate can be run separately:
 npm run smoke:first-instance
 ```
 
+The live compute-plus-render crossover uses the same fixed scene size and runs
+24 paired trials. Its smoke includes a disposable forced-feature-off fallback
+gate and one complete 800-frame trial:
+
+```sh
+npm run smoke:first-instance-live
+npm run candidate:init:first-instance-live
+npm run candidate:first-instance-live
+```
+
+Candidate execution currently requires exactly one telemetry-visible NVIDIA
+device, an exact normalized match between its name and the WebGPU adapter
+description, a working `nvidia-smi` executable, and complete 250 ms telemetry. Set
+`BENCHMARK_NVIDIA_SMI_PATH` if the executable is not on `PATH`. This requirement
+applies to candidate evidence; ordinary development matrices remain portable
+to other WebGPU implementations with explicitly unavailable telemetry.
+
+```powershell
+npm run smoke:first-instance-live
+npm run candidate:init:first-instance-live
+npm run candidate:first-instance-live
+```
+
+Initialization creates the one source-derived series and prints an exact
+annotated-tag name, target commit, and canonical message. Create and publish
+that tag before running the candidate command; candidate timing refuses an
+alias directory or a missing/mismatched local anchor tag. The root registry and
+series ledger reserve every attempt before browser timing. A valid matrix 1
+automatically proceeds to matrix 2 even when it misses a decision gate. A
+permitted infrastructure failure preserves the attempt, stops the command, and
+requires reinvocation after remediation; a nonretryable evidence failure ends
+that frozen-source series. The runner records an exact reservation binding,
+installed-dependency closure, and child lifecycle for each attempt, and
+requires exactly two same-source candidate matrices. Verify a closed series
+independently with the derived directory printed by initialization:
+
+```sh
+npm run verify:candidate:first-instance-live -- results/candidate-series/first-device-live-<16-hex-study-key-prefix>
+```
+
+The ledger and pair-verification contract is specified in
+[`docs/FIRST_INSTANCE_LIVE_CANDIDATE_LEDGER.md`](docs/FIRST_INSTANCE_LIVE_CANDIDATE_LEDGER.md).
+
 A completed run can be summarized with:
 
 ```sh
 npm run analyze -- results/runs/<run-id>
 ```
 
-Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. For the coarse depth matrix it evaluates the preregistered numeric gates, keeps front-to-back versus reverse under causal contrasts, and labels comparisons against atomic fixed-slice as contextual whole-mechanism comparisons. For the frozen crossover it reconstructs every superblock, rejects schedule or base-mapping deviations, and evaluates the preregistered repetition-level, control, interaction, and drift gates. For the indirect-`firstInstance` crossover it additionally revalidates the feature, browser/backend, shader, all-address oracle, lifecycle, telemetry, and physical command-segment evidence before recomputing all 24 trial estimates. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
+Directory analysis verifies the artifact manifest, run acceptance, source provenance, workload links, and cross-file counts before reporting statistics. For the coarse depth matrix it evaluates the preregistered numeric gates, keeps front-to-back versus reverse under causal contrasts, and labels comparisons against atomic fixed-slice as contextual whole-mechanism comparisons. For the frozen crossover it reconstructs every superblock, rejects schedule or base-mapping deviations, and evaluates the preregistered repetition-level, control, interaction, and drift gates. For the indirect-`firstInstance` crossovers it additionally revalidates the feature, browser/backend, shaders, all-address oracle, lifecycle, telemetry, command-buffer placement, compute/render event identity, and retained timestamp evidence before recomputing all 24 trial estimates. A standalone `frames.csv` remains accepted for exploratory analysis but is labeled unverified.
+
+Finalized live candidate artifacts can be transformed into a separately hashed
+public bundle without modifying the private original:
+
+```sh
+npm run sanitize:first-instance-live -- results/candidate-series/<derived-series>/<attempt>/runs/<private-run-id> results/public/<public-run-id>
+```
+
+The exact redaction allowlist, fixed replacements, rejection rules, and manifest
+boundary are documented in [Public evidence derivation](docs/PUBLIC_EVIDENCE_SANITIZER.md).
+Public-derived directory analysis rejects undeclared entries and symlinks,
+checks every declared artifact digest, validates the exact frozen provenance
+schema, and resolves the sanitizer dependency hashes from the recorded Git
+commit rather than the current checkout. These are integrity checks, not an
+author signature; the analyzer reports that distinction explicitly.
+
+After both private matrices have been sanitized, derive one public pair receipt
+that binds their public manifests to the disclosed root registry, series ledger,
+and private pair-verifier decision:
+
+```sh
+npm run build:public-pair:first-instance-live -- results/candidate-series/<derived-series> results/public/<matrix-1-run-id> results/public/<matrix-2-run-id> results/public-pairs/<pair-id>
+npm run verify:public-pair:first-instance-live -- results/public-pairs/<pair-id> results/public/<matrix-1-run-id> results/public/<matrix-2-run-id>
+```
+
+The receipt format, privacy boundary, independent checks, and private-byte
+limitation are documented in [Public candidate-pair receipt](docs/PUBLIC_FIRST_INSTANCE_LIVE_CANDIDATE_PAIR.md).
+
+For publication, the verified receipt bundle and both public run directories
+can be encoded losslessly as one recorded-encoder-deterministic `.tar.br` below
+the repository's 100 MB single-file limit:
+
+```sh
+npm run build:public-package:first-instance-live -- results/public-pairs/<pair-id> results/public/<matrix-1-run-id> results/public/<matrix-2-run-id> results/public-packages/<pair-id>.tar.br
+npm run verify:public-package:first-instance-live -- results/public-packages/<pair-id>.tar.br
+```
+
+The canonical archive format, in-memory verification, and integrity boundary
+are documented in [Public candidate-pair package](docs/PUBLIC_FIRST_INSTANCE_LIVE_PACKAGE.md).
 
 The benchmark requires a WebGPU-capable device and records the actual adapter, backend, browser, timestamp support, and timer precision with each run. The browser smoke additionally requires zero-tolerance decoded-RGBA screenshot agreement among draw all, fixed-slice, and the per-bucket representation control at 4, 32, and 128 buckets, reports PNG byte equality as a diagnostic, verifies 32- and 128-bucket timed replay, and checks repeated strategy teardown against the renderer's resource and cache baseline. Results from a busy or changing device should be retained as development evidence rather than used for performance claims.
 
@@ -163,6 +290,14 @@ That design trades mutation flexibility for two compute dispatches and a portabl
 The local server sends COOP and COEP headers to request a cross-origin-isolated context. The harness records both `crossOriginIsolated` and the smallest observed positive `performance.now()` increment; CPU timings are not treated as high-resolution evidence unless isolation succeeds and the measured increment is at most 0.01 ms. The browser smoke and focused runner enforce this threshold.
 
 GPU pass timing uses Three.js timestamp queries and records the observed timestamp quantum separately from CPU clock precision. Per-frame timestamp joining reads version-pinned r185 backend pool metadata after public timestamp resolution; it is instrumentation for this harness, not a stable Three.js API. Three.js r185 allocates 2,048 queries per render or compute timestamp pool, and each timed compute submission consumes two queries. A 32-bucket public-package lane would require 19,200 compute queries during the unresolved 300-frame warmup and 15,360 during the 240-frame measurement block. In addition, r185 does not assign distinct timestamp identifiers to multiple array-valued compute calls in one frame, so only the last such call would remain in its per-frame map. The public v0.11 lane is therefore excluded from the standard GPU-timestamp matrix until both limits are addressed. The one-submission coalesced, historical, and fixed-slice lanes are unaffected by the identifier collision and require 600 warmup queries and 480 measurement queries, with the pool resolved between phases. These are measurement-system constraints, not evidence that one GPU algorithm is faster.
+
+The live indirect-`firstInstance` candidate is a narrower one-submission case.
+Before timing, its version-pinned backend wrapper registers each exact compute
+group `Array` under a unique positive context ID; every resolved compute UID is
+then reconstructed against that context, lane, frame, and call index. Replacing
+the backend wrapper or group identity fails validation. This harness-specific
+attribution closes the r185 array-UID ambiguity for this experiment only; it is
+not presented as a general Three.js timestamp API.
 
 ## Evidence standard
 
