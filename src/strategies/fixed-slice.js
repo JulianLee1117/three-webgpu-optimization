@@ -42,6 +42,22 @@ export const FIXED_SLICE_ADDRESS_MODE_BY_LANE = Object.freeze({
   [FEATURE_LANE]: STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
 });
 
+const FIXED_SLICE_GEOMETRY_NAME_BY_ADDRESS_MODE = Object.freeze({
+  [STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE]:
+    'fixed-slice-portable-merged-indexed-fixtures',
+  [STORAGE_TRANSFORM_ADDRESS_MODES.IMMEDIATE_BASE]:
+    'fixed-slice-immediate-merged-indexed-fixtures',
+  [STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE]:
+    'fixed-slice-feature-merged-indexed-fixtures',
+});
+
+const FIXED_SLICE_ID_BY_ADDRESS_MODE = Object.freeze({
+  [STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE]: 'fixed-slice',
+  [STORAGE_TRANSFORM_ADDRESS_MODES.IMMEDIATE_BASE]: 'fixed-slice-immediate-base',
+  [STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE]:
+    'fixed-slice-indirect-first-instance',
+});
+
 function sphereInsideNode(sphere, planeUniforms) {
   let inside = dot(planeUniforms[0].xyz, sphere.xyz)
     .add(planeUniforms[0].w)
@@ -144,22 +160,23 @@ export function createFixedSliceSharedResources(
   );
   const geometriesByAddressMode = {};
   if (includesPortable) {
-    merged.geometry.name = 'fixed-slice-portable-merged-indexed-fixtures';
+    merged.geometry.name = FIXED_SLICE_GEOMETRY_NAME_BY_ADDRESS_MODE[
+      STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE
+    ];
     geometriesByAddressMode[STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE] = merged.geometry;
   }
-  if (addressModes.includes(STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE)) {
-    if (includesPortable) {
-      const featureGeometry = createSharedGeometryShell(merged.geometry, {
-        omitAttributes: ['bucketBase'],
-      });
-      featureGeometry.name = 'fixed-slice-feature-merged-indexed-fixtures';
-      geometriesByAddressMode[STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE]
-        = featureGeometry;
-    } else {
-      merged.geometry.name = 'fixed-slice-feature-merged-indexed-fixtures';
-      geometriesByAddressMode[STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE]
-        = merged.geometry;
-    }
+
+  let assignedAddressGeometry = includesPortable;
+  for (const addressMode of addressModes) {
+    if (addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE) continue;
+    const geometry = assignedAddressGeometry
+      ? createSharedGeometryShell(merged.geometry, {
+        omitAttributes: includesPortable ? ['bucketBase'] : [],
+      })
+      : merged.geometry;
+    geometry.name = FIXED_SLICE_GEOMETRY_NAME_BY_ADDRESS_MODE[addressMode];
+    geometriesByAddressMode[addressMode] = geometry;
+    assignedAddressGeometry = true;
   }
 
   const commandTemplate = createIndexedIndirectCommands(
@@ -246,28 +263,51 @@ function createFixedSliceComputeNodes(shared, indirectAttribute, commandRecordCo
   return [reset, cull];
 }
 
-/** Creates the only lane-specific state used by paired and standalone paths. */
-export function createFixedSliceLane(
+function validateImmediateBases(addressMode, indirectImmediateBases, scenario) {
+  if (addressMode !== STORAGE_TRANSFORM_ADDRESS_MODES.IMMEDIATE_BASE) {
+    if (indirectImmediateBases !== null && indirectImmediateBases !== undefined) {
+      throw new TypeError('indirectImmediateBases are valid only for immediate-base addressing.');
+    }
+    return null;
+  }
+  const bases = indirectImmediateBases ?? scenario.bucketBases.slice();
+  if (!(bases instanceof Uint32Array) || bases.length !== scenario.bucketCount) {
+    throw new RangeError(
+      `indirectImmediateBases must be a Uint32Array of length ${scenario.bucketCount}.`,
+    );
+  }
+  return bases;
+}
+
+function createFixedSliceAddressLaneState(
   shared,
   {
-    lane = PORTABLE_LANE,
-    id = lane === FEATURE_LANE
-      ? 'fixed-slice-indirect-first-instance'
-      : 'fixed-slice',
+    addressMode,
+    laneIdentity,
+    id,
     perBucketRenderObjects = false,
+    indirectImmediateBases = null,
   } = {},
 ) {
-  validateFixedSliceLane(lane);
   if (!shared || shared.kind !== 'fixed-slice-shared-resources') {
-    throw new TypeError('createFixedSliceLane requires fixed-slice shared resources.');
+    throw new TypeError('Address-lane construction requires fixed-slice shared resources.');
   }
+  validateStorageTransformAddressMode(addressMode);
   const { scenario, sourceGeometries, firstIndexes } = shared;
-  const addressMode = FIXED_SLICE_ADDRESS_MODE_BY_LANE[lane];
   const geometry = shared.geometriesByAddressMode[addressMode];
   if (!geometry) {
-    throw new Error(`Shared fixed-slice resources do not include the ${lane} geometry.`);
+    throw new Error(`Shared fixed-slice resources do not include ${addressMode} geometry.`);
   }
-  const indirectFirstInstance = lane === FEATURE_LANE;
+  const resolvedImmediateBases = validateImmediateBases(
+    addressMode,
+    indirectImmediateBases,
+    scenario,
+  );
+  if (resolvedImmediateBases !== null && perBucketRenderObjects) {
+    throw new Error('Immediate-base addressing requires the one-render-object indirect loop.');
+  }
+  const indirectFirstInstance =
+    addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE;
   const commandLayout = createIndexedIndirectCommands(
     sourceGeometries,
     scenario.bucketCounts,
@@ -313,7 +353,12 @@ export function createFixedSliceLane(
       root.add(mesh);
     }
   } else {
-    geometry.setIndirect(indirectAttribute, Array.from(commandLayout.offsets));
+    const indirectOffsets = Array.from(commandLayout.offsets);
+    if (resolvedImmediateBases === null) {
+      geometry.setIndirect(indirectAttribute, indirectOffsets);
+    } else {
+      geometry.setIndirect(indirectAttribute, indirectOffsets, resolvedImmediateBases);
+    }
     const mesh = new Mesh(geometry, material);
     freezeStaticTransform(mesh);
     mesh.frustumCulled = false;
@@ -330,7 +375,7 @@ export function createFixedSliceLane(
   return {
     kind: 'fixed-slice-lane',
     id,
-    lane,
+    lane: laneIdentity,
     addressMode,
     root,
     bundle: root,
@@ -340,12 +385,15 @@ export function createFixedSliceLane(
     indirectAttribute,
     commandLayout,
     computeNodes,
+    ...(resolvedImmediateBases === null ? {} : {
+      indirectImmediateBases: resolvedImmediateBases,
+    }),
     get bundleRecordCallbackCount() {
       return bundleRecordCallbackCount;
     },
     commandBufferCommitment() {
       return {
-        lane,
+        lane: laneIdentity,
         attributeId: indirectAttribute.id,
         attributeVersion: indirectAttribute.version,
         byteOffset: 0,
@@ -357,6 +405,49 @@ export function createFixedSliceLane(
       };
     },
   };
+}
+
+/** Creates one low-level lane for any supported fixed-slice address transport. */
+export function createFixedSliceAddressLane(
+  shared,
+  {
+    addressMode = STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE,
+    id = FIXED_SLICE_ID_BY_ADDRESS_MODE[addressMode],
+    perBucketRenderObjects = false,
+    indirectImmediateBases = null,
+  } = {},
+) {
+  validateStorageTransformAddressMode(addressMode);
+  if (typeof id !== 'string' || id.length === 0) {
+    throw new TypeError('Address-lane id must be a nonempty string.');
+  }
+  return createFixedSliceAddressLaneState(shared, {
+    addressMode,
+    laneIdentity: addressMode,
+    id,
+    perBucketRenderObjects,
+    indirectImmediateBases,
+  });
+}
+
+/** Creates the only legacy lane-specific state used by paired and standalone paths. */
+export function createFixedSliceLane(
+  shared,
+  {
+    lane = PORTABLE_LANE,
+    id = lane === FEATURE_LANE
+      ? 'fixed-slice-indirect-first-instance'
+      : 'fixed-slice',
+    perBucketRenderObjects = false,
+  } = {},
+) {
+  validateFixedSliceLane(lane);
+  return createFixedSliceAddressLaneState(shared, {
+    addressMode: FIXED_SLICE_ADDRESS_MODE_BY_LANE[lane],
+    laneIdentity: lane,
+    id,
+    perBucketRenderObjects,
+  });
 }
 
 function expectedCountsForIds(scenario, expectedIds) {
@@ -425,7 +516,10 @@ export async function validateFixedSliceLaneSnapshot({
     geometries: sourceGeometries,
     expectedCounts,
     expectedFirstIndexes: firstIndexes,
-    expectedFirstInstances: lane.lane === FEATURE_LANE ? scenario.bucketBases : null,
+    expectedFirstInstances:
+      lane.addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE
+        ? scenario.bucketBases
+        : null,
   });
   const membershipDigests = await createMembershipDigestEvidence({
     expectedIds,

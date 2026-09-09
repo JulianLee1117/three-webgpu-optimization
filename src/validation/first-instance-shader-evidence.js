@@ -32,6 +32,10 @@ const ELEMENT_BYTE_SIZES = Object.freeze({
   [STORAGE_SEMANTICS.VISIBLE_IDS]: 4,
 });
 
+const PHASE0_LANE_IDS = Object.freeze(['A', 'I', 'F']);
+const IMMEDIATE_REQUIREMENT = 'immediate_address_space';
+const IMMEDIATE_VARIABLE = 'threeImmediateDrawBase';
+
 const EXPECTED_VERTEX_INPUTS = Object.freeze({
   [LANE_IDS.PORTABLE]: Object.freeze([
     Object.freeze({
@@ -876,6 +880,254 @@ export async function createFirstInstanceShaderEvidence({ portable, feature } = 
       normalizedVertexSha256Equal: portableRecord !== null
         && featureRecord !== null
         && portableRecord.normalizedVertex.sha256 === featureRecord.normalizedVertex.sha256,
+    },
+  };
+}
+
+function phase0ImmediateContrast(vertexShader) {
+  assertAudit(
+    typeof vertexShader === 'string' && vertexShader.length > 0,
+    'I.vertexShader must be a nonempty string.',
+  );
+  const requirementPattern = /requires\s+immediate_address_space\s*;/g;
+  const declarationPattern = /var\s*<\s*immediate\s*>\s+threeImmediateDrawBase\s*:\s*u32\s*;/g;
+  const injectionPattern = /requires\s+immediate_address_space\s*;\r?\n\r?\n\/\/ immediate data\r?\nvar\s*<\s*immediate\s*>\s+threeImmediateDrawBase\s*:\s*u32\s*;\r?\n/g;
+  const parenthesizedAddressPattern = /\(\s*threeImmediateDrawBase\s*\+\s*instanceIndex\s*\)/g;
+  const bareAddressPattern = /threeImmediateDrawBase\s*\+\s*instanceIndex/g;
+  const requirementCount = countMatches(vertexShader, requirementPattern);
+  const declarationCount = countMatches(vertexShader, declarationPattern);
+  const totalImmediateDeclarationCount = countMatches(
+    vertexShader,
+    /var\s*<\s*immediate\s*>\s+[A-Za-z_]\w*\s*:/g,
+  );
+  const injectionCount = countMatches(vertexShader, injectionPattern);
+  const parenthesizedAddressCount = countMatches(vertexShader, parenthesizedAddressPattern);
+  const bareAddressCount = countMatches(vertexShader, bareAddressPattern);
+  const variableTokenCount = countIdentifier(vertexShader, IMMEDIATE_VARIABLE);
+  assertAudit(requirementCount === 1,
+    'I WGSL must require immediate_address_space exactly once.');
+  assertAudit(declarationCount === 1,
+    'I WGSL must declare threeImmediateDrawBase exactly once.');
+  assertAudit(totalImmediateDeclarationCount === 1,
+    'I WGSL must contain exactly one total immediate variable declaration.');
+  assertAudit(injectionCount === 1,
+    'I WGSL must contain the exact overlay immediate declaration block once.');
+  assertAudit(bareAddressCount === 1,
+    'I WGSL must use threeImmediateDrawBase + instanceIndex exactly once.');
+  assertAudit(variableTokenCount === 2,
+    'I WGSL must contain only the declaration and address use of threeImmediateDrawBase.');
+
+  let normalized = vertexShader.replace(injectionPattern, '');
+  if (parenthesizedAddressCount === 1) {
+    normalized = normalized.replace(parenthesizedAddressPattern, 'instanceIndex');
+  } else {
+    assertAudit(parenthesizedAddressCount === 0,
+      'I WGSL contains multiple parenthesized immediate address expressions.');
+    normalized = normalized.replace(bareAddressPattern, 'instanceIndex');
+  }
+  assertAudit(countIdentifier(normalized, IMMEDIATE_VARIABLE) === 0,
+    'I normalization left an immediate variable token.');
+  assertAudit(countIdentifier(normalized, IMMEDIATE_REQUIREMENT) === 0,
+    'I normalization left an immediate feature token.');
+  return {
+    normalized,
+    audit: {
+      schemaVersion: SCHEMA_VERSION,
+      kind: 'immediate-aif-phase0-immediate-wgsl-normalization',
+      pass: true,
+      requirementCount,
+      declarationCount,
+      totalImmediateDeclarationCount,
+      injectionCount,
+      addressExpressionCount: bareAddressCount,
+      parenthesizedAddressCount,
+      variableTokenCount,
+      replacement: 'instanceIndex',
+    },
+  };
+}
+
+function assertNoImmediateContrast(laneId, vertexShader) {
+  assertAudit(
+    countIdentifier(vertexShader, IMMEDIATE_REQUIREMENT) === 0
+      && countIdentifier(vertexShader, IMMEDIATE_VARIABLE) === 0
+      && countMatches(vertexShader, /var\s*<\s*immediate\s*>/g) === 0,
+    `${laneId} WGSL unexpectedly contains an immediate-address-space token.`,
+  );
+}
+
+function phase0RenderLaneNormalizationRecord(
+  laneId,
+  originalLane,
+  audit,
+  immediateNormalization,
+) {
+  return {
+    laneId,
+    addressMode: laneId === 'A'
+      ? 'bucket-base'
+      : laneId === 'I'
+        ? 'immediate-base'
+        : 'indirect-first-instance',
+    rawVertexShader: originalLane.vertexShader,
+    rawFragmentShader: originalLane.fragmentShader,
+    normalizedVertexShader: audit.normalizedVertexShader,
+    vertexInputs: audit.runtimeVertexInputs,
+    storageBindings: audit.storageBindings,
+    semanticMappings: audit.semanticMappings,
+    occurrenceCounts: audit.occurrenceCounts,
+    immediateNormalization,
+  };
+}
+
+/**
+ * Synchronously performs the narrowly-scoped Phase 0 A/I/F render
+ * normalization. A is first
+ * audited as the existing portable bucket-base lane and F as the existing
+ * first-instance lane. I may differ from F only by the overlay's exact
+ * immediate declaration block and its single address expression. All
+ * generated storage identifiers are then canonicalized by the established
+ * first-instance semantic normalizer before byte equality is required.
+ */
+export function normalizeImmediateAifRenderShaderLanes(lanes = {}) {
+  const reasons = [];
+  const audits = {};
+  let immediateNormalization = null;
+  try {
+    assertAudit(lanes && typeof lanes === 'object' && !Array.isArray(lanes),
+      'Phase 0 render lanes must be an object.');
+    for (const laneId of PHASE0_LANE_IDS) {
+      assertAudit(lanes[laneId] && typeof lanes[laneId] === 'object',
+        `Phase 0 render lane ${laneId} is missing.`);
+    }
+    assertNoImmediateContrast('A', lanes.A.vertexShader);
+    assertNoImmediateContrast('F', lanes.F.vertexShader);
+    audits.A = auditLane(LANE_IDS.PORTABLE, lanes.A);
+    audits.F = auditLane(LANE_IDS.FEATURE, lanes.F);
+    immediateNormalization = phase0ImmediateContrast(lanes.I.vertexShader);
+    audits.I = auditLane(LANE_IDS.FEATURE, {
+      ...lanes.I,
+      vertexShader: immediateNormalization.normalized,
+    });
+    validateCrossLaneRuntimeIdentity(audits.A, audits.F);
+    validateCrossLaneRuntimeIdentity(audits.A, audits.I);
+  } catch (error) {
+    reasons.push(error.message);
+  }
+
+  const records = {};
+  if (PHASE0_LANE_IDS.every((laneId) => audits[laneId] !== undefined)) {
+    for (const laneId of PHASE0_LANE_IDS) {
+      records[laneId] = phase0RenderLaneNormalizationRecord(
+        laneId,
+        lanes[laneId],
+        audits[laneId],
+        laneId === 'I' ? immediateNormalization.audit : null,
+      );
+    }
+    const normalizedVertexEqual = PHASE0_LANE_IDS.every(
+      (laneId) => records[laneId].normalizedVertexShader
+        === records.A.normalizedVertexShader,
+    );
+    const rawFragmentEqual = PHASE0_LANE_IDS.every(
+      (laneId) => records[laneId].rawFragmentShader === records.A.rawFragmentShader,
+    );
+    const rawVertexPairwiseDifferent = new Set(
+      PHASE0_LANE_IDS.map((laneId) => records[laneId].rawVertexShader),
+    ).size === PHASE0_LANE_IDS.length;
+    if (!normalizedVertexEqual) {
+      reasons.push('A/I/F normalized vertex WGSL differs outside the approved address transports.');
+    }
+    if (!rawFragmentEqual) {
+      reasons.push('A/I/F raw fragment WGSL is not byte-identical.');
+    }
+    if (!rawVertexPairwiseDifferent) {
+      reasons.push('A/I/F raw vertex WGSL does not expose three distinct address transports.');
+    }
+    return {
+      schemaVersion: SCHEMA_VERSION,
+      kind: 'immediate-aif-phase0-render-shader-normalization',
+      pass: reasons.length === 0,
+      reasons,
+      lanes: records,
+      comparison: {
+        normalizedVertexEqual,
+        rawFragmentEqual,
+        rawVertexPairwiseDifferent,
+      },
+    };
+  }
+
+  return {
+    schemaVersion: SCHEMA_VERSION,
+    kind: 'immediate-aif-phase0-render-shader-normalization',
+    pass: false,
+    reasons,
+    lanes: records,
+    comparison: null,
+  };
+}
+
+/** Adds deterministic SHA-256 commitments to the synchronous Phase 0 audit. */
+export async function createImmediateAifRenderShaderEvidence(lanes = {}) {
+  const normalized = normalizeImmediateAifRenderShaderLanes(lanes);
+  if (!normalized.pass) {
+    return {
+      ...normalized,
+      commonVertexSha256: null,
+      commonFragmentSha256: null,
+    };
+  }
+  const records = {};
+  for (const laneId of PHASE0_LANE_IDS) {
+    const record = normalized.lanes[laneId];
+    const [rawVertex, rawFragment, normalizedVertex] = await Promise.all([
+      shaderDigest(record.rawVertexShader),
+      shaderDigest(record.rawFragmentShader),
+      shaderDigest(record.normalizedVertexShader),
+    ]);
+    records[laneId] = {
+      ...record,
+      rawVertexSha256: rawVertex.sha256,
+      rawFragmentSha256: rawFragment.sha256,
+      normalizedSha256: normalizedVertex.sha256,
+      normalizedVertexSha256: normalizedVertex.sha256,
+      byteLengths: {
+        rawVertex: rawVertex.byteLength,
+        rawFragment: rawFragment.byteLength,
+        normalizedVertex: normalizedVertex.byteLength,
+      },
+    };
+  }
+  const normalizedVertexSha256Equal = PHASE0_LANE_IDS.every(
+    (laneId) => records[laneId].normalizedSha256 === records.A.normalizedSha256,
+  );
+  const rawFragmentSha256Equal = PHASE0_LANE_IDS.every(
+    (laneId) => records[laneId].rawFragmentSha256 === records.A.rawFragmentSha256,
+  );
+  return {
+    ...normalized,
+    pass: normalized.pass && normalizedVertexSha256Equal && rawFragmentSha256Equal,
+    reasons: [
+      ...normalized.reasons,
+      ...(normalizedVertexSha256Equal
+        ? []
+        : ['A/I/F normalized vertex WGSL hashes differ.']),
+      ...(rawFragmentSha256Equal
+        ? []
+        : ['A/I/F raw fragment WGSL hashes differ.']),
+    ],
+    lanes: records,
+    commonVertexSha256: normalizedVertexSha256Equal
+      ? records.A.normalizedSha256
+      : null,
+    commonFragmentSha256: rawFragmentSha256Equal
+      ? records.A.rawFragmentSha256
+      : null,
+    comparison: {
+      ...normalized.comparison,
+      normalizedVertexSha256Equal,
+      rawFragmentSha256Equal,
     },
   };
 }

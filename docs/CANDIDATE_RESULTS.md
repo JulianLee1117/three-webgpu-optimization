@@ -2,7 +2,7 @@
 
 ## Status and scope
 
-These results are candidate evidence from one machine and are governed by experiment-specific decision rules. Some comparisons below meet their declared single-device replication rules; neither indirect-`firstInstance` study meets its two-matrix confirmation rule. None establishes a general WebGPU result.
+These results are candidate evidence from one machine and are governed by experiment-specific decision rules. Some comparisons below meet their declared single-device replication rules; neither completed indirect-`firstInstance` study meets its two-matrix confirmation rule. The first standalone deployment capture is incomplete and analysis-ineligible, so it adds no efficacy estimate or decision. None establishes a general WebGPU result.
 
 The fixed-ownership ecosystem runs used source commit `abbc5629cb5ce44bafd2ad0ced91fbbb07d6e8f2`, Three.js 0.185.1, Chrome 151.0.7922.174, a 1280 x 720 WebGPU viewport, 16,384 static objects, and 32 indexed geometry buckets. The fixtures contain positions, normals, UVs, full static TRS matrices, and matched `MeshStandardNodeMaterial` parameters. They are controlled procedural assets rather than production content.
 
@@ -185,6 +185,114 @@ one lane is constructed, resident, and primed per fresh browser/device session;
 that design removes render-prime order from the comparison rather than treating
 it as a nuisance to average away.
 
+## Standalone deployment v1 capture failure
+
+The first full standalone capture used clean source commit
+`52ec935e44bcaf147e1c9a68f1a79f03c30c0144` and retained its failed artifact at:
+
+```text
+results/candidate-standalone-deployment/first-instance-standalone-deployment-2026-09-03T07-29-33-833Z-959a6905/
+```
+
+It stopped while opening Matrix 1 session 16 after committing 15 of 96 sessions
+and 30 of 192 trials. No matrix completed. `failure.json` has SHA-256
+`838424d99ed429831ba28468a6e7f5d396fa6ca074e2f601b01bca54ca7ae1d1`;
+the directory contains 98 files totaling 12,966,684 bytes, and all 96 referenced
+artifact descriptors independently matched their recorded lengths and hashes.
+The terminal error was a 120-second page-readiness timeout. The record is
+explicitly `analysisEligible: false`; the partial trials have not been and must
+not be summarized for portable-versus-feature efficacy.
+
+The timeout was not an independently logged browser/device loss,
+telemetry-collector failure, or artifact-I/O failure, so the frozen retry rule
+did not authorize another v1 launch. There was no retry, resume, or replacement.
+The retained failure therefore neither passes nor fails the standalone
+two-matrix efficacy decision: no such decision exists for v1.
+
+Windows recorded Tcpip Event ID 4231, record 18340, at
+`2026-09-03T07:32:53.263605Z`, approximately 25 ms after the failed page was
+created. That warning reported failure to allocate an ephemeral port from the
+global TCP port space. Its timing and the readiness-failure shape make transient
+host-wide port exhaustion the strongest supported cause. The attribution is not
+conclusive because v1 did not persist page console, failed-request, HTTP-error,
+crash, or bounded readiness diagnostics, and Event 4231 does not identify the
+responsible process. This finding is infrastructure evidence only.
+
+A corrected v2 series requires a new clean committed source identity, terminal
+failure/interruption schema v2, and the separate one-gate-plus-32-session
+[startup-endurance qualification](INDIRECT_FIRST_INSTANCE_STANDALONE_STARTUP_ENDURANCE_PROTOCOL.md).
+That one-attempt qualification rejects an Event 4231 in the prior 10 minutes
+and requires at least `max(4096, ceil(25% of the configured range))` free unique
+dynamic local ports before and after each of its 33 browser lifecycles. It
+performs no trial timing
+or efficacy analysis. Only the exact qualified source and dependency closure
+may write a single corrected candidate under
+`results/candidate-standalone-deployment-v2/first-instance-standalone-deployment-v2-.../`.
+The original workload, schedule, estimators, thresholds, correctness rules, and
+two-complete-matrix requirement remain unchanged.
+
+## Standalone deployment v2 result
+
+The exact corrected source first passed its one-shot, analysis-ineligible
+startup-endurance qualification. The full v2 candidate then completed from
+clean source commit `3ff0b6f4674c062f7dd9e83c0618a604d6626b4d` with unchanged
+installed dependency closure
+`2de960326f2740a20e836b5e4228c3aa0ed0aba58e670856706b73abd0c6d388`.
+The immutable candidate identifier is:
+
+```text
+first-instance-standalone-deployment-v2-2026-09-03T17-56-15-996Z-3b0cae96
+```
+
+It contains all 192 trials, 96 measured sessions, two matrices, 92,160 retained
+rows, and 98 non-overlapping fresh browser processes including the forced-off
+gates. The captured environment was Three.js r185 / npm 0.185.1,
+HeadlessChrome 152, an RTX 5070 Ti through D3D12 driver 32.0.16.1656, and a
+32 ns timestamp quantum. Negative values favor indirect `firstInstance`.
+
+| Endpoint | Matrix 1 | Matrix 2 |
+| --- | ---: | ---: |
+| 99% timestamped GPU pass | +0.0672225 ms (+3.55123%); 4/12 negative | +0.1435670 ms (+7.90525%); 3/12 negative |
+| 99% render | +0.0671855 ms (+3.55720%); 4/12 negative | +0.1435655 ms (+7.92373%); 3/12 negative |
+| 20% timestamped GPU pass | +0.0059525 ms (+1.61142%) | +0.0181605 ms (+5.08588%) |
+| Paired 99%-minus-20% | +0.0615680 ms (+2.02039 pp) | +0.1248765 ms (+2.68676 pp) |
+| Preregistered result | Fail | Fail |
+
+Both matrices failed the high-visibility GPU-pass, render, low-visibility,
+paired-dose, and high-visibility nuisance-factor gates. Both passed every
+condition-blind session-sequence and within-trial drift gate. Their median 99%
+compute responses were only +0.0000005 ms and +0.0000035 ms, so the observed
+contrast is render-driven.
+
+Independent verification returned `status: consistent`,
+`technicalGatePass: true`, and
+`decision: standalone-confirmation-not-met`. Every correctness, exact-output,
+shader, resource-lifecycle, timestamp-continuity, source, dependency,
+served-module, browser-lifecycle, telemetry, and artifact gate passed. The
+manifest SHA-256 is
+`acd70bd77330edc8d4cb2a29e88333a8dc7a9fa02971d315a7b0deaabc6b855f`.
+All 598 declared artifacts matched their lengths and stored/logical hashes; the
+directory has 599 files and 80,289,683 stored bytes in total. The verifier's
+`authenticityVerified: false` correctly means internal consistency, not an
+external signature or independent-origin attestation.
+
+The fresh-session responses are sharply multimodal. At 99% visibility, 40/48
+feature sessions cluster at 1.959178-1.961420 ms while 8/48 cluster at
+1.503918-1.504968 ms. For portable, 39/48 cluster at
+1.815644-1.817742 ms while 9/48 cluster at 1.968966-1.969780 ms. These modes
+persist into the same browser's 20% trial despite essentially equal measured GPU
+clocks. The preregistered direction and nuisance gates correctly reject a
+positive claim under this mixture. The result is not evidence that
+`firstInstance` is inherently slower; it is evidence that the proposed
+deployment benefit does not survive the tested process-state modes.
+
+The earlier positive live candidates used Chrome 151, whereas this candidate
+used HeadlessChrome 152. The contemporaneous v2 lane contrast is valid, but the
+sign reversal relative to the earlier candidates cannot be causally assigned to
+standalone topology alone. No matrix will be retried or replaced. The next
+mechanism study adds a zero-`firstInstance`, no-bucket-vertex-stream WebGPU
+immediate-data lane to distinguish address sources.
+
 ## Evidence identifiers
 
 | Comparison | Replication | Run identifier |
@@ -202,8 +310,10 @@ it as a nuisance to average away.
 | Live indirect `firstInstance` | A | `first-instance-live-o65536-b32-2026-09-01T16-47-53.050Z` |
 | Live indirect `firstInstance` | B | `first-instance-live-o65536-b32-2026-09-01T16-50-07.577Z` |
 | Setup-order factorial | Development diagnostic | `first-instance-live-order-factorial-2026-09-01T18-25-27-021Z-ace6b5c5` |
+| Standalone deployment v1 | Failed, analysis-ineligible capture | `first-instance-standalone-deployment-2026-09-03T07-29-33-833Z-959a6905` |
+| Standalone deployment v2 | Completed; confirmation not met | `first-instance-standalone-deployment-v2-2026-09-03T17-56-15-996Z-3b0cae96` |
 
-Generated run directories remain ignored source artifacts and are not part of the tracked repository. Each identifier above names a manifest-bound local directory containing frame-level data, metadata, trial summaries, validation payloads, workload manifests, and SHA-256 commitments. Candidate directories also retain their required GPU telemetry; the setup-order development diagnostic does not. The analyzers reject incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts; this establishes internal artifact consistency, not independent authenticity.
+Generated run directories remain ignored source artifacts and are not part of the tracked repository. Each completed identifier above names a manifest-bound local directory containing frame-level data, metadata, trial summaries, validation payloads, workload manifests, and SHA-256 commitments. Candidate directories also retain their required GPU telemetry; the setup-order development diagnostic does not. The failed standalone v1 identifier instead names a `failure.json`-bound partial directory with partial telemetry and no completion manifest. Its artifact descriptors were checked directly, but it is excluded from all candidate analysis. The completed v2 directory passed its independent verifier with 598 declared artifacts and zero inventory, length, hash, decompression, parse, or semantic mismatch. The analyzers reject incomplete trials, changed source provenance, mismatched workload links, and altered required artifacts; this establishes internal artifact consistency, not independent authenticity.
 
 ## What the evidence establishes
 
@@ -215,6 +325,9 @@ Generated run directories remain ignored source artifacts and are not part of th
 - Two same-device matrices observed approximately 17% lower timestamped render-pass time with indirect `firstInstance` addressing in the tested high-visibility fixed-slice path, but this remains an unconfirmed signal because one matrix failed nuisance-interaction bounds and the required two-matrix decision was not met.
 - Normal live culling preserved that addressing-path direction: two further matrices observed approximately 11.5-12.5% lower high-visibility timestamped GPU-pass time, almost entirely in render, but one matrix again failed a strict order-interaction bound and the pair did not confirm.
 - The setup-order development diagnostic preserved a negative feature-minus-portable response in every factorial cell and localized a repeatable render-priming-order sensitivity. This is diagnostic evidence, not a candidate or deployment result.
+- The standalone v1 capture establishes only a preserved, internally checked infrastructure failure. Its partial trials establish no portable-versus-feature effect.
+- The corrected standalone v2 comparison completed with every technical gate passing, but both matrices numerically favored the portable lane at their medians and the preregistered confirmation was not met.
+- Standalone session estimates occupy discrete, lane-associated performance modes that are not explained by the captured GPU-clock telemetry. This invalidates a simple inherent-speed interpretation in either direction and identifies a process-local render-pipeline mechanism for follow-up.
 
 ## What remains open
 
@@ -223,6 +336,7 @@ Generated run directories remain ignored source artifacts and are not part of th
 - Production assets, textures, dynamic cameras, moving objects, shadows, transparency, skinning, and morph targets are outside this result.
 - The benchmark does not measure presentation latency or queue overlap.
 - A different scene, material cost, resolution, depth distribution, or GPU may have a different render-order crossover; that would require a new preregistered experiment rather than extending this null result.
-- The repeated indirect-`firstInstance` effect remains a same-device signal. Render-priming-order sensitivity is now localized, but a deployment-topology experiment must eliminate shared dual-lane state by isolating each lane in balanced fresh browser/device sessions before enabling the feature path.
+- The cause of the discrete fresh-browser performance modes remains unobserved. The earlier positive runs used Chrome 151 and v2 used HeadlessChrome 152, so browser change and deployment topology cannot be separated retrospectively.
+- WebGPU immediate data now permits a three-way address-source control: per-vertex base, immediate base with zero `firstInstance`, and indirect `firstInstance`. Three.js does not yet expose that path.
 
-The frozen render-order crossover closes the ordering branch for the current fixture. In the live crossover and setup-order diagnostic, the indirect-`firstInstance` specialization's compute contrast was effectively zero while the render-stage response remained material-sized; the result does not rank unrelated compute optimizations. The next experiment is the standalone fresh-session deployment topology. Exact occlusion headroom remains the following branch if the addressing specialization does not confirm there.
+The frozen render-order crossover closes the ordering branch for the current fixture. Across the live, setup-order, and standalone work, the indirect-addressing contrast remains render-driven while changing sign under materially different execution conditions. No additional A/F rescue run is warranted. The next mechanism branch is an A/I/F immediate-data attribution study with exact address and output parity. Exact occlusion headroom remains a later branch if that study does not yield a stable, upstreamable result.

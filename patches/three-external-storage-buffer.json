@@ -1,0 +1,28 @@
+{
+  "baseCommit": "c4ffe022f2a4f982b42b7da5af79a87066a138ae",
+  "candidateHead": "31fdc388bc2d001f9a7d7ca27f52ca2c411b1cdc",
+  "includesUncommittedCandidateWork": true,
+  "patchSha256": "61e3f45791f8adece4b0d926a3258ca9e29571f9baa4ef3ba959915d9d7c1191",
+  "files": {
+    "three.core.js": {
+      "bytes": 1518172,
+      "sha256": "766a32993fedb1834e29804b691a0951914b804826a2de9f0746ea03387dd0e0"
+    },
+    "three.module.js": {
+      "bytes": 679849,
+      "sha256": "3a64a3e531914515523a42cc7bcc8b43f6dad5b1ad1b916f29650d60e2b89513"
+    },
+    "three.tsl.js": {
+      "bytes": 37535,
+      "sha256": "d7bec24ec37cab32f54c50574d5169c9b4a7579de3f8696d3101f7417983993b"
+    },
+    "three.webgpu.js": {
+      "bytes": 2393276,
+      "sha256": "bbf71a483595600f657f76302d759bbdcab721e14631b7ffa80572277a6ca86b"
+    },
+    "three.webgpu.nodes.js": {
+      "bytes": 2384359,
+      "sha256": "2e786f60fd032c01d0e32e85274ed472cb993e3ae74ccccd67ccc27483bdd7c8"
+    }
+  }
+}

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>ONNX Runtime WebGPU to Three.js - one borrowed GPUBuffer</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+        background: #07101f;
+        color: #f8fafc;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-width: 720px; overflow: hidden; background: #07101f; }
+      main { position: relative; width: 100vw; height: 100vh; isolation: isolate; }
+      #canvas-host, #canvas-host canvas {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+      #canvas-host { z-index: -2; }
+      main::before {
+        position: absolute;
+        z-index: -1;
+        inset: 0;
+        content: '';
+        pointer-events: none;
+        background:
+          radial-gradient(circle at 50% 50%, transparent 0 22%, rgba(7, 16, 31, .15) 46%, rgba(7, 16, 31, .62) 100%),
+          linear-gradient(90deg, rgba(7, 16, 31, .38), transparent 35% 65%, rgba(7, 16, 31, .38));
+      }
+      header {
+        position: absolute;
+        top: 26px;
+        left: 32px;
+        width: 370px;
+      }
+      .eyebrow {
+        color: #67e8f9;
+        font: 750 11px/1.2 ui-monospace, SFMono-Regular, Consolas, monospace;
+        letter-spacing: .16em;
+      }
+      h1 {
+        margin: 8px 0 7px;
+        font-size: clamp(26px, 3.2vw, 42px);
+        line-height: .98;
+        letter-spacing: -.045em;
+      }
+      header p {
+        margin: 0;
+        color: #b8c7dc;
+        font-size: 13px;
+        line-height: 1.45;
+      }
+      code { color: #facc6b; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+      #bridge {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        display: grid;
+        grid-template-columns: auto 48px auto 48px auto;
+        align-items: center;
+        transform: translate(-50%, -50%);
+        padding: 13px 17px;
+        border: 1px solid rgba(125, 211, 252, .27);
+        border-radius: 16px;
+        background: rgba(5, 12, 25, .78);
+        box-shadow: 0 22px 80px rgba(0, 0, 0, .32);
+        backdrop-filter: blur(12px);
+      }
+      .box { text-align: center; }
+      .box strong { display: block; color: #f8fafc; font-size: 14px; }
+      .box span { color: #91a4bd; font: 650 10px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace; }
+      .box.buffer strong { color: #facc6b; }
+      .arrow { color: #67e8f9; text-align: center; font-size: 22px; }
+      #proof-note {
+        position: absolute;
+        right: 27px;
+        top: 27px;
+        width: 255px;
+        padding: 11px 13px;
+        border: 1px solid rgba(148, 163, 184, .2);
+        border-radius: 12px;
+        background: rgba(5, 12, 25, .65);
+        color: #a9bad0;
+        font: 600 11px/1.48 ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      #proof-note b { color: #69e4aa; }
+      footer {
+        position: absolute;
+        left: 23px;
+        right: 23px;
+        bottom: 16px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        color: #8092aa;
+        font: 650 10px/1.35 ui-monospace, SFMono-Regular, Consolas, monospace;
+      }
+      #status { max-width: 620px; }
+      #status[data-state='screenshot-ready'], #status[data-state='passed'] { color: #69e4aa; }
+      #status[data-state='continuing'] { color: #facc6b; }
+      #status[data-state='failed'] { color: #fb7185; }
+      .no-cpu { text-align: right; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="eyebrow">ONNX RUNTIME 1.29 / THREE.JS DEV / WEBGPU</span>
+        <h1>Inference output.<br />Same GPUBuffer.<br />Drawn by Three.</h1>
+        <p>
+          The three markers are positioned and bit-identified from ORT's
+          preallocated <code>float32[3,2]</code> output.
+        </p>
+      </header>
+
+      <section id="canvas-host" aria-label="GPU-driven ONNX output markers"></section>
+
+      <section id="bridge" aria-label="shared GPU buffer path">
+        <span class="box"><strong>ORT WebGPU</strong><span>Mul inference</span></span>
+        <span class="arrow">-&gt;</span>
+        <span class="box buffer"><strong>32-byte GPUBuffer</strong><span>24-byte logical range</span></span>
+        <span class="arrow">-&gt;</span>
+        <span class="box"><strong>Three.js TSL</strong><span>storage read</span></span>
+      </section>
+
+      <aside id="proof-note">
+        <b>Exact oracle:</b> rgba32uint float bits + spatial centroids<br />
+        <b>Lifecycle:</b> dispose Three, reuse in ORT, render again
+      </aside>
+
+      <footer>
+        <span id="status" data-state="running">Initializing one explicitly shared GPUDevice...</span>
+        <span class="no-cpu">no target mapping / no <code>getData()</code> / no target CPU reupload</span>
+      </footer>
+    </main>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three/webgpu": "/__three_ort_bridge__/three.webgpu.js"
+        }
+      }
+    </script>
+    <script type="module" src="/src/three-ort-gpu-buffer-canary.js"></script>
+  </body>
+</html>

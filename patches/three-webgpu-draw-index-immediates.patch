@@ -1,0 +1,458 @@
+diff --git a/src/nodes/accessors/Batch.js b/src/nodes/accessors/Batch.js
+index f0b2e65caa03e5f7207817a2bc6f7edefc47d3c4..1d074008b8cd0c96945263616282948ef6dcc1c2 100644
+--- a/src/nodes/accessors/Batch.js
++++ b/src/nodes/accessors/Batch.js
+@@ -125,7 +125,8 @@ export const batchIndirectIndex = /*@__PURE__*/ varyingProperty( 'uint', 'vBatch
+  */
+ export const batch = /*@__PURE__*/ Fn( ( [ batchMesh ], builder ) => {
+ 
+-	const batchingIdNode = builder.getDrawIndex() === null ? instanceIndex : drawIndex;
++	const usesBatchingInstanceIndex = builder.isAvailable( 'batchingInstanceIndex' ) || builder.getDrawIndex() === null;
++	const batchingIdNode = usesBatchingInstanceIndex ? instanceIndex : drawIndex;
+ 
+ 	const indirectId = getIndirectIndex( batchMesh._indirectTexture, int( batchingIdNode ) );
+ 
+diff --git a/src/nodes/core/IndexNode.js b/src/nodes/core/IndexNode.js
+index 1da19c93cb7de50183111a3a458f85185b962b41..01d362a6e66edd90d7093bcabc9c322b55b4430c 100644
+--- a/src/nodes/core/IndexNode.js
++++ b/src/nodes/core/IndexNode.js
+@@ -222,7 +222,12 @@ export const invocationSubgroupIndex = /*@__PURE__*/ nodeImmutable( IndexNode, I
+ export const invocationLocalIndex = /*@__PURE__*/ nodeImmutable( IndexNode, IndexNode.INVOCATION_LOCAL );
+ 
+ /**
+- * TSL object that represents the index of a draw call.
++ * TSL object that represents the zero-based index of a draw command in the
++ * current logical draw list. Standalone draws use zero and a new list resets
++ * the index.
++ *
++ * WebGPU support requires the `immediate_address_space` WGSL language
++ * extension. The node is not available in compute shaders.
+  *
+  * @tsl
+  * @type {IndexNode}
+diff --git a/src/nodes/core/NodeBuilder.js b/src/nodes/core/NodeBuilder.js
+index eaa6f6347c5fcecac4541d73b1e55ad6bb3bff64..8ecd87906e0a9ecd07a6aec22435eef6638eb924 100644
+--- a/src/nodes/core/NodeBuilder.js
++++ b/src/nodes/core/NodeBuilder.js
+@@ -254,6 +254,15 @@ class NodeBuilder {
+ 		 */
+ 		this.hardwareClipping = false;
+ 
++		/**
++		 * The number of immediate data bytes required by the generated shader.
++		 * The initial four-byte range is reserved for `drawIndex`.
++		 *
++		 * @type {number}
++		 * @default 0
++		 */
++		this.immediateSize = 0;
++
+ 		/**
+ 		 * The generated vertex shader.
+ 		 *
+@@ -1167,7 +1176,6 @@ class NodeBuilder {
+ 
+ 	/**
+ 	 * Returns the drawIndex input variable as a native shader string.
+-	 * Only relevant for WebGL and its `WEBGL_multi_draw` extension.
+ 	 *
+ 	 * @abstract
+ 	 * @return {?string} The drawIndex shader string.
+diff --git a/src/renderers/common/nodes/NodeBuilderState.js b/src/renderers/common/nodes/NodeBuilderState.js
+index 5b7f90756cf48598159cf5fd419a35ecc6815c63..63c964c5e19243cf6f88d604cc11107a46b67c14 100644
+--- a/src/renderers/common/nodes/NodeBuilderState.js
++++ b/src/renderers/common/nodes/NodeBuilderState.js
+@@ -25,8 +25,9 @@ class NodeBuilderState {
+ 	 * @param {NodeMaterialObserver} observer - A node material observer.
+ 	 * @param {boolean} hardwareClipping - Whether the built material uses hardware clipping or not.
+ 	 * @param {Array<Object>} transforms - An array with transform attribute objects. Only relevant when using compute shaders with WebGL 2.
++	 * @param {number} [immediateSize=0] - The number of immediate data bytes required by the shaders.
+ 	 */
+-	constructor( vertexShader, fragmentShader, computeShader, nodeAttributes, bindings, updateNodes, updateBeforeNodes, updateAfterNodes, observer, hardwareClipping, transforms = [] ) {
++	constructor( vertexShader, fragmentShader, computeShader, nodeAttributes, bindings, updateNodes, updateBeforeNodes, updateAfterNodes, observer, hardwareClipping, transforms = [], immediateSize = 0 ) {
+ 
+ 		/**
+ 		 * The native vertex shader code.
+@@ -57,6 +58,13 @@ class NodeBuilderState {
+ 		 */
+ 		this.transforms = transforms;
+ 
++		/**
++		 * The number of immediate data bytes required by the shaders.
++		 *
++		 * @type {number}
++		 */
++		this.immediateSize = immediateSize;
++
+ 		/**
+ 		 * An array of node attributes representing
+ 		 * the attributes of the shaders.
+diff --git a/src/renderers/common/nodes/NodeManager.js b/src/renderers/common/nodes/NodeManager.js
+index 47a4b2ca4672aaa9e0eab945e24b59185881a156..d8225d4969deeabe7fe2f6b1a5c87c8d531fdb14 100644
+--- a/src/renderers/common/nodes/NodeManager.js
++++ b/src/renderers/common/nodes/NodeManager.js
+@@ -537,7 +537,8 @@ class NodeManager extends DataMap {
+ 			nodeBuilder.updateAfterNodes,
+ 			nodeBuilder.observer,
+ 			nodeBuilder.hardwareClipping,
+-			nodeBuilder.transforms
++			nodeBuilder.transforms,
++			nodeBuilder.immediateSize
+ 		);
+ 
+ 	}
+diff --git a/src/renderers/webgpu/WebGPUBackend.js b/src/renderers/webgpu/WebGPUBackend.js
+index e6345e42e2008f6606971c626326d6479e50a51a..e0559b9a3d4c149a8b5b60da115dd1b7259c0f86 100644
+--- a/src/renderers/webgpu/WebGPUBackend.js
++++ b/src/renderers/webgpu/WebGPUBackend.js
+@@ -114,6 +114,23 @@ class WebGPUBackend extends Backend {
+ 		 */
+ 		this.device = null;
+ 
++		/**
++		 * Whether the active implementation supports WebGPU immediate data.
++		 *
++		 * @private
++		 * @type {boolean}
++		 * @default false
++		 */
++		this._supportsImmediateData = false;
++
++		/**
++		 * Reusable storage for the draw index immediate value.
++		 *
++		 * @private
++		 * @type {Uint32Array}
++		 */
++		this._drawIndexData = new Uint32Array( 1 );
++
+ 		/**
+ 		 * A reference to the default render pass descriptor.
+ 		 *
+@@ -295,6 +312,13 @@ class WebGPUBackend extends Backend {
+ 
+ 		this.device = device;
+ 
++		const wgslLanguageFeatures = ( typeof navigator !== 'undefined' ) ? navigator.gpu?.wgslLanguageFeatures : undefined;
++		const maxImmediateSize = device.limits?.maxImmediateSize;
++		this._supportsImmediateData = typeof wgslLanguageFeatures?.has === 'function'
++			&& wgslLanguageFeatures.has( 'immediate_address_space' ) === true
++			&& Number.isInteger( maxImmediateSize )
++			&& maxImmediateSize >= 4;
++
+ 		this.trackTimestamp = this.trackTimestamp && this.hasFeature( GPUFeatureName.TimestampQuery );
+ 
+ 		this.updateSize();
+@@ -2008,7 +2032,7 @@ class WebGPUBackend extends Backend {
+ 	 * @param {RenderObject} renderObject - The render object.
+ 	 * @param {Info} info - Holds a series of statistical information about the GPU memory and the rendering process.
+ 	 * @param {Object} renderContextData - The render context data object, holding current pass state and occlusion query tracking.
+-	 * @param {GPURenderPipeline} pipelineGPU - The GPU render pipeline.
++	 * @param {Object} pipelineData - The render pipeline data.
+ 	 * @param {Array<BindGroup>} bindings - The bind groups.
+ 	 * @param {Array<BufferAttribute>} vertexBuffers - The vertex buffers.
+ 	 * @param {{vertexCount: number, firstVertex: number, instanceCount: number, firstInstance: number}} drawParams - The draw parameters.
+@@ -2016,9 +2040,23 @@ class WebGPUBackend extends Backend {
+ 	 * @param {Object} currentSets - Tracking object for currently set pipeline, attributes, bind groups, and index state.
+ 	 * @param {number} [cameraIndexSlot=-1] - Index of the binding slot holding the camera index bind group.
+ 	 */
+-	_draw( renderObject, info, renderContextData, pipelineGPU, bindings, vertexBuffers, drawParams, passEncoderGPU, currentSets, cameraIndexSlot = - 1 ) {
++	_draw( renderObject, info, renderContextData, pipelineData, bindings, vertexBuffers, drawParams, passEncoderGPU, currentSets, cameraIndexSlot = - 1 ) {
+ 
+ 		const { object, material, context } = renderObject;
++		const pipelineGPU = pipelineData.pipeline;
++		const immediateSize = pipelineData.immediateSize;
++
++		if ( immediateSize !== 0 && immediateSize !== 4 ) {
++
++			throw new Error( 'THREE.WebGPUBackend: The active render pipeline has invalid immediate data metadata.' );
++
++		}
++
++		if ( immediateSize === 4 && typeof passEncoderGPU.setImmediates !== 'function' ) {
++
++			throw new Error( 'THREE.WebGPUBackend: The active render pipeline requires unsupported immediate data.' );
++
++		}
+ 
+ 		const index = renderObject.getIndex();
+ 		const hasIndex = ( index !== null );
+@@ -2130,6 +2168,8 @@ class WebGPUBackend extends Backend {
+ 
+ 			for ( let i = 0; i < drawCount; i ++ ) {
+ 
++				this._setDrawIndex( passEncoderGPU, immediateSize, i );
++
+ 				if ( hasIndex === true ) {
+ 
+ 					passEncoderGPU.drawIndexed( counts[ i ], 1, starts[ i ] / bytesPerElement, 0, i );
+@@ -2158,12 +2198,14 @@ class WebGPUBackend extends Backend {
+ 
+ 				for ( let i = 0; i < indirectOffsets.length; i ++ ) {
+ 
++					this._setDrawIndex( passEncoderGPU, immediateSize, i );
+ 					passEncoderGPU.drawIndexedIndirect( buffer, indirectOffsets[ i ] );
+ 
+ 				}
+ 
+ 			} else {
+ 
++				this._setDrawIndex( passEncoderGPU, immediateSize, 0 );
+ 				passEncoderGPU.drawIndexed( indexCount, instanceCount, firstIndex, 0, 0 );
+ 
+ 			}
+@@ -2184,6 +2226,7 @@ class WebGPUBackend extends Backend {
+ 
+ 				for ( let i = 0; i < indirectOffsets.length; i ++ ) {
+ 
++					this._setDrawIndex( passEncoderGPU, immediateSize, i );
+ 					passEncoderGPU.drawIndirect( buffer, indirectOffsets[ i ] );
+ 
+ 				}
+@@ -2191,6 +2234,7 @@ class WebGPUBackend extends Backend {
+ 
+ 			} else {
+ 
++				this._setDrawIndex( passEncoderGPU, immediateSize, 0 );
+ 				passEncoderGPU.draw( vertexCount, instanceCount, firstVertex, 0 );
+ 
+ 			}
+@@ -2201,6 +2245,23 @@ class WebGPUBackend extends Backend {
+ 
+ 	}
+ 
++	/**
++	 * Sets the draw index in its reserved four-byte immediate data range.
++	 *
++	 * @private
++	 * @param {GPURenderPassEncoder|GPURenderBundleEncoder} passEncoderGPU - The active pass encoder.
++	 * @param {number} immediateSize - The pipeline's immediate data size.
++	 * @param {number} drawIndex - The zero-based draw index.
++	 */
++	_setDrawIndex( passEncoderGPU, immediateSize, drawIndex ) {
++
++		if ( immediateSize === 0 ) return;
++
++		this._drawIndexData[ 0 ] = drawIndex;
++		passEncoderGPU.setImmediates( 0, this._drawIndexData, 0, 1 );
++
++	}
++
+ 	// render object
+ 
+ 	/**
+@@ -2214,7 +2275,6 @@ class WebGPUBackend extends Backend {
+ 		const { object, context, pipeline } = renderObject;
+ 		const renderContextData = this.get( context );
+ 		const pipelineData = this.get( pipeline );
+-		const pipelineGPU = pipelineData.pipeline;
+ 
+ 		// Skip if pipeline has error
+ 		if ( pipelineData.error === true ) return;
+@@ -2310,7 +2370,7 @@ class WebGPUBackend extends Backend {
+ 
+ 					}
+ 
+-					this._draw( renderObject, info, renderContextData, pipelineGPU, bindings, vertexBuffers, drawParams, pass, sets, indexPos );
++					this._draw( renderObject, info, renderContextData, pipelineData, bindings, vertexBuffers, drawParams, pass, sets, indexPos );
+ 
+ 				}
+ 
+@@ -2356,7 +2416,7 @@ class WebGPUBackend extends Backend {
+ 
+ 				}
+ 
+-				this._draw( renderObject, info, renderContextData, pipelineGPU, bindings, vertexBuffers, drawParams, renderContextData.currentPass, renderContextData.currentSets );
++				this._draw( renderObject, info, renderContextData, pipelineData, bindings, vertexBuffers, drawParams, renderContextData.currentPass, renderContextData.currentSets );
+ 
+ 			}
+ 
+diff --git a/src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js b/src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js
+index 0a393816444a84414489f059fe34ab12f1c416a3..874b1323eb86c0fd784e7edef742577f66efcdd1 100644
+--- a/src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js
++++ b/src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js
+@@ -22,6 +22,14 @@ class GPUPipelineLayoutDescriptor {
+ 		 */
+ 		this.bindGroupLayouts = null;
+ 
++		/**
++		 * The number of immediate data bytes used by pipelines with this layout.
++		 *
++		 * @type {number}
++		 * @default 0
++		 */
++		this.immediateSize = 0;
++
+ 	}
+ 
+ 	/**
+@@ -31,6 +39,7 @@ class GPUPipelineLayoutDescriptor {
+ 
+ 		this.label = '';
+ 		this.bindGroupLayouts = null;
++		this.immediateSize = 0;
+ 
+ 	}
+ 
+diff --git a/src/renderers/webgpu/nodes/WGSLNodeBuilder.js b/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
+index 141480f7109eec5162b8d1dcff4ac551b9a31f91..bee73d205043d3cddd74a476f076dce440a436d2 100644
+--- a/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
++++ b/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
+@@ -40,11 +40,14 @@ const gpuShaderStageLib = {
+ };
+ 
+ const supports = {
++	batchingInstanceIndex: true,
+ 	instance: true,
+ 	swizzleAssign: false,
+ 	storageBuffer: true
+ };
+ 
++const drawIndexName = 'nodeDrawIndex';
++
+ const wgslFnOpLib = {
+ 	'^^': 'tsl_xor'
+ };
+@@ -1608,13 +1611,27 @@ ${ flowData.code }
+ 	}
+ 
+ 	/**
+-	 * Overwritten as a NOP since this method is intended for the WebGL 2 backend.
++	 * Returns the draw index immediate data variable when supported.
+ 	 *
+-	 * @return {null} Null.
++	 * @return {string} The draw index shader string.
+ 	 */
+ 	getDrawIndex() {
+ 
+-		return null;
++		if ( this.shaderStage === 'compute' ) {
++
++			throw new Error( 'THREE.WGSLNodeBuilder: drawIndex is not available in compute shaders.' );
++
++		}
++
++		if ( this.isAvailable( 'drawIndex' ) === false ) {
++
++			throw new Error( 'THREE.WGSLNodeBuilder: drawIndex requires WebGPU immediate data support.' );
++
++		}
++
++		this.immediateSize = 4;
++
++		return drawIndexName;
+ 
+ 	}
+ 
+@@ -2524,6 +2541,8 @@ ${ flowData.code }
+ 	 */
+ 	isAvailable( name ) {
+ 
++		if ( name === 'drawIndex' ) return this.renderer.backend._supportsImmediateData === true;
++
+ 		let result = supports[ name ];
+ 
+ 		if ( result === undefined ) {
+@@ -2593,10 +2612,17 @@ ${ flowData.code }
+ 	 */
+ 	_getWGSLVertexCode( shaderData ) {
+ 
++		const immediateData = this.immediateSize === 4
++			? `requires immediate_address_space;\nvar<immediate> ${ drawIndexName } : u32;`
++			: '';
++
+ 		return `${ this.getSignature() }
+ // directives
+ ${shaderData.directives}
+ 
++// immediate data
++${ immediateData }
++
+ // structs
+ ${shaderData.structs}
+ 
+diff --git a/src/renderers/webgpu/utils/WebGPUPipelineUtils.js b/src/renderers/webgpu/utils/WebGPUPipelineUtils.js
+index 802f98b6e061d4c1580a1e06a43d9b41aeec5b90..65424a38e2007af4663323bbd44671693877b36c 100644
+--- a/src/renderers/webgpu/utils/WebGPUPipelineUtils.js
++++ b/src/renderers/webgpu/utils/WebGPUPipelineUtils.js
+@@ -49,6 +49,48 @@ class WebGPUPipelineUtils {
+ 
+ 	}
+ 
++	/**
++	 * Creates a pipeline layout and resets the reusable descriptor.
++	 *
++	 * @private
++	 * @param {Array<GPUBindGroupLayout>} bindGroupLayouts - The bind group layouts.
++	 * @param {number} [immediateSize=0] - The required immediate data size in bytes.
++	 * @return {GPUPipelineLayout} The pipeline layout.
++	 */
++	_createPipelineLayout( bindGroupLayouts, immediateSize = 0 ) {
++
++		const backend = this.backend;
++
++		if ( immediateSize !== 0 && immediateSize !== 4 ) {
++
++			throw new Error( `THREE.WebGPUPipelineUtils: Unsupported immediate data size ${ immediateSize }.` );
++
++		}
++
++		const maxImmediateSize = backend.device.limits?.maxImmediateSize;
++		const hasRequiredImmediateSize = Number.isInteger( maxImmediateSize ) && maxImmediateSize >= immediateSize;
++
++		if ( immediateSize > 0 && ( backend._supportsImmediateData !== true || hasRequiredImmediateSize === false ) ) {
++
++			throw new Error( 'THREE.WebGPUPipelineUtils: Immediate data is not supported by the active device.' );
++
++		}
++
++		_pipelineLayoutDescriptor.bindGroupLayouts = bindGroupLayouts;
++		_pipelineLayoutDescriptor.immediateSize = immediateSize;
++
++		try {
++
++			return backend.device.createPipelineLayout( _pipelineLayoutDescriptor );
++
++		} finally {
++
++			_pipelineLayoutDescriptor.reset();
++
++		}
++
++	}
++
+ 	/**
+ 	 * Returns the sample count derived from the given render context.
+ 	 *
+@@ -197,12 +239,11 @@ class WebGPUPipelineUtils {
+ 		const depthStencilFormat = utils.getCurrentDepthStencilFormat( renderObject.context );
+ 
+ 		const sampleCount = this._getSampleCount( renderObject.context );
++		const immediateSize = renderObject.getNodeBuilderState().immediateSize;
+ 
+-		_pipelineLayoutDescriptor.bindGroupLayouts = bindGroupLayouts;
+-
+-		const pipelineLayout = device.createPipelineLayout( _pipelineLayoutDescriptor );
++		const pipelineLayout = this._createPipelineLayout( bindGroupLayouts, immediateSize );
+ 
+-		_pipelineLayoutDescriptor.reset();
++		pipelineData.immediateSize = immediateSize;
+ 
+ 		_renderPipelineDescriptor.label = `renderPipeline_${ material.name || material.type }_${ material.id }`;
+ 		_renderPipelineDescriptor.vertex = Object.assign( {}, vertexModule, { buffers: vertexBuffers } );
+@@ -402,13 +443,9 @@ class WebGPUPipelineUtils {
+ 		const computeStage = pipeline.computeProgram;
+ 		const pipelineLabel = `computePipeline_${ computeStage.stage }${ computeStage.name ? `_${ computeStage.name }` : '' }`;
+ 
+-		device.pushErrorScope( 'validation' );
+-
+-		_pipelineLayoutDescriptor.bindGroupLayouts = bindGroupLayouts;
+-
+-		const pipelineLayout = device.createPipelineLayout( _pipelineLayoutDescriptor );
++		const pipelineLayout = this._createPipelineLayout( bindGroupLayouts );
+ 
+-		_pipelineLayoutDescriptor.reset();
++		device.pushErrorScope( 'validation' );
+ 
+ 		_computePipelineDescriptor.label = pipelineLabel;
+ 		_computePipelineDescriptor.compute = computeProgram;

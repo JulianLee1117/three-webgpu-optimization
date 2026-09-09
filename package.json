@@ -16,6 +16,18 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "demo:trainable-tsl": "node scripts/run-trainable-tsl.mjs --serve",
+    "check:trainable-tsl": "node scripts/run-trainable-tsl.mjs",
+    "test:trainable-tsl": "node --test experiments/trainable-tsl/autograd.test.mjs",
+    "package:trainable-tsl": "node scripts/package-trainable-tsl.mjs",
+    "demo:zipdepth": "node scripts/run-zipdepth-browser.mjs --serve",
+    "check:zipdepth": "node scripts/run-zipdepth-browser.mjs",
+    "analyze:ort-handoff": "node scripts/analyze-ort-handoff-screen.mjs",
+    "prepare:ort": "node scripts/prepare-ort-surface.mjs",
+    "demo:ort": "node scripts/run-ort-surface.mjs --serve",
+    "check:ort": "node scripts/run-ort-surface.mjs --size=128",
+    "test:external-storage": "node --test scripts/test-external-storage.mjs",
+    "package:ort": "node scripts/package-ort-surface.mjs",
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "test": "node --test tests/*.test.mjs",
@@ -29,8 +41,24 @@
     "probe:first-instance-live-order": "node scripts/run-first-instance-live-order-factorial.mjs",
     "verify:first-instance-live-order": "node analysis/verify-first-instance-live-order-factorial.mjs",
     "smoke:first-instance-standalone": "node scripts/run-first-instance-standalone-deployment.mjs --smoke",
+    "probe:first-instance-standalone-startup-endurance": "node scripts/probe-first-instance-standalone-startup-endurance.mjs",
     "candidate:first-instance-standalone": "node scripts/run-first-instance-standalone-deployment.mjs",
     "verify:first-instance-standalone": "node analysis/verify-first-instance-standalone-deployment.mjs",
+    "build:three-immediate-overlay": "node scripts/build-three-immediate-overlay.mjs",
+    "build:three-immediate-dev-overlay": "node scripts/build-three-immediate-dev-overlay.mjs",
+    "build:three-draw-index-overlay": "node scripts/build-three-draw-index-overlay.mjs",
+    "probe:three-draw-index": "node scripts/probe-three-draw-index.mjs",
+    "probe:three-draw-index-v2-owned-device": "node scripts/probe-three-draw-index-v2-owned-device.mjs",
+    "probe:three-draw-index-v3-owned-device": "node scripts/probe-three-draw-index-v3-owned-device.mjs",
+    "probe:three-primitive-index": "node scripts/probe-three-primitive-index.mjs",
+    "probe:three-ort-gpu-buffer": "node scripts/probe-three-ort-gpu-buffer.mjs",
+    "probe:three-ort-gpu-buffer-v2": "node scripts/probe-three-ort-gpu-buffer-v2.mjs",
+    "probe:webgpu-immediates": "node scripts/probe-webgpu-immediates.mjs",
+    "probe:webgpu-immediates-default": "node scripts/probe-webgpu-immediates.mjs --default-exposure",
+    "probe:three-immediate-overlay": "node scripts/probe-three-immediate-overlay.mjs",
+    "probe:three-immediate-dev-overlay": "node scripts/probe-three-immediate-dev-overlay.mjs",
+    "probe:three-immediate-phase0-r185": "node scripts/probe-three-immediate-phase0.mjs --target r185",
+    "probe:three-immediate-phase0-dev": "node scripts/probe-three-immediate-phase0.mjs --target dev",
     "benchmark:focused": "node scripts/run-benchmark.mjs",
     "candidate:init:first-instance-live": "node scripts/run-live-first-instance-candidate.mjs --initialize",
     "candidate:first-instance-live": "node scripts/run-live-first-instance-candidate.mjs",
@@ -40,15 +68,27 @@
     "verify:public-pair:first-instance-live": "node analysis/verify-public-live-first-instance-candidate-pair.mjs",
     "build:public-package:first-instance-live": "node scripts/build-public-live-first-instance-package.mjs",
     "verify:public-package:first-instance-live": "node analysis/verify-public-live-first-instance-package.mjs",
-    "analyze": "node analysis/summarize.mjs"
+    "analyze": "node analysis/summarize.mjs",
+    "demo:scene-fit": "node scripts/run-scene-fit.mjs --serve",
+    "check:scene-fit": "node scripts/run-scene-fit.mjs",
+    "analyze:scene-fit": "node scripts/analyze-scene-fit.mjs",
+    "check:depth-contact": "node experiments/depth-contact/reference.mjs",
+    "demo:triangle-query": "node scripts/run-gpu-deform-collider.mjs --serve --bug-demo",
+    "check:triangle-query": "node scripts/run-gpu-deform-collider.mjs --triangle-probe",
+    "check:triangle-query:fixed": "node scripts/run-gpu-deform-collider.mjs --triangle-probe --corrected",
+    "demo:shader-bounds": "node scripts/run-gpu-deform-collider.mjs --serve --corrected",
+    "analyze:shader-bounds": "node scripts/analyze-tsl-bounds.mjs"
   },
   "dependencies": {
+    "onnxruntime-web": "1.29.0",
+    "onnxruntime-web-dev": "npm:onnxruntime-web@1.30.0-dev.20260904-d47fd8824",
     "three": "0.185.1",
     "three-blocks-v10": "npm:three-blocks@0.10.0",
-    "three-blocks-v11": "npm:three-blocks@0.11.0"
+    "three-blocks-v11": "npm:three-blocks@0.11.0",
+    "three-mesh-bvh": "0.9.15"
   },
   "devDependencies": {
     "playwright-core": "1.55.0",
-    "vite": "7.2.2"
+    "vite": "7.3.6"
   }
 }

@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "protocol": "three-webgpu-draw-index-v3-owned-device-v1",
+  "execution": "single-use correctness canary with checkpointed one-shot evidence collection",
+  "methodRevision": "The prior v2 canary discarded its successful first asynchronous evidence snapshot, rendered and captured its screenshot, and then timed out in a second asynchronous snapshot. V3 retains the first snapshot, requests shader compilation info exactly once, and uses only a synchronous late-state read after the screenshot.",
+  "priorAttempt": {
+    "relationship": "method revision after an inconclusive harness timeout; not an independent confirmation or replacement",
+    "report": {
+      "path": "results/development/three-draw-index-v2-owned-device-canary/canary-994260a-v2/report.json",
+      "bytes": 5953,
+      "sha256": "866e5d557aa0c83c1d8e0fe27f1b32c4510de239d49832ea9fe061bccb963258"
+    },
+    "sidecar": {
+      "path": "results/development/three-draw-index-v2-owned-device-canary/canary-994260a-v2/report.json.sha256",
+      "bytes": 78,
+      "sha256": "1d455559ad621e26d59847256d66c44887b529bdb99247c54cd745e62b84a2cc"
+    },
+    "screenshot": {
+      "path": "results/development/three-draw-index-v2-owned-device-canary/canary-994260a-v2/draw-index-example.png",
+      "bytes": 25650,
+      "width": 960,
+      "height": 540,
+      "sha256": "c053908996302b34f416103a1bd0f5312fc5238f7e0e20ef4aa85205de2a27c7"
+    },
+    "expectedStatus": "failed",
+    "expectedFailure": "Final evidence snapshot exceeded 30000 ms."
+  },
+  "upstream": {
+    "commit": "994260a7a59abe466de8e59db1ecc9e30352751d",
+    "tree": "7f3d4a048ea19bef1a488b0e2e243e47f6b30002"
+  },
+  "patch": {
+    "path": "patches/three-webgpu-draw-index-immediates-v2.patch",
+    "bytes": 72740,
+    "sha256": "51cd50c1c385a1389ace5903179f6fe354b9d9e7fb93af31474476c7e6f3092e"
+  },
+  "browser": {
+    "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "bytes": 4461720,
+    "productVersion": "152.0.7977.82",
+    "sha256": "8cd23aec3a30479b9b8db2063e70526c88a7ec2c99cd744603eb26ab598733ed",
+    "launch": "Playwright Chromium, headless, args: []",
+    "forbiddenArgumentPrefixes": [
+      "--disable-dawn-features",
+      "--enable-dawn-features",
+      "--enable-unsafe-webgpu",
+      "--enable-webgpu-developer-features",
+      "--force-high-performance-gpu",
+      "--force-webgpu-compat",
+      "--ignore-gpu-blocklist",
+      "--use-angle",
+      "--use-vulkan",
+      "--use-webgpu-adapter"
+    ]
+  },
+  "renderer": {
+    "constructor": "new THREE.WebGPURenderer( { antialias: true } )",
+    "deviceOwnership": "Three.js",
+    "requiredLimitsPromotion": false,
+    "rawAdapterOrDeviceInjection": false
+  },
+  "build": {
+    "files": {
+      "three.core.js": {
+        "bytes": 1518172,
+        "sha256": "766a32993fedb1834e29804b691a0951914b804826a2de9f0746ea03387dd0e0"
+      },
+      "three.module.js": {
+        "bytes": 679841,
+        "sha256": "52d447c6397ac9924a0c873f97cd455f11e3825fcf491f893e96eb26d83e8129"
+      },
+      "three.tsl.js": {
+        "bytes": 37535,
+        "sha256": "d7bec24ec37cab32f54c50574d5169c9b4a7579de3f8696d3101f7417983993b"
+      },
+      "three.webgpu.js": {
+        "bytes": 2379229,
+        "sha256": "eef8dcd7f5fafe62baa99b725b9daf3cc015d8248003917a5d5cc4bec5741aac"
+      },
+      "three.webgpu.nodes.js": {
+        "bytes": 2370312,
+        "sha256": "61ace30bcfdc624f95faa03374d02645448c1a10b36d8a7c153756135c166e3c"
+      }
+    }
+  },
+  "example": {
+    "path": "examples/webgpu_tsl_draw_index.html",
+    "viewport": [
+      960,
+      540
+    ],
+    "deviceScaleFactor": 1,
+    "phase": 3,
+    "order": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      0,
+      1,
+      2
+    ]
+  },
+  "assertions": [
+    "the prior v2 report, checksum sidecar, and screenshot remain byte-identical to their frozen identities",
+    "the candidate working diff is byte-identical to the frozen patch",
+    "the ordinary renderer path owns the sole adapter and device acquisition",
+    "the acquired adapter reports that it is not a fallback adapter",
+    "requiredLimits contains no maxImmediateSize promotion",
+    "the actual device reports maxImmediateSize at least four and the WGSL language feature is present",
+    "one immediate and one ordinary scene pipeline render eight indexed BatchedMesh commands each, followed by the expected ordinary output-transform draw",
+    "immediate setters carry exact uint32 ordinals zero through seven immediately before their draws",
+    "the ordinary batch emits no immediate setter",
+    "the immediate WGSL requirement and declaration compile without messages and compilation info is requested exactly once per shader module",
+    "all WebGPU validation scopes are balanced, settled, and empty",
+    "the deterministic example reaches phase three and both actual BatchedMesh command lists equal the expected order",
+    "raw synchronous page and GPU state is written to an immutable pre-collection checkpoint before any asynchronous diagnostic wait",
+    "the successful initial GPU snapshot is written to an immutable checkpoint before screenshot or late-state work",
+    "late page and GPU state is read synchronously after all postflight work and is deeply identical to the initial snapshot",
+    "browser, page, GPU, network, and harness-teardown diagnostics are empty",
+    "a full-resolution screenshot is captured for visual inspection"
+  ],
+  "output": {
+    "directory": "results/development/three-draw-index-v3-owned-device-canary/canary-994260a-v3",
+    "preCollectionCheckpoint": "pre-collection-checkpoint.json",
+    "checkpoint": "initial-checkpoint.json",
+    "report": "report.json",
+    "screenshot": "draw-index-example.png"
+  },
+  "claimBoundary": "Correctness and integration on one Chrome/WebGPU implementation using Three-owned device acquisition; no performance or cross-device universality claim. The prior v2 run remains an inconclusive harness timeout and is not erased by this method revision."
+}

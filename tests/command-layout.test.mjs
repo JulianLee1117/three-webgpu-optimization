@@ -129,7 +129,13 @@ test('storage-transform material exposes validated static address modes', () => 
       visibleIdsAttribute,
       addressMode: STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
     });
-    materials.push(portable, firstInstance);
+    const immediate = createStorageTransformMaterial({
+      matrixAttribute,
+      objectCount: 2,
+      visibleIdsAttribute,
+      addressMode: STORAGE_TRANSFORM_ADDRESS_MODES.IMMEDIATE_BASE,
+    });
+    materials.push(portable, immediate, firstInstance);
 
     assert.equal(
       portable.userData.storageTransformAddressMode,
@@ -139,6 +145,12 @@ test('storage-transform material exposes validated static address modes', () => 
       firstInstance.userData.storageTransformAddressMode,
       STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE,
     );
+    assert.equal(
+      immediate.userData.storageTransformAddressMode,
+      STORAGE_TRANSFORM_ADDRESS_MODES.IMMEDIATE_BASE,
+    );
+    assert.notEqual(portable.positionNode, immediate.positionNode);
+    assert.notEqual(immediate.positionNode, firstInstance.positionNode);
     assert.notEqual(portable.positionNode, firstInstance.positionNode);
     assert.throws(
       () => createStorageTransformMaterial({

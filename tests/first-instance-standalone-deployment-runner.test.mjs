@@ -3,10 +3,18 @@ import test from 'node:test';
 
 import {
   STANDALONE_EXECUTION_MODES,
+  STANDALONE_FAILURE_DIAGNOSTIC_LIMITS,
+  STANDALONE_FULL_RESULT_ROOT_NAME,
+  STANDALONE_FULL_RUN_ID_STEM,
   STANDALONE_POST_DISCONNECT_DELAY_MS,
+  boundStandaloneFailureDiagnosticValue,
+  captureStandaloneReadinessSnapshot,
+  createStandaloneBrowserObservationRecorder,
   createStandaloneAuditContext,
   createStandaloneShaderObservationChallenges,
+  createStandaloneTerminalFailureEnvelope,
   createStandaloneTrialArtifact,
+  guardStandaloneBrowserOperation,
   selectStandaloneDeploymentExecution,
   standaloneFullEnvironmentGatesPassed,
   validateStandaloneBrowserLifecycleChain,
@@ -21,6 +29,11 @@ const RUN_ID = 'standalone-runner-unit';
 const PLAN_SHA256 = 'a'.repeat(64);
 const plan = buildFirstInstanceStandaloneDeploymentPlan({ runId: RUN_ID });
 const canonicalTrial = plan.trials[0];
+
+test('corrective full capture uses an isolated v2 result namespace', () => {
+  assert.equal(STANDALONE_FULL_RUN_ID_STEM, 'first-instance-standalone-deployment-v2');
+  assert.equal(STANDALONE_FULL_RESULT_ROOT_NAME, 'candidate-standalone-deployment-v2');
+});
 
 function timestampUid(type, frame) {
   const prefix = type === 'compute' ? 'c' : 'r';
@@ -238,6 +251,200 @@ function acceptedRows(trial = canonicalTrial) {
     };
   });
 }
+
+test('failure diagnostics retain fatal browser observations under declared caps', () => {
+  let clock = 0;
+  const recorder = createStandaloneBrowserObservationRecorder({
+    now: () => `2026-01-01T00:00:${String(clock).padStart(2, '0')}.000Z`,
+    elapsed: () => clock++,
+  });
+  const oversizedStack = 'x'.repeat(
+    STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits + 100,
+  );
+  for (let index = 0;
+    index < STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.observationRecordsPerKind + 4;
+    index += 1) {
+    recorder.record('pageerror', {
+      name: 'Error',
+      message: `failure-${index}`,
+      stack: oversizedStack,
+    }, { fatal: true });
+  }
+  recorder.record('requestfailed', {
+    url: 'http://127.0.0.1/module.js',
+    failure: { errorText: 'net::ERR_FAILED' },
+  }, { fatal: true });
+  recorder.record('console-error', { text: 'module failed' }, { fatal: true });
+  recorder.record('http-error-response', {
+    url: 'http://127.0.0.1/missing.js',
+    status: 404,
+  }, { fatal: true });
+  recorder.record('page-crash', {}, { fatal: true });
+  recorder.record('page-close', { shutdownIntent: null }, { fatal: true });
+  recorder.record('browser-disconnected', {
+    shutdownIntent: null,
+  }, { fatal: true });
+  recorder.record('browser-disconnected', {
+    shutdownIntent: 'failure-cleanup',
+  }, { fatal: true, expected: true });
+
+  const report = recorder.report();
+  assert.equal(report.totalObserved,
+    STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.observationRecordsPerKind + 11);
+  assert.equal(report.observedCounts.pageerror,
+    STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.observationRecordsPerKind + 4);
+  assert.equal(report.retainedCounts.pageerror,
+    STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.observationRecordsPerKind);
+  assert.equal(report.droppedCounts.pageerror, 4);
+  assert.equal(report.recordsByKind.requestfailed.length, 1);
+  assert.equal(report.recordsByKind['console-error'].length, 1);
+  assert.equal(report.recordsByKind['http-error-response'].length, 1);
+  assert.equal(report.recordsByKind['page-crash'].length, 1);
+  assert.equal(report.recordsByKind['page-close'].length, 1);
+  assert.equal(report.recordsByKind['browser-disconnected'][0].expected, false);
+  assert.equal(report.recordsByKind['browser-disconnected'][1].expected, true);
+  assert.equal(report.firstFatalObservation.kind, 'pageerror');
+  assert.match(report.recordsByKind.pageerror[0].detail.stack, /diagnostic text omitted/);
+  assert.ok(report.recordsByKind.pageerror[0].detail.stack.length
+    <= STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits);
+
+  const cyclic = { values: Array.from({ length: 40 }, (_, index) => index) };
+  cyclic.self = cyclic;
+  const bounded = boundStandaloneFailureDiagnosticValue(cyclic);
+  assert.match(bounded.self, /circular/);
+  assert.equal(bounded.values.length,
+    STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticArrayItems + 1);
+});
+
+test('fatal page observation wins a pending browser operation without waiting for timeout', async () => {
+  const recorder = createStandaloneBrowserObservationRecorder();
+  const guarded = guardStandaloneBrowserOperation(
+    () => new Promise(() => {}),
+    recorder,
+    'readiness',
+  );
+  recorder.record('pageerror', {
+    name: 'Error',
+    message: 'module boot failed',
+  }, { fatal: true });
+  await assert.rejects(guarded, (error) => {
+    assert.equal(error.name, 'StandaloneBrowserObservationError');
+    assert.equal(error.code, 'FIRST_INSTANCE_STANDALONE_BROWSER_OBSERVATION');
+    assert.match(error.message, /pageerror/);
+    return true;
+  });
+
+  const expectedRecorder = createStandaloneBrowserObservationRecorder();
+  expectedRecorder.record('browser-disconnected', {
+    shutdownIntent: 'normal-close',
+  }, { fatal: true, expected: true });
+  assert.equal(await guardStandaloneBrowserOperation(
+    () => Promise.resolve('complete'),
+    expectedRecorder,
+    'normal close',
+  ), 'complete');
+  assert.equal(expectedRecorder.report().firstFatalObservation, null);
+
+  const alreadyFatalRecorder = createStandaloneBrowserObservationRecorder();
+  alreadyFatalRecorder.record('requestfailed', {
+    url: 'http://127.0.0.1/module.js',
+  }, { fatal: true });
+  let operationStarted = false;
+  await assert.rejects(guardStandaloneBrowserOperation(
+    () => {
+      operationStarted = true;
+      return Promise.resolve();
+    },
+    alreadyFatalRecorder,
+    'post-failure operation',
+  ), /requestfailed/);
+  assert.equal(operationStarted, false);
+});
+
+test('readiness snapshot has a global payload budget and a capture deadline', async () => {
+  const captured = await captureStandaloneReadinessSnapshot({
+    isClosed: () => false,
+    evaluate: async () => ({
+      schemaVersion: 1,
+      kind: 'first-instance-standalone-readiness-snapshot-value',
+      documentReadyState: 'interactive',
+      benchmarkGlobalPresent: false,
+    }),
+  });
+  assert.equal(captured.captureStatus, 'captured');
+  assert.equal(captured.value.documentReadyState, 'interactive');
+  assert.match(captured.valueSha256, /^[0-9a-f]{64}$/);
+  assert.ok(captured.observedJsonByteLength <= captured.maximumJsonBytes);
+
+  const huge = Object.fromEntries(Array.from(
+    { length: STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticObjectKeys },
+    (_, index) => [
+      `field-${index}`,
+      Array.from(
+        { length: STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticArrayItems },
+        () => 'x'.repeat(STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits),
+      ),
+    ],
+  ));
+  const globallyBounded = await captureStandaloneReadinessSnapshot({
+    isClosed: () => false,
+    evaluate: async () => huge,
+  });
+  assert.equal(globallyBounded.captureStatus, 'captured');
+  assert.notEqual(globallyBounded.value, null);
+  assert.ok(globallyBounded.observedJsonByteLength <= globallyBounded.maximumJsonBytes);
+  assert.match(JSON.stringify(globallyBounded.value), /diagnostic budget exhausted/);
+  assert.match(globallyBounded.valueSha256, /^[0-9a-f]{64}$/);
+
+  const deadline = await captureStandaloneReadinessSnapshot({
+    isClosed: () => false,
+    evaluate: () => new Promise(() => {}),
+  }, { timeoutMs: 1 });
+  assert.equal(deadline.captureStatus, 'deadline-exceeded');
+  assert.equal(deadline.value, null);
+
+  const unavailable = await captureStandaloneReadinessSnapshot({
+    isClosed: () => true,
+  });
+  assert.equal(unavailable.captureStatus, 'page-unavailable');
+});
+
+test('terminal failure envelope is versioned independently from successful artifacts', () => {
+  const error = new TypeError('readiness failed');
+  error.stack = 's'.repeat(
+    STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits + 100,
+  );
+  const diagnostics = {
+    schemaVersion: 1,
+    kind: 'first-instance-standalone-active-browser-failure-diagnostics',
+    observations: { firstFatalObservation: { kind: 'pageerror' } },
+  };
+  const failure = createStandaloneTerminalFailureEnvelope({
+    error,
+    activeBrowserFailureDiagnostics: diagnostics,
+  });
+  assert.equal(failure.schemaVersion, 2);
+  assert.equal(failure.kind, 'first-instance-standalone-deployment-capture-failure');
+  assert.equal(failure.signal, null);
+  assert.equal(failure.error.name, 'TypeError');
+  assert.equal(failure.error.message, 'readiness failed');
+  assert.match(failure.error.stack, /code units omitted/);
+  assert.ok(failure.error.stack.length
+    <= STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits);
+  assert.deepEqual(failure.activeBrowserFailureDiagnostics, diagnostics);
+
+  const interruption = createStandaloneTerminalFailureEnvelope({
+    terminationSignal: 'SIGINT',
+    error,
+    activeBrowserFailureDiagnostics: diagnostics,
+  });
+  assert.equal(interruption.schemaVersion, 2);
+  assert.equal(
+    interruption.kind,
+    'first-instance-standalone-deployment-capture-interruption',
+  );
+  assert.equal(interruption.signal, 'SIGINT');
+});
 
 test('execution selection preserves the full plan and freezes a two-session P/F smoke prefix', () => {
   const full = selectStandaloneDeploymentExecution(plan, STANDALONE_EXECUTION_MODES.FULL);

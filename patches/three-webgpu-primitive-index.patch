@@ -1,0 +1,437 @@
+diff --git a/src/Three.TSL.js b/src/Three.TSL.js
+index b75d68b59ef257e7f62a8e0355e8f500b0e4e469..6faf5ea402980fa33b9e6cfb76146c3e93b522c4 100644
+--- a/src/Three.TSL.js
++++ b/src/Three.TSL.js
+@@ -483,6 +483,7 @@ export const pow2 = TSL.pow2;
+ export const pow3 = TSL.pow3;
+ export const pow4 = TSL.pow4;
+ export const premultiplyAlpha = TSL.premultiplyAlpha;
++export const primitiveIndex = TSL.primitiveIndex;
+ export const property = TSL.property;
+ export const quadBroadcast = TSL.quadBroadcast;
+ export const quadSwapDiagonal = TSL.quadSwapDiagonal;
+diff --git a/src/nodes/core/IndexNode.js b/src/nodes/core/IndexNode.js
+index 1da19c93cb7de50183111a3a458f85185b962b41..ddf1fc4767c47c714eff242f865869a2b0bc81a8 100644
+--- a/src/nodes/core/IndexNode.js
++++ b/src/nodes/core/IndexNode.js
+@@ -9,6 +9,7 @@ import { varying } from './VaryingNode.js';
+  * - `vertexIndex`: The index of a vertex within a mesh.
+  * - `instanceIndex`: The index of either a mesh instance or an invocation of a compute shader.
+  * - `drawIndex`: The index of a draw call.
++ * - `primitiveIndex`: The index of a primitive within an instance of a draw call.
+  * - `invocationLocalIndex`: The index of a compute invocation within the scope of a workgroup.
+  * - `invocationSubgroupIndex`: The index of a compute invocation within the scope of a subgroup.
+  * - `subgroupIndex`: The index of a compute invocation's subgroup within its workgroup.
+@@ -26,7 +27,7 @@ class IndexNode extends Node {
+ 	/**
+ 	 * Constructs a new index node.
+ 	 *
+-	 * @param {('vertex'|'instance'|'subgroup'|'invocationLocal'|'invocationSubgroup'|'draw')} scope - The scope of the index node.
++	 * @param {('vertex'|'instance'|'primitive'|'subgroup'|'invocationLocal'|'invocationSubgroup'|'draw')} scope - The scope of the index node.
+ 	 */
+ 	constructor( scope ) {
+ 
+@@ -55,6 +56,12 @@ class IndexNode extends Node {
+ 		const nodeType = this.getNodeType( builder );
+ 		const scope = this.scope;
+ 
++		if ( scope === IndexNode.PRIMITIVE ) {
++
++			return builder.getPrimitiveIndex();
++
++		}
++
+ 		let propertyName;
+ 
+ 		if ( scope === IndexNode.VERTEX ) {
+@@ -109,6 +116,7 @@ class IndexNode extends Node {
+ 
+ IndexNode.VERTEX = 'vertex';
+ IndexNode.INSTANCE = 'instance';
++IndexNode.PRIMITIVE = 'primitive';
+ IndexNode.SUBGROUP = 'subgroup';
+ IndexNode.INVOCATION_LOCAL = 'invocationLocal';
+ IndexNode.INVOCATION_SUBGROUP = 'invocationSubgroup';
+@@ -154,6 +162,19 @@ export const vertexIndex = /*@__PURE__*/ nodeImmutable( IndexNode, IndexNode.VER
+  */
+ export const instanceIndex = /*@__PURE__*/ nodeImmutable( IndexNode, IndexNode.INSTANCE );
+ 
++/**
++ * TSL object that represents the per-instance index of the primitive currently
++ * being rasterized. The index starts at zero for each instance in a draw call
++ * and is uniform across all fragments of the primitive.
++ *
++ * `primitiveIndex` is only available in the fragment shader stage when the
++ * WebGPU device has the optional `primitive-index` feature enabled.
++ *
++ * @tsl
++ * @type {IndexNode}
++ */
++export const primitiveIndex = /*@__PURE__*/ nodeImmutable( IndexNode, IndexNode.PRIMITIVE );
++
+ /**
+  * TSL object that represents the index of the subgroup the current compute invocation belongs to.
+  * Subgroup indices are local to the workgroups to which they belong.
+diff --git a/src/nodes/core/NodeBuilder.js b/src/nodes/core/NodeBuilder.js
+index eaa6f6347c5fcecac4541d73b1e55ad6bb3bff64..2d48c5faf5c6cb72234133e28a0d7905d7db8e06 100644
+--- a/src/nodes/core/NodeBuilder.js
++++ b/src/nodes/core/NodeBuilder.js
+@@ -1178,6 +1178,18 @@ class NodeBuilder {
+ 
+ 	}
+ 
++	/**
++	 * Returns the primitiveIndex input variable as a native shader string.
++	 *
++	 * @abstract
++	 * @return {string} The primitiveIndex shader string.
++	 */
++	getPrimitiveIndex() {
++
++		warn( 'Abstract function.' );
++
++	}
++
+ 	/**
+ 	 * Returns the frontFacing input variable as a native shader string.
+ 	 *
+diff --git a/src/renderers/webgl-fallback/nodes/GLSLNodeBuilder.js b/src/renderers/webgl-fallback/nodes/GLSLNodeBuilder.js
+index c1886d3789f1e0ed177638ea5301092ec20c207e..3f394bf3cb8f8c63b4857982435940046a7538de 100644
+--- a/src/renderers/webgl-fallback/nodes/GLSLNodeBuilder.js
++++ b/src/renderers/webgl-fallback/nodes/GLSLNodeBuilder.js
+@@ -1308,6 +1308,17 @@ ${ flowData.code }
+ 
+ 	}
+ 
++	/**
++	 * Primitive index is not exposed by WebGL 2 / GLSL ES 3.00.
++	 *
++	 * @return {never}
++	 */
++	getPrimitiveIndex() {
++
++		throw new Error( 'THREE.GLSLNodeBuilder: primitiveIndex is not supported by the WebGL backend.' );
++
++	}
++
+ 	/**
+ 	 * Returns the front facing builtin.
+ 	 *
+diff --git a/src/renderers/webgpu/nodes/WGSLNodeBuilder.js b/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
+index 141480f7109eec5162b8d1dcff4ac551b9a31f91..0d1c8a527e5ccbf46c0f48a62fc7c63962297c58 100644
+--- a/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
++++ b/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
+@@ -1618,6 +1618,31 @@ ${ flowData.code }
+ 
+ 	}
+ 
++	/**
++	 * Returns the primitive index builtin.
++	 *
++	 * @return {string} The primitive index builtin.
++	 */
++	getPrimitiveIndex() {
++
++		if ( this.shaderStage !== 'fragment' ) {
++
++			throw new Error( 'THREE.WGSLNodeBuilder: primitiveIndex is only available in fragment shaders.' );
++
++		}
++
++		if ( this.isAvailable( 'primitiveIndex' ) === false ) {
++
++			throw new Error( 'THREE.WGSLNodeBuilder: primitiveIndex requires the WebGPU "primitive-index" feature.' );
++
++		}
++
++		this.enableDirective( 'primitive_index' );
++
++		return this.getBuiltin( 'primitive_index', 'primitiveIndex', 'u32' );
++
++	}
++
+ 	/**
+ 	 * Returns the front facing builtin.
+ 	 *
+@@ -2524,6 +2549,12 @@ ${ flowData.code }
+ 	 */
+ 	isAvailable( name ) {
+ 
++		if ( name === 'primitiveIndex' ) {
++
++			return this.renderer.hasFeature( 'primitive-index' );
++
++		}
++
+ 		let result = supports[ name ];
+ 
+ 		if ( result === undefined ) {
+@@ -2636,6 +2667,9 @@ fn main( ${shaderData.attributes} ) -> VaryingsStruct {
+ 	_getWGSLFragmentCode( shaderData ) {
+ 
+ 		return `${ this.getSignature() }
++// directives
++${shaderData.directives}
++
+ // global
+ ${ diagnostics }
+ 
+diff --git a/src/renderers/webgpu/utils/WebGPUConstants.js b/src/renderers/webgpu/utils/WebGPUConstants.js
+index 91b9934d022611642d6205280b6b6a5c3f2e1ba3..0d04cce70a1901b76bdbcfa87ace1e6c3f954f9d 100644
+--- a/src/renderers/webgpu/utils/WebGPUConstants.js
++++ b/src/renderers/webgpu/utils/WebGPUConstants.js
+@@ -345,7 +345,8 @@ export const GPUFeatureName = {
+ 	DualSourceBlending: 'dual-source-blending',
+ 	Subgroups: 'subgroups',
+ 	TextureFormatsTier1: 'texture-formats-tier1',
+-	TextureFormatsTier2: 'texture-formats-tier2'
++	TextureFormatsTier2: 'texture-formats-tier2',
++	PrimitiveIndex: 'primitive-index'
+ };
+ 
+ export const GPUFeatureMap = {
+diff --git a/test/unit/src/renderers/webgpu/WebGPUPrimitiveIndex.tests.js b/test/unit/src/renderers/webgpu/WebGPUPrimitiveIndex.tests.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..b73851aca0f98912ae860c24777d580aca944c03
+--- /dev/null
++++ b/test/unit/src/renderers/webgpu/WebGPUPrimitiveIndex.tests.js
+@@ -0,0 +1,212 @@
++import * as THREE from '../../../../../src/Three.WebGPU.js';
++import GLSLNodeBuilder from '../../../../../src/renderers/webgl-fallback/nodes/GLSLNodeBuilder.js';
++import WebGPUBackend from '../../../../../src/renderers/webgpu/WebGPUBackend.js';
++import { GPUFeatureName } from '../../../../../src/renderers/webgpu/utils/WebGPUConstants.js';
++
++const { TSL } = THREE;
++
++function countOccurrences( source, token ) {
++
++	return source.split( token ).length - 1;
++
++}
++
++function createRenderer( primitiveIndexSupported ) {
++
++	return {
++		backend: {
++			capabilities: { getUniformBufferLimit: () => 65536 },
++			isWebGPUBackend: true,
++			utils: { getTextureSampleData: () => ( { primarySamples: 1 } ) }
++		},
++		contextNode: TSL.context( {} ),
++		library: new THREE.StandardNodeLibrary(),
++		getRenderTarget: () => null,
++		getMRT: () => null,
++		coordinateSystem: THREE.WebGPUCoordinateSystem,
++		outputColorSpace: THREE.SRGBColorSpace,
++		debug: { diagnostics: { keywords: false } },
++		currentSamples: 1,
++		depth: false,
++		logarithmicDepthBuffer: false,
++		reversedDepthBuffer: false,
++		lighting: { enabled: false },
++		shadowMap: { enabled: false },
++		highPrecision: true,
++		hasFeature: ( name ) => name === GPUFeatureName.PrimitiveIndex && primitiveIndexSupported,
++		hasCompatibility: () => false
++	};
++
++}
++
++function buildShaders( fragmentNode, primitiveIndexSupported ) {
++
++	const material = new THREE.NodeMaterial();
++	material.vertexNode = TSL.vec4( TSL.positionLocal, 1 );
++	material.fragmentNode = fragmentNode;
++
++	const geometry = new THREE.BufferGeometry();
++	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [
++		0, 0, 0,
++		1, 0, 0,
++		0, 1, 0
++	], 3 ) );
++
++	const builder = new THREE.WGSLNodeBuilder(
++		new THREE.Mesh( geometry, material ),
++		createRenderer( primitiveIndexSupported )
++	);
++	builder.camera = new THREE.PerspectiveCamera();
++	builder.scene = new THREE.Scene();
++	builder.build();
++
++	return builder;
++
++}
++
++export default QUnit.module( 'Renderers', () => {
++
++	QUnit.module( 'WebGPU', () => {
++
++		QUnit.module( 'primitiveIndex', () => {
++
++			QUnit.test( 'TSL export and device feature name', ( assert ) => {
++
++				assert.strictEqual( GPUFeatureName.PrimitiveIndex, 'primitive-index' );
++				assert.ok( Object.values( GPUFeatureName ).includes( 'primitive-index' ), 'backend feature negotiation includes primitive-index' );
++				assert.ok( TSL.primitiveIndex.isIndexNode, 'exports an IndexNode' );
++				assert.strictEqual( TSL.primitiveIndex.scope, THREE.IndexNode.PRIMITIVE );
++				assert.strictEqual( THREE.IndexNode.PRIMITIVE, 'primitive' );
++
++			} );
++
++			QUnit.test( 'device negotiation', async ( assert ) => {
++
++				const originalGPU = Object.getOwnPropertyDescriptor( navigator, 'gpu' );
++				let adapterOptions;
++				let deviceDescriptor;
++				const device = {
++					features: new Set( [ GPUFeatureName.PrimitiveIndex ] ),
++					lost: new Promise( () => {} )
++				};
++				const adapter = {
++					features: new Set( [ GPUFeatureName.PrimitiveIndex ] ),
++					requestDevice: async ( descriptor ) => {
++
++						deviceDescriptor = descriptor;
++						return device;
++
++					}
++				};
++
++				Object.defineProperty( navigator, 'gpu', {
++					configurable: true,
++					value: {
++						requestAdapter: async ( options ) => {
++
++							adapterOptions = options;
++							return adapter;
++
++						}
++					}
++				} );
++
++				try {
++
++					const backend = new WebGPUBackend();
++					await backend.init( {
++						xr: { enabled: false },
++						_samples: 4,
++						getCanvasTarget: () => ( {} ),
++						onDeviceLost: () => {},
++						onError: () => {}
++					} );
++
++					assert.strictEqual( adapterOptions.featureLevel, 'compatibility' );
++					assert.deepEqual( deviceDescriptor.requiredFeatures, [ GPUFeatureName.PrimitiveIndex ], 'requests the advertised optional feature' );
++					assert.strictEqual( backend.hasFeature( GPUFeatureName.PrimitiveIndex ), true, 'the created device exposes the enabled feature' );
++
++				} finally {
++
++					if ( originalGPU === undefined ) {
++
++						delete navigator.gpu;
++
++					} else {
++
++						Object.defineProperty( navigator, 'gpu', originalGPU );
++
++					}
++
++				}
++
++			} );
++
++			QUnit.test( 'conditional WGSL generation', ( assert ) => {
++
++				const builder = buildShaders(
++					TSL.vec4( TSL.float( TSL.primitiveIndex ), 0, 0, 1 ),
++					true
++				);
++
++				assert.strictEqual( countOccurrences( builder.fragmentShader, 'enable primitive_index;' ), 1, 'emits one feature directive' );
++				assert.strictEqual(
++					countOccurrences( builder.fragmentShader, '@builtin( primitive_index ) primitiveIndex : u32' ),
++					1,
++					'emits one fragment builtin'
++				);
++				assert.ok( builder.fragmentShader.includes( 'f32( primitiveIndex )' ), 'uses the builtin directly in fragment code' );
++				assert.notOk( builder.vertexShader.includes( 'primitive_index' ), 'does not emit the feature in the vertex shader' );
++				assert.notOk( builder.fragmentShader.includes( '@interpolate' ), 'does not synthesize a vertex varying' );
++
++				const unused = buildShaders( TSL.vec4( 1, 0, 0, 1 ), false );
++				assert.notOk( unused.vertexShader.includes( 'primitive_index' ), 'ordinary vertex shader remains feature-free' );
++				assert.notOk( unused.fragmentShader.includes( 'primitive_index' ), 'ordinary fragment shader remains feature-free' );
++
++			} );
++
++			QUnit.test( 'feature and stage validation', ( assert ) => {
++
++				const unsupported = new THREE.WGSLNodeBuilder(
++					{ material: {}, geometry: {} },
++					{ hasFeature: () => false }
++				);
++				unsupported.shaderStage = 'fragment';
++				assert.throws(
++					() => unsupported.getPrimitiveIndex(),
++					/requires the WebGPU "primitive-index" feature/,
++					'rejects a device without the optional feature'
++				);
++
++				for ( const shaderStage of [ 'vertex', 'compute' ] ) {
++
++					const wrongStage = new THREE.WGSLNodeBuilder(
++						{ material: {}, geometry: {} },
++						{ hasFeature: () => true }
++					);
++					wrongStage.shaderStage = shaderStage;
++					assert.throws(
++						() => wrongStage.getPrimitiveIndex(),
++						/only available in fragment shaders/,
++						`rejects ${ shaderStage } use`
++					);
++
++				}
++
++				const webgl = new GLSLNodeBuilder(
++					{ material: {}, geometry: {} },
++					{ backend: {} }
++				);
++				assert.throws(
++					() => webgl.getPrimitiveIndex(),
++					/not supported by the WebGL backend/,
++					'rejects the WebGL fallback explicitly'
++				);
++
++			} );
++
++		} );
++
++	} );
++
++} );
+diff --git a/test/unit/three.source.unit.js b/test/unit/three.source.unit.js
+index e60c5f9cbb1a637f855c9bcd84dd030b662d9baa..ccb6e94af2b32397c4b956d114c29931a5512ce1 100644
+--- a/test/unit/three.source.unit.js
++++ b/test/unit/three.source.unit.js
+@@ -238,6 +238,9 @@ import './src/renderers/shaders/UniformsUtils.tests.js';
+ import './src/renderers/webgl/WebGLExtensions.tests.js';
+ import './src/renderers/webgl/WebGLRenderLists.tests.js';
+ 
++//src/renderers/webgpu
++import './src/renderers/webgpu/WebGPUPrimitiveIndex.tests.js';
++
+ 
+ //src/scenes
+ import './src/scenes/Fog.tests.js';
+diff --git a/tsl/content/Guide.md b/tsl/content/Guide.md
+index a05ff25722a370b9e33deb4b356980ea6c9d9114..0e3641b1672feda44ee63ad3af9785d52a9c8c0e 100644
+--- a/tsl/content/Guide.md
++++ b/tsl/content/Guide.md
+@@ -2785,6 +2785,8 @@ Attributes are inputs that are defined per-vertex or per-instance in the geometr
+ 
+ ::: api drawIndex : `uint` - The draw index when using multi-draw. :::
+ 
++::: api primitiveIndex : `uint` - The per-instance primitive index in a fragment shader. Requires the WebGPU `primitive-index` feature. :::
++
+ ### Functions
+ 
+ ::: api attribute( name, type? )

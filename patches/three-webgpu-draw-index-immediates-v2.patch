@@ -1,0 +1,1758 @@
+diff --git a/examples/files.json b/examples/files.json
+index ca64c734126760cf860f2617d9e334749e574009..1257db1209f4508310816db916adf90dd466ef23 100644
+--- a/examples/files.json
++++ b/examples/files.json
+@@ -502,6 +502,7 @@
+ 		"webgpu_tonemapping",
+ 		"webgpu_tsl_angular_slicing",
+ 		"webgpu_tsl_compute_attractors_particles",
++		"webgpu_tsl_draw_index",
+ 		"webgpu_tsl_earth",
+ 		"webgpu_tsl_editor",
+ 		"webgpu_tsl_galaxy",
+diff --git a/examples/screenshots/webgpu_tsl_draw_index.jpg b/examples/screenshots/webgpu_tsl_draw_index.jpg
+new file mode 100644
+index 0000000000000000000000000000000000000000..1571891bd1b790f269c69ef9a80733ff0de53462
+GIT binary patch
+literal 22307
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/examples/webgpu_tsl_draw_index.html b/examples/webgpu_tsl_draw_index.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..01b15dc76fb3aef8be09e2a8c7d5e6029b65b01f
+--- /dev/null
++++ b/examples/webgpu_tsl_draw_index.html
+@@ -0,0 +1,193 @@
++<!DOCTYPE html>
++<html lang="en">
++	<head>
++		<title>three.js webgpu - tsl - draw index</title>
++		<meta charset="utf-8">
++		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
++		<meta property="og:title" content="three.js webgpu - tsl - draw index">
++		<meta property="og:type" content="website">
++		<meta property="og:url" content="https://threejs.org/examples/webgpu_tsl_draw_index.html">
++		<meta property="og:image" content="https://threejs.org/examples/screenshots/webgpu_tsl_draw_index.jpg">
++		<link type="text/css" rel="stylesheet" href="example.css">
++	</head>
++	<body>
++
++		<div id="info">
++			<a href="https://threejs.org/" target="_blank" rel="noopener" class="logo-link"></a>
++
++			<div class="title-wrapper">
++				<a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a><span>TSL Draw Index</span>
++			</div>
++
++			<small id="description">
++				<code>drawIndex</code> ( top ) follows emitted command order; <code>batchIndirectIndex</code> ( bottom ) follows the original batch instance.<br>
++				<span id="order"></span>
++			</small>
++		</div>
++
++		<script type="importmap">
++			{
++				"imports": {
++					"three": "../build/three.webgpu.js",
++					"three/webgpu": "../build/three.webgpu.js",
++					"three/tsl": "../build/three.tsl.js",
++					"three/addons/": "./jsm/"
++				}
++			}
++		</script>
++
++		<script type="module">
++
++			import * as THREE from 'three/webgpu';
++			import { batchIndirectIndex, color, drawIndex, hue } from 'three/tsl';
++
++			const INSTANCE_COUNT = 8;
++			const PHASES = [ 3, 6, 1, 4, 7, 2, 5 ];
++			const STEP_DURATION = 1200;
++
++			let camera, renderer, scene;
++			let phase = PHASES[ 0 ];
++			let startTime;
++
++			const matrix = new THREE.Matrix4();
++			const position = new THREE.Vector3();
++			const quaternion = new THREE.Quaternion();
++			const rotation = new THREE.Euler();
++			const scale = new THREE.Vector3();
++
++			init();
++
++			async function init() {
++
++				renderer = new THREE.WebGPURenderer( { antialias: true } );
++				renderer.setPixelRatio( window.devicePixelRatio );
++				renderer.setSize( window.innerWidth, window.innerHeight );
++				renderer.toneMapping = THREE.ACESFilmicToneMapping;
++				renderer.toneMappingExposure = 1.2;
++				document.body.appendChild( renderer.domElement );
++
++				await renderer.init();
++
++				if ( renderer.backend.isWebGPUBackend !== true || renderer.backend.capabilities.hasImmediateData() === false ) {
++
++					document.getElementById( 'description' ).textContent = 'This example requires WebGPU immediate data support.';
++					return;
++
++				}
++
++				camera = new THREE.OrthographicCamera( - 1, 1, 1, - 1, 0.1, 100 );
++				camera.position.set( 0, 0, 10 );
++
++				scene = new THREE.Scene();
++				scene.background = new THREE.Color( 0x090c15 );
++
++				const hemisphereLight = new THREE.HemisphereLight( 0xa9c8ff, 0x182033, 2.5 );
++				scene.add( hemisphereLight );
++
++				const directionalLight = new THREE.DirectionalLight( 0xffffff, 3 );
++				directionalLight.position.set( 3, 5, 8 );
++				scene.add( directionalLight );
++
++				const geometry = new THREE.BoxGeometry( 0.9, 0.9, 0.9 );
++				scene.add(
++					createBatch( geometry, createMaterial( drawIndex ), 1.35 ),
++					createBatch( geometry, createMaterial( batchIndirectIndex ), - 1.35 )
++				);
++
++				onWindowResize();
++				window.addEventListener( 'resize', onWindowResize );
++				renderer.setAnimationLoop( animate );
++
++			}
++
++			function createMaterial( indexNode ) {
++
++				const material = new THREE.MeshStandardNodeMaterial( {
++					metalness: 0.1,
++					roughness: 0.35
++				} );
++				material.colorNode = hue(
++					color( 0xff3158 ),
++					indexNode.toFloat().mul( Math.PI * 2 / INSTANCE_COUNT )
++				);
++
++				return material;
++
++			}
++
++			function createBatch( geometry, material, y ) {
++
++				const mesh = new THREE.BatchedMesh(
++					INSTANCE_COUNT,
++					geometry.attributes.position.count,
++					geometry.index.count,
++					material
++				);
++				const geometryId = mesh.addGeometry( geometry );
++
++				for ( let i = 0; i < INSTANCE_COUNT; i ++ ) {
++
++					const instanceId = mesh.addInstance( geometryId );
++
++					position.set( ( i - ( INSTANCE_COUNT - 1 ) * 0.5 ) * 1.45, y, 0 );
++					rotation.set( 0.18 + i * 0.07, i * 0.31, ( i - 3.5 ) * 0.055 );
++					quaternion.setFromEuler( rotation );
++					scale.set( 0.82, 0.62 + i * 0.085, 0.82 );
++					matrix.compose( position, quaternion, scale );
++					mesh.setMatrixAt( instanceId, matrix );
++
++				}
++
++				mesh.frustumCulled = false;
++				mesh.perObjectFrustumCulled = false;
++				mesh.sortObjects = true;
++				mesh.setCustomSort( sortByPhase );
++
++				return mesh;
++
++			}
++
++			function sortByPhase( list ) {
++
++				const key = ( item ) => ( item.index - phase + INSTANCE_COUNT ) % INSTANCE_COUNT;
++				list.sort( ( a, b ) => key( a ) - key( b ) );
++
++			}
++
++			function updateOrder() {
++
++				const order = Array.from( { length: INSTANCE_COUNT }, ( _, i ) => ( phase + i ) % INSTANCE_COUNT );
++				document.getElementById( 'order' ).textContent = `command order: ${ order.join( ' → ' ) }`;
++
++			}
++
++			function onWindowResize() {
++
++				const aspect = window.innerWidth / window.innerHeight;
++				const halfHeight = Math.max( 3.3, 6.3 / aspect );
++
++				camera.left = - halfHeight * aspect;
++				camera.right = halfHeight * aspect;
++				camera.top = halfHeight;
++				camera.bottom = - halfHeight;
++				camera.updateProjectionMatrix();
++
++				renderer.setSize( window.innerWidth, window.innerHeight );
++
++			}
++
++			function animate( time ) {
++
++				if ( startTime === undefined ) startTime = time;
++
++				const step = Math.floor( ( time - startTime ) / STEP_DURATION );
++				phase = PHASES[ step % PHASES.length ];
++				updateOrder();
++
++				renderer.render( scene, camera );
++
++			}
++
++		</script>
++	</body>
++</html>
+diff --git a/src/nodes/accessors/Batch.js b/src/nodes/accessors/Batch.js
+index f0b2e65caa03e5f7207817a2bc6f7edefc47d3c4..c5406621ffa3dd5629ba61cef29d1f204cf54274 100644
+--- a/src/nodes/accessors/Batch.js
++++ b/src/nodes/accessors/Batch.js
+@@ -125,7 +125,10 @@ export const batchIndirectIndex = /*@__PURE__*/ varyingProperty( 'uint', 'vBatch
+  */
+ export const batch = /*@__PURE__*/ Fn( ( [ batchMesh ], builder ) => {
+ 
+-	const batchingIdNode = builder.getDrawIndex() === null ? instanceIndex : drawIndex;
++	// WebGPU batching already transports its compact command index through
++	// `instanceIndex`; do not opt every BatchedMesh shader into immediate data.
++	const usesBatchingInstanceIndex = builder.isAvailable( 'batchingInstanceIndex' ) || builder.getDrawIndex() === null;
++	const batchingIdNode = usesBatchingInstanceIndex ? instanceIndex : drawIndex;
+ 
+ 	const indirectId = getIndirectIndex( batchMesh._indirectTexture, int( batchingIdNode ) );
+ 
+diff --git a/src/nodes/core/IndexNode.js b/src/nodes/core/IndexNode.js
+index 1da19c93cb7de50183111a3a458f85185b962b41..6a76e37a3c649c8b93b995b26f7f16730bbf5a9e 100644
+--- a/src/nodes/core/IndexNode.js
++++ b/src/nodes/core/IndexNode.js
+@@ -67,6 +67,7 @@ class IndexNode extends Node {
+ 
+ 		} else if ( scope === IndexNode.DRAW ) {
+ 
++			builder.usesDrawIndex = true;
+ 			propertyName = builder.getDrawIndex();
+ 
+ 		} else if ( scope === IndexNode.INVOCATION_LOCAL ) {
+@@ -224,6 +225,12 @@ export const invocationLocalIndex = /*@__PURE__*/ nodeImmutable( IndexNode, Inde
+ /**
+  * TSL object that represents the index of a draw call.
+  *
++ * With WebGPU, this is the zero-based command ordinal emitted for one render
++ * object and view. Direct draws use zero, while BatchedMesh and array-indirect
++ * draws use consecutive values. WebGPU support requires the
++ * `immediate_address_space` WGSL language feature and is unavailable in
++ * compute shaders.
++ *
+  * @tsl
+  * @type {IndexNode}
+  */
+diff --git a/src/nodes/core/NodeBuilder.js b/src/nodes/core/NodeBuilder.js
+index eaa6f6347c5fcecac4541d73b1e55ad6bb3bff64..c0785c65b1c8d49f4f2bbdb90c5d059673c9f18f 100644
+--- a/src/nodes/core/NodeBuilder.js
++++ b/src/nodes/core/NodeBuilder.js
+@@ -254,6 +254,14 @@ class NodeBuilder {
+ 		 */
+ 		this.hardwareClipping = false;
+ 
++		/**
++		 * Whether the generated shader uses `drawIndex`.
++		 *
++		 * @type {boolean}
++		 * @default false
++		 */
++		this.usesDrawIndex = false;
++
+ 		/**
+ 		 * The generated vertex shader.
+ 		 *
+@@ -1167,7 +1175,6 @@ class NodeBuilder {
+ 
+ 	/**
+ 	 * Returns the drawIndex input variable as a native shader string.
+-	 * Only relevant for WebGL and its `WEBGL_multi_draw` extension.
+ 	 *
+ 	 * @abstract
+ 	 * @return {?string} The drawIndex shader string.
+diff --git a/src/renderers/common/nodes/NodeBuilderState.js b/src/renderers/common/nodes/NodeBuilderState.js
+index 5b7f90756cf48598159cf5fd419a35ecc6815c63..05cc584f8ba442c9830cc343d0287d820a3af902 100644
+--- a/src/renderers/common/nodes/NodeBuilderState.js
++++ b/src/renderers/common/nodes/NodeBuilderState.js
+@@ -25,8 +25,9 @@ class NodeBuilderState {
+ 	 * @param {NodeMaterialObserver} observer - A node material observer.
+ 	 * @param {boolean} hardwareClipping - Whether the built material uses hardware clipping or not.
+ 	 * @param {Array<Object>} transforms - An array with transform attribute objects. Only relevant when using compute shaders with WebGL 2.
++	 * @param {boolean} [usesDrawIndex=false] - Whether the shaders use `drawIndex`.
+ 	 */
+-	constructor( vertexShader, fragmentShader, computeShader, nodeAttributes, bindings, updateNodes, updateBeforeNodes, updateAfterNodes, observer, hardwareClipping, transforms = [] ) {
++	constructor( vertexShader, fragmentShader, computeShader, nodeAttributes, bindings, updateNodes, updateBeforeNodes, updateAfterNodes, observer, hardwareClipping, transforms = [], usesDrawIndex = false ) {
+ 
+ 		/**
+ 		 * The native vertex shader code.
+@@ -57,6 +58,13 @@ class NodeBuilderState {
+ 		 */
+ 		this.transforms = transforms;
+ 
++		/**
++		 * Whether the shaders use `drawIndex`.
++		 *
++		 * @type {boolean}
++		 */
++		this.usesDrawIndex = usesDrawIndex;
++
+ 		/**
+ 		 * An array of node attributes representing
+ 		 * the attributes of the shaders.
+diff --git a/src/renderers/common/nodes/NodeManager.js b/src/renderers/common/nodes/NodeManager.js
+index 47a4b2ca4672aaa9e0eab945e24b59185881a156..f47d12b1d56774ad71672f5a2ef86a2ff21ff857 100644
+--- a/src/renderers/common/nodes/NodeManager.js
++++ b/src/renderers/common/nodes/NodeManager.js
+@@ -537,7 +537,8 @@ class NodeManager extends DataMap {
+ 			nodeBuilder.updateAfterNodes,
+ 			nodeBuilder.observer,
+ 			nodeBuilder.hardwareClipping,
+-			nodeBuilder.transforms
++			nodeBuilder.transforms,
++			nodeBuilder.usesDrawIndex
+ 		);
+ 
+ 	}
+diff --git a/src/renderers/webgpu/WebGPUBackend.js b/src/renderers/webgpu/WebGPUBackend.js
+index e6345e42e2008f6606971c626326d6479e50a51a..9271744e4839bdbd0187d3b2372873930a9e6ec8 100644
+--- a/src/renderers/webgpu/WebGPUBackend.js
++++ b/src/renderers/webgpu/WebGPUBackend.js
+@@ -114,6 +114,14 @@ class WebGPUBackend extends Backend {
+ 		 */
+ 		this.device = null;
+ 
++		/**
++		 * Reusable storage for the draw index immediate value.
++		 *
++		 * @private
++		 * @type {Uint32Array}
++		 */
++		this._drawIndexData = new Uint32Array( 1 );
++
+ 		/**
+ 		 * A reference to the default render pass descriptor.
+ 		 *
+@@ -2008,7 +2016,7 @@ class WebGPUBackend extends Backend {
+ 	 * @param {RenderObject} renderObject - The render object.
+ 	 * @param {Info} info - Holds a series of statistical information about the GPU memory and the rendering process.
+ 	 * @param {Object} renderContextData - The render context data object, holding current pass state and occlusion query tracking.
+-	 * @param {GPURenderPipeline} pipelineGPU - The GPU render pipeline.
++	 * @param {Object} pipelineData - The render pipeline data.
+ 	 * @param {Array<BindGroup>} bindings - The bind groups.
+ 	 * @param {Array<BufferAttribute>} vertexBuffers - The vertex buffers.
+ 	 * @param {{vertexCount: number, firstVertex: number, instanceCount: number, firstInstance: number}} drawParams - The draw parameters.
+@@ -2016,9 +2024,23 @@ class WebGPUBackend extends Backend {
+ 	 * @param {Object} currentSets - Tracking object for currently set pipeline, attributes, bind groups, and index state.
+ 	 * @param {number} [cameraIndexSlot=-1] - Index of the binding slot holding the camera index bind group.
+ 	 */
+-	_draw( renderObject, info, renderContextData, pipelineGPU, bindings, vertexBuffers, drawParams, passEncoderGPU, currentSets, cameraIndexSlot = - 1 ) {
++	_draw( renderObject, info, renderContextData, pipelineData, bindings, vertexBuffers, drawParams, passEncoderGPU, currentSets, cameraIndexSlot = - 1 ) {
+ 
+ 		const { object, material, context } = renderObject;
++		const pipelineGPU = pipelineData.pipeline;
++		const usesDrawIndex = pipelineData.usesDrawIndex;
++
++		if ( typeof usesDrawIndex !== 'boolean' ) {
++
++			throw new Error( 'THREE.WebGPUBackend: The active render pipeline has invalid drawIndex metadata.' );
++
++		}
++
++		if ( usesDrawIndex === true && typeof passEncoderGPU.setImmediates !== 'function' ) {
++
++			throw new Error( 'THREE.WebGPUBackend: The active render pipeline cannot provide drawIndex.' );
++
++		}
+ 
+ 		const index = renderObject.getIndex();
+ 		const hasIndex = ( index !== null );
+@@ -2130,6 +2152,8 @@ class WebGPUBackend extends Backend {
+ 
+ 			for ( let i = 0; i < drawCount; i ++ ) {
+ 
++				this._setDrawIndex( passEncoderGPU, usesDrawIndex, i );
++
+ 				if ( hasIndex === true ) {
+ 
+ 					passEncoderGPU.drawIndexed( counts[ i ], 1, starts[ i ] / bytesPerElement, 0, i );
+@@ -2158,12 +2182,14 @@ class WebGPUBackend extends Backend {
+ 
+ 				for ( let i = 0; i < indirectOffsets.length; i ++ ) {
+ 
++					this._setDrawIndex( passEncoderGPU, usesDrawIndex, i );
+ 					passEncoderGPU.drawIndexedIndirect( buffer, indirectOffsets[ i ] );
+ 
+ 				}
+ 
+ 			} else {
+ 
++				this._setDrawIndex( passEncoderGPU, usesDrawIndex, 0 );
+ 				passEncoderGPU.drawIndexed( indexCount, instanceCount, firstIndex, 0, 0 );
+ 
+ 			}
+@@ -2184,6 +2210,7 @@ class WebGPUBackend extends Backend {
+ 
+ 				for ( let i = 0; i < indirectOffsets.length; i ++ ) {
+ 
++					this._setDrawIndex( passEncoderGPU, usesDrawIndex, i );
+ 					passEncoderGPU.drawIndirect( buffer, indirectOffsets[ i ] );
+ 
+ 				}
+@@ -2191,6 +2218,7 @@ class WebGPUBackend extends Backend {
+ 
+ 			} else {
+ 
++				this._setDrawIndex( passEncoderGPU, usesDrawIndex, 0 );
+ 				passEncoderGPU.draw( vertexCount, instanceCount, firstVertex, 0 );
+ 
+ 			}
+@@ -2201,6 +2229,23 @@ class WebGPUBackend extends Backend {
+ 
+ 	}
+ 
++	/**
++	 * Sets the draw index in its reserved four-byte immediate data range.
++	 *
++	 * @private
++	 * @param {GPURenderPassEncoder|GPURenderBundleEncoder} passEncoderGPU - The active pass encoder.
++	 * @param {boolean} usesDrawIndex - Whether the active pipeline uses `drawIndex`.
++	 * @param {number} drawIndex - The zero-based draw index.
++	 */
++	_setDrawIndex( passEncoderGPU, usesDrawIndex, drawIndex ) {
++
++		if ( usesDrawIndex === false ) return;
++
++		this._drawIndexData[ 0 ] = drawIndex;
++		passEncoderGPU.setImmediates( 0, this._drawIndexData, 0, 1 );
++
++	}
++
+ 	// render object
+ 
+ 	/**
+@@ -2214,7 +2259,6 @@ class WebGPUBackend extends Backend {
+ 		const { object, context, pipeline } = renderObject;
+ 		const renderContextData = this.get( context );
+ 		const pipelineData = this.get( pipeline );
+-		const pipelineGPU = pipelineData.pipeline;
+ 
+ 		// Skip if pipeline has error
+ 		if ( pipelineData.error === true ) return;
+@@ -2310,7 +2354,7 @@ class WebGPUBackend extends Backend {
+ 
+ 					}
+ 
+-					this._draw( renderObject, info, renderContextData, pipelineGPU, bindings, vertexBuffers, drawParams, pass, sets, indexPos );
++					this._draw( renderObject, info, renderContextData, pipelineData, bindings, vertexBuffers, drawParams, pass, sets, indexPos );
+ 
+ 				}
+ 
+@@ -2356,7 +2400,7 @@ class WebGPUBackend extends Backend {
+ 
+ 				}
+ 
+-				this._draw( renderObject, info, renderContextData, pipelineGPU, bindings, vertexBuffers, drawParams, renderContextData.currentPass, renderContextData.currentSets );
++				this._draw( renderObject, info, renderContextData, pipelineData, bindings, vertexBuffers, drawParams, renderContextData.currentPass, renderContextData.currentSets );
+ 
+ 			}
+ 
+diff --git a/src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js b/src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js
+index 0a393816444a84414489f059fe34ab12f1c416a3..874b1323eb86c0fd784e7edef742577f66efcdd1 100644
+--- a/src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js
++++ b/src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js
+@@ -22,6 +22,14 @@ class GPUPipelineLayoutDescriptor {
+ 		 */
+ 		this.bindGroupLayouts = null;
+ 
++		/**
++		 * The number of immediate data bytes used by pipelines with this layout.
++		 *
++		 * @type {number}
++		 * @default 0
++		 */
++		this.immediateSize = 0;
++
+ 	}
+ 
+ 	/**
+@@ -31,6 +39,7 @@ class GPUPipelineLayoutDescriptor {
+ 
+ 		this.label = '';
+ 		this.bindGroupLayouts = null;
++		this.immediateSize = 0;
+ 
+ 	}
+ 
+diff --git a/src/renderers/webgpu/nodes/WGSLNodeBuilder.js b/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
+index 141480f7109eec5162b8d1dcff4ac551b9a31f91..e9de814510965db522574ed76c96e690ed21c274 100644
+--- a/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
++++ b/src/renderers/webgpu/nodes/WGSLNodeBuilder.js
+@@ -40,11 +40,14 @@ const gpuShaderStageLib = {
+ };
+ 
+ const supports = {
++	batchingInstanceIndex: true,
+ 	instance: true,
+ 	swizzleAssign: false,
+ 	storageBuffer: true
+ };
+ 
++const drawIndexName = 'nodeDrawIndex';
++
+ const wgslFnOpLib = {
+ 	'^^': 'tsl_xor'
+ };
+@@ -1608,13 +1611,27 @@ ${ flowData.code }
+ 	}
+ 
+ 	/**
+-	 * Overwritten as a NOP since this method is intended for the WebGL 2 backend.
++	 * Returns the draw index immediate data variable when supported.
+ 	 *
+-	 * @return {null} Null.
++	 * @return {string} The draw index shader string.
+ 	 */
+ 	getDrawIndex() {
+ 
+-		return null;
++		if ( this.shaderStage === 'compute' ) {
++
++			throw new Error( 'THREE.WGSLNodeBuilder: drawIndex is not available in compute shaders.' );
++
++		}
++
++		if ( this.isAvailable( 'drawIndex' ) === false ) {
++
++			throw new Error( 'THREE.WGSLNodeBuilder: drawIndex requires WebGPU immediate data support.' );
++
++		}
++
++		this.usesDrawIndex = true;
++
++		return drawIndexName;
+ 
+ 	}
+ 
+@@ -2524,6 +2541,8 @@ ${ flowData.code }
+ 	 */
+ 	isAvailable( name ) {
+ 
++		if ( name === 'drawIndex' ) return this.renderer.backend.capabilities.hasImmediateData();
++
+ 		let result = supports[ name ];
+ 
+ 		if ( result === undefined ) {
+@@ -2593,10 +2612,17 @@ ${ flowData.code }
+ 	 */
+ 	_getWGSLVertexCode( shaderData ) {
+ 
++		const immediateData = this.usesDrawIndex === true
++			? `requires immediate_address_space;\nvar<immediate> ${ drawIndexName } : u32;`
++			: '';
++
+ 		return `${ this.getSignature() }
+ // directives
+ ${shaderData.directives}
+ 
++// immediate data
++${ immediateData }
++
+ // structs
+ ${shaderData.structs}
+ 
+diff --git a/src/renderers/webgpu/utils/WebGPUCapabilities.js b/src/renderers/webgpu/utils/WebGPUCapabilities.js
+index 6184b68e46c1a9e3b99c78d0dc075c7f18d59eaa..797796ebc3b39da6f37c56f7f13ae2c71e0320ff 100644
+--- a/src/renderers/webgpu/utils/WebGPUCapabilities.js
++++ b/src/renderers/webgpu/utils/WebGPUCapabilities.js
+@@ -19,6 +19,13 @@ class WebGPUCapabilities {
+ 		 */
+ 		this.backend = backend;
+ 
++		/**
++		 * The WGSL language features exposed by the user agent.
++		 *
++		 * @type {?WGSLLanguageFeatures}
++		 */
++		this.wgslLanguageFeatures = ( typeof navigator !== 'undefined' ) ? navigator.gpu?.wgslLanguageFeatures : undefined;
++
+ 	}
+ 
+ 	/**
+@@ -43,6 +50,22 @@ class WebGPUCapabilities {
+ 
+ 	}
+ 
++	/**
++	 * Returns whether the active implementation supports WebGPU immediate data.
++	 *
++	 * @return {boolean} Whether immediate data is supported or not.
++	 */
++	hasImmediateData() {
++
++		const maxImmediateSize = this.backend.device?.limits?.maxImmediateSize;
++
++		return typeof this.wgslLanguageFeatures?.has === 'function'
++			&& this.wgslLanguageFeatures.has( 'immediate_address_space' ) === true
++			&& Number.isInteger( maxImmediateSize )
++			&& maxImmediateSize >= 4;
++
++	}
++
+ }
+ 
+ export default WebGPUCapabilities;
+diff --git a/src/renderers/webgpu/utils/WebGPUPipelineUtils.js b/src/renderers/webgpu/utils/WebGPUPipelineUtils.js
+index 802f98b6e061d4c1580a1e06a43d9b41aeec5b90..2e4f8454128d833b69f0f87453169c32e5958d76 100644
+--- a/src/renderers/webgpu/utils/WebGPUPipelineUtils.js
++++ b/src/renderers/webgpu/utils/WebGPUPipelineUtils.js
+@@ -26,6 +26,8 @@ const _pipelineLayoutDescriptor = new GPUPipelineLayoutDescriptor();
+ const _renderBundleEncoderDescriptor = new GPURenderBundleEncoderDescriptor();
+ const _renderPipelineDescriptor = new GPURenderPipelineDescriptor();
+ 
++const DRAW_INDEX_IMMEDIATE_SIZE = 4;
++
+ /**
+  * A WebGPU backend utility module for managing pipelines.
+  *
+@@ -49,6 +51,45 @@ class WebGPUPipelineUtils {
+ 
+ 	}
+ 
++	/**
++	 * Creates a pipeline layout and resets the reusable descriptor.
++	 *
++	 * @private
++	 * @param {Array<GPUBindGroupLayout>} bindGroupLayouts - The bind group layouts.
++	 * @param {boolean} [usesDrawIndex=false] - Whether the pipeline uses `drawIndex`.
++	 * @return {GPUPipelineLayout} The pipeline layout.
++	 */
++	_createPipelineLayout( bindGroupLayouts, usesDrawIndex = false ) {
++
++		const backend = this.backend;
++
++		if ( typeof usesDrawIndex !== 'boolean' ) {
++
++			throw new Error( 'THREE.WebGPUPipelineUtils: Invalid drawIndex pipeline metadata.' );
++
++		}
++
++		if ( usesDrawIndex === true && backend.capabilities.hasImmediateData() === false ) {
++
++			throw new Error( 'THREE.WebGPUPipelineUtils: drawIndex is not supported by the active device.' );
++
++		}
++
++		_pipelineLayoutDescriptor.bindGroupLayouts = bindGroupLayouts;
++		_pipelineLayoutDescriptor.immediateSize = usesDrawIndex ? DRAW_INDEX_IMMEDIATE_SIZE : 0;
++
++		try {
++
++			return backend.device.createPipelineLayout( _pipelineLayoutDescriptor );
++
++		} finally {
++
++			_pipelineLayoutDescriptor.reset();
++
++		}
++
++	}
++
+ 	/**
+ 	 * Returns the sample count derived from the given render context.
+ 	 *
+@@ -197,12 +238,11 @@ class WebGPUPipelineUtils {
+ 		const depthStencilFormat = utils.getCurrentDepthStencilFormat( renderObject.context );
+ 
+ 		const sampleCount = this._getSampleCount( renderObject.context );
++		const usesDrawIndex = renderObject.getNodeBuilderState().usesDrawIndex;
+ 
+-		_pipelineLayoutDescriptor.bindGroupLayouts = bindGroupLayouts;
+-
+-		const pipelineLayout = device.createPipelineLayout( _pipelineLayoutDescriptor );
++		const pipelineLayout = this._createPipelineLayout( bindGroupLayouts, usesDrawIndex );
+ 
+-		_pipelineLayoutDescriptor.reset();
++		pipelineData.usesDrawIndex = usesDrawIndex;
+ 
+ 		_renderPipelineDescriptor.label = `renderPipeline_${ material.name || material.type }_${ material.id }`;
+ 		_renderPipelineDescriptor.vertex = Object.assign( {}, vertexModule, { buffers: vertexBuffers } );
+@@ -404,11 +444,7 @@ class WebGPUPipelineUtils {
+ 
+ 		device.pushErrorScope( 'validation' );
+ 
+-		_pipelineLayoutDescriptor.bindGroupLayouts = bindGroupLayouts;
+-
+-		const pipelineLayout = device.createPipelineLayout( _pipelineLayoutDescriptor );
+-
+-		_pipelineLayoutDescriptor.reset();
++		const pipelineLayout = this._createPipelineLayout( bindGroupLayouts );
+ 
+ 		_computePipelineDescriptor.label = pipelineLabel;
+ 		_computePipelineDescriptor.compute = computeProgram;
+diff --git a/test/unit/src/renderers/webgpu/WebGPUDrawIndex.tests.js b/test/unit/src/renderers/webgpu/WebGPUDrawIndex.tests.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..4e55d2928ff4c4a427ad42745a8cfaaf70047c16
+--- /dev/null
++++ b/test/unit/src/renderers/webgpu/WebGPUDrawIndex.tests.js
+@@ -0,0 +1,642 @@
++import * as THREE from '../../../../../src/Three.WebGPU.js';
++import NodeManager from '../../../../../src/renderers/common/nodes/NodeManager.js';
++import GLSLNodeBuilder from '../../../../../src/renderers/webgl-fallback/nodes/GLSLNodeBuilder.js';
++import WebGPUBackend from '../../../../../src/renderers/webgpu/WebGPUBackend.js';
++import WebGPUCapabilities from '../../../../../src/renderers/webgpu/utils/WebGPUCapabilities.js';
++import WebGPUPipelineUtils from '../../../../../src/renderers/webgpu/utils/WebGPUPipelineUtils.js';
++
++const { TSL } = THREE;
++
++function emptyShaderData() {
++
++	return {
++		directives: '',
++		structs: '',
++		uniforms: '',
++		varyings: '',
++		vars: '',
++		codes: '',
++		attributes: '',
++		flow: ''
++	};
++
++}
++
++function countOccurrences( source, token ) {
++
++	return source.split( token ).length - 1;
++
++}
++
++function createRenderer() {
++
++	return {
++		backend: {
++			capabilities: {
++				getUniformBufferLimit: () => 65536,
++				hasImmediateData: () => true
++			},
++			isWebGPUBackend: true,
++			utils: { getTextureSampleData: () => ( { primarySamples: 1 } ) }
++		},
++		contextNode: TSL.context( {} ),
++		library: new THREE.StandardNodeLibrary(),
++		getRenderTarget: () => null,
++		getMRT: () => null,
++		coordinateSystem: THREE.WebGPUCoordinateSystem,
++		outputColorSpace: THREE.SRGBColorSpace,
++		debug: { diagnostics: { keywords: false } },
++		currentSamples: 1,
++		depth: false,
++		logarithmicDepthBuffer: false,
++		reversedDepthBuffer: false,
++		lighting: { enabled: false },
++		shadowMap: { enabled: false },
++		highPrecision: true,
++		hasFeature: () => false,
++		hasCompatibility: () => false
++	};
++
++}
++
++function createGLSLRenderer( extensions = [] ) {
++
++	const renderer = createRenderer();
++	renderer.coordinateSystem = THREE.WebGLCoordinateSystem;
++	renderer.backend = {
++		capabilities: { getUniformBufferLimit: () => 65536 },
++		extensions: new Set( extensions ),
++		get: () => undefined,
++		has: () => false,
++		isWebGLBackend: true,
++		utils: { getTextureSampleData: () => ( { primarySamples: 1 } ) }
++	};
++
++	return renderer;
++
++}
++
++function buildDrawIndexShaders() {
++
++	const material = new THREE.NodeMaterial();
++	material.vertexNode = TSL.vec4( TSL.float( TSL.drawIndex ), 0, 0, 1 );
++	material.fragmentNode = TSL.vec4( 0, TSL.float( TSL.drawIndex ), 0, 1 );
++
++	const geometry = new THREE.BufferGeometry();
++	geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [
++		0, 0, 0,
++		1, 0, 0,
++		0, 1, 0
++	], 3 ) );
++
++	const mesh = new THREE.Mesh( geometry, material );
++	const renderer = createRenderer();
++
++	const builder = new THREE.WGSLNodeBuilder( mesh, renderer );
++	builder.camera = new THREE.PerspectiveCamera();
++	builder.scene = new THREE.Scene();
++	builder.build();
++
++	return builder;
++
++}
++
++function buildDefaultBatchedMeshShaders( Builder = THREE.WGSLNodeBuilder, renderer = createRenderer() ) {
++
++	const sourceGeometry = new THREE.BufferGeometry();
++	sourceGeometry.setAttribute( 'position', new THREE.Float32BufferAttribute( [
++		0, 0, 0,
++		1, 0, 0,
++		0, 1, 0
++	], 3 ) );
++	sourceGeometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( [
++		0, 0, 1,
++		0, 0, 1,
++		0, 0, 1
++	], 3 ) );
++	sourceGeometry.setIndex( [ 0, 1, 2 ] );
++
++	const mesh = new THREE.BatchedMesh( 1, 3, 3, new THREE.MeshBasicNodeMaterial() );
++	const geometryId = mesh.addGeometry( sourceGeometry );
++	mesh.addInstance( geometryId );
++
++	const builder = new Builder( mesh, renderer );
++	builder.camera = new THREE.PerspectiveCamera();
++	builder.scene = new THREE.Scene();
++	builder.build();
++
++	return builder;
++
++}
++
++function createEncoder( supportsImmediates = true ) {
++
++	const events = [];
++	const encoder = {
++		events,
++		setPipeline: ( value ) => events.push( [ 'setPipeline', value ] ),
++		setVertexBuffer: () => {},
++		setIndexBuffer: ( buffer, format ) => events.push( [ 'setIndexBuffer', buffer, format ] ),
++		setBindGroup: () => {},
++		draw: ( ...args ) => events.push( [ 'draw', ...args ] ),
++		drawIndexed: ( ...args ) => events.push( [ 'drawIndexed', ...args ] ),
++		drawIndirect: ( ...args ) => events.push( [ 'drawIndirect', ...args ] ),
++		drawIndexedIndirect: ( ...args ) => events.push( [ 'drawIndexedIndirect', ...args ] )
++	};
++
++	if ( supportsImmediates ) {
++
++		encoder.setImmediates = ( offset, values, dataOffset, dataSize ) => {
++
++			events.push( [
++				'setImmediates',
++				offset,
++				dataOffset,
++				dataSize,
++				...values.slice( dataOffset, dataOffset + dataSize )
++			] );
++
++		};
++
++	}
++
++	return encoder;
++
++}
++
++function runDraw( backend, {
++	encoder = createEncoder(),
++	usesDrawIndex = true,
++	indexed = false,
++	indirectOffsets = null,
++	batched = false
++} = {} ) {
++
++	const index = indexed ? { array: new Uint16Array() } : null;
++	const indirect = indirectOffsets === null ? null : {};
++
++	if ( index !== null ) backend.set( index, { buffer: 'index-buffer' } );
++	if ( indirect !== null ) backend.set( indirect, { buffer: 'indirect-buffer' } );
++
++	const object = batched ? {
++		isBatchedMesh: true,
++		_multiDrawStarts: indexed ? [ 0, 6 ] : [ 0, 3 ],
++		_multiDrawCounts: [ 3, 6 ],
++		_multiDrawCount: 2,
++		_multiDrawBytesPerElement: indexed ? 2 : 1
++	} : {};
++
++	backend._draw(
++		{
++			object,
++			material: {},
++			context: { stencil: false },
++			getIndex: () => index,
++			getIndirect: () => indirect,
++			getIndirectOffset: () => indirectOffsets
++		},
++		{ update: () => {} },
++		{},
++		{ pipeline: 'pipeline', usesDrawIndex },
++		[],
++		[],
++		{ vertexCount: 6, instanceCount: 1, firstVertex: 2 },
++		encoder,
++		{ pipeline: null, bindingGroups: [], attributes: [], index: null }
++	);
++
++	return encoder.events;
++
++}
++
++export default QUnit.module( 'Renderers', () => {
++
++	QUnit.module( 'WebGPU', () => {
++
++		QUnit.module( 'drawIndex', () => {
++
++			QUnit.test( 'capability', ( assert ) => {
++
++				const backend = { device: null };
++				const capabilities = new WebGPUCapabilities( backend );
++
++				capabilities.wgslLanguageFeatures = new Set( [ 'immediate_address_space' ] );
++				assert.strictEqual( capabilities.hasImmediateData(), false, 'requires an initialized device' );
++
++				for ( const [ maxImmediateSize, expected ] of [
++					[ undefined, false ],
++					[ 3, false ],
++					[ 4, true ],
++					[ 64, true ]
++				] ) {
++
++					backend.device = { limits: { maxImmediateSize } };
++					assert.strictEqual( capabilities.hasImmediateData(), expected, `limit ${ maxImmediateSize }` );
++
++				}
++
++				capabilities.wgslLanguageFeatures = new Set();
++				assert.strictEqual( capabilities.hasImmediateData(), false, 'requires the WGSL language feature' );
++
++			} );
++
++			QUnit.test( 'WGSL generation', ( assert ) => {
++
++				const builder = buildDrawIndexShaders();
++
++				assert.strictEqual( builder.usesDrawIndex, true, 'records semantic shader usage' );
++				assert.strictEqual(
++					countOccurrences( builder.vertexShader, 'requires immediate_address_space;' ),
++					1,
++					'emits one language requirement'
++				);
++				assert.strictEqual(
++					countOccurrences( builder.vertexShader, 'var<immediate> nodeDrawIndex : u32;' ),
++					1,
++					'emits one immediate declaration'
++				);
++				assert.ok( /varyings\.nodeVarying\d+ = nodeDrawIndex;/.test( builder.vertexShader ), 'writes a flat varying' );
++				assert.ok(
++					/@location\( \d+ \) @interpolate\(flat, either\) nodeVarying\d+ : u32/.test( builder.fragmentShader ),
++					'declares flat interpolation'
++				);
++				assert.ok( /f32\( nodeVarying\d+ \)/.test( builder.fragmentShader ), 'fragment stage reads the varying' );
++				assert.notOk( builder.fragmentShader.includes( 'nodeDrawIndex' ), 'fragment stage does not access immediate data' );
++
++				const unsupported = new THREE.WGSLNodeBuilder(
++					{ material: {}, geometry: {} },
++					{ backend: { capabilities: { hasImmediateData: () => false } } }
++				);
++				unsupported.shaderStage = 'vertex';
++				assert.throws(
++					() => unsupported.getDrawIndex(),
++					/requires WebGPU immediate data support/,
++					'rejects unsupported render use'
++				);
++
++				const compute = new THREE.WGSLNodeBuilder(
++					{ material: {}, geometry: {} },
++					{ backend: { capabilities: { hasImmediateData: () => true } } }
++				);
++				compute.shaderStage = 'compute';
++				assert.throws(
++					() => compute.getDrawIndex(),
++					/not available in compute shaders/,
++					'rejects compute use'
++				);
++
++				const unused = new THREE.WGSLNodeBuilder(
++					{ material: {}, geometry: {} },
++					{ backend: { capabilities: { hasImmediateData: () => true } } }
++				);
++				const unusedShader = unused._getWGSLVertexCode( emptyShaderData() );
++				assert.strictEqual( unused.usesDrawIndex, false, 'unused shader stays unmarked' );
++				assert.notOk( unusedShader.includes( 'immediate_address_space' ), 'unused shader has no requirement' );
++				unused.shaderStage = 'vertex';
++				assert.strictEqual( unused.getDrawIndex(), 'nodeDrawIndex', 'direct builder access returns the symbol' );
++				assert.strictEqual( unused.usesDrawIndex, true, 'direct builder access records semantic usage' );
++
++			} );
++
++			QUnit.test( 'semantic metadata and WebGL policy', ( assert ) => {
++
++				const nodeBuilder = {
++					vertexShader: 'vertex',
++					fragmentShader: 'fragment',
++					computeShader: null,
++					getAttributesArray: () => [],
++					getBindings: () => [],
++					updateNodes: [],
++					updateBeforeNodes: [],
++					updateAfterNodes: [],
++					observer: {},
++					hardwareClipping: false,
++					transforms: [],
++					usesDrawIndex: true
++				};
++				const state = NodeManager.prototype._createNodeBuilderState.call( {}, nodeBuilder );
++
++				assert.strictEqual( state.usesDrawIndex, true, 'preserves semantic drawIndex metadata' );
++				nodeBuilder.usesDrawIndex = false;
++				assert.strictEqual(
++					NodeManager.prototype._createNodeBuilderState.call( {}, nodeBuilder ).usesDrawIndex,
++					false,
++					'ordinary shaders remain unmarked'
++				);
++
++				const batchedBuilder = buildDefaultBatchedMeshShaders();
++				assert.strictEqual( batchedBuilder.usesDrawIndex, false, 'default WebGPU BatchedMesh stays unmarked' );
++				assert.notOk(
++					batchedBuilder.vertexShader.includes( 'immediate_address_space' ),
++					'default WebGPU BatchedMesh stays immediate-free'
++				);
++				assert.ok(
++					/@builtin\( instance_index \) instanceIndex : u32/.test( batchedBuilder.vertexShader ),
++					'default WebGPU BatchedMesh uses the instance-index transport'
++				);
++
++				const fallbackBuilder = buildDefaultBatchedMeshShaders( GLSLNodeBuilder, createGLSLRenderer() );
++				assert.strictEqual( fallbackBuilder.usesDrawIndex, true, 'WebGL fallback records semantic usage' );
++				assert.ok( fallbackBuilder.vertexShader.includes( 'uniform uint nodeUniformDrawId;' ) );
++				assert.ok( fallbackBuilder.vertexShader.includes( 'int( nodeUniformDrawId )' ) );
++				assert.notOk( fallbackBuilder.vertexShader.includes( 'gl_DrawID' ) );
++
++				const multiDrawBuilder = buildDefaultBatchedMeshShaders(
++					GLSLNodeBuilder,
++					createGLSLRenderer( [ 'WEBGL_multi_draw' ] )
++				);
++				assert.strictEqual( multiDrawBuilder.usesDrawIndex, true, 'WebGL multi-draw records semantic usage' );
++				assert.ok( multiDrawBuilder.vertexShader.includes( '#extension GL_ANGLE_multi_draw : require' ) );
++				assert.ok( multiDrawBuilder.vertexShader.includes( 'uint( gl_DrawID )' ) );
++				assert.notOk( multiDrawBuilder.vertexShader.includes( 'uniform uint nodeUniformDrawId;' ) );
++
++			} );
++
++			QUnit.test( 'render pipeline metadata chain', ( assert ) => {
++
++				const records = [];
++
++				for ( const usesDrawIndex of [ true, false ] ) {
++
++					const vertexProgram = {};
++					const fragmentProgram = {};
++					const pipeline = { vertexProgram, fragmentProgram };
++					const pipelineData = {};
++					const backendData = new Map( [
++						[ vertexProgram, { module: { module: 'vertex-module' } } ],
++						[ fragmentProgram, { module: { module: 'fragment-module' } } ],
++						[ pipeline, pipelineData ]
++					] );
++					const backend = {
++						attributeUtils: { createShaderVertexBuffers: () => [] },
++						capabilities: { hasImmediateData: () => true },
++						device: {
++							createPipelineLayout( descriptor ) {
++
++								return { immediateSize: descriptor.immediateSize };
++
++							},
++							createRenderPipeline( descriptor ) {
++
++								records.push( {
++									layoutSize: descriptor.layout.immediateSize,
++									usesDrawIndex
++								} );
++
++								return {};
++
++							},
++							popErrorScope: () => Promise.resolve( null ),
++							pushErrorScope: () => {}
++						},
++						get: ( key ) => backendData.get( key ),
++						parameters: { reversedDepthBuffer: false },
++						utils: {
++							getCurrentColorFormat: () => 'rgba8unorm',
++							getCurrentDepthStencilFormat: () => 'depth24plus',
++							getSampleCountRenderContext: () => 1
++						}
++					};
++					const utils = new WebGPUPipelineUtils( backend );
++					utils._getDepthCompare = () => 'less';
++					utils._getPrimitiveState = () => ( {} );
++
++					utils.createRenderPipeline( {
++						context: { depth: false, stencil: false, textures: null },
++						geometry: { index: null },
++						getBindings: () => [],
++						getNodeBuilderState: () => ( { usesDrawIndex } ),
++						material: new THREE.MeshBasicMaterial(),
++						object: {},
++						pipeline
++					}, null );
++
++					assert.strictEqual( pipelineData.usesDrawIndex, usesDrawIndex );
++
++				}
++
++				assert.deepEqual( records, [
++					{ layoutSize: 4, usesDrawIndex: true },
++					{ layoutSize: 0, usesDrawIndex: false }
++				], 'semantic usage controls both the layout and retained pipeline metadata' );
++
++			} );
++
++			QUnit.test( 'pipeline layout metadata and compute scope', ( assert ) => {
++
++				const captures = [];
++				let throwOnLayout = false;
++				const backend = {
++					capabilities: { hasImmediateData: () => true },
++					device: {
++						createPipelineLayout( descriptor ) {
++
++							captures.push( descriptor.immediateSize );
++							if ( throwOnLayout ) {
++
++								throwOnLayout = false;
++								throw new Error( 'layout failure' );
++
++							}
++
++							return { immediateSize: descriptor.immediateSize };
++
++						}
++					}
++				};
++				const utils = new WebGPUPipelineUtils( backend );
++
++				utils._createPipelineLayout( [], true );
++				utils._createPipelineLayout( [] );
++				throwOnLayout = true;
++				assert.throws( () => utils._createPipelineLayout( [], true ), /layout failure/ );
++				utils._createPipelineLayout( [] );
++				assert.deepEqual( captures, [ 4, 0, 4, 0 ], 'resets descriptor after success and failure' );
++				assert.throws(
++					() => utils._createPipelineLayout( [], 4 ),
++					/Invalid drawIndex pipeline metadata/,
++					'rejects non-boolean semantic metadata'
++				);
++				backend.capabilities.hasImmediateData = () => false;
++				assert.throws(
++					() => utils._createPipelineLayout( [], true ),
++					/drawIndex is not supported/,
++					'rejects unavailable immediate data'
++				);
++				utils._createPipelineLayout( [], false );
++				assert.strictEqual( captures.at( - 1 ), 0, 'ordinary layouts do not require immediate support' );
++				backend.capabilities.hasImmediateData = () => true;
++
++				const events = [];
++				const computeProgram = { stage: 'compute', name: '' };
++				const computePipeline = { computeProgram };
++				const backendData = new Map( [
++					[ computeProgram, { module: { module: 'compute-module' } } ],
++					[ computePipeline, {} ]
++				] );
++				const computeBackend = {
++					capabilities: { hasImmediateData: () => true },
++					get: ( key ) => backendData.get( key ),
++					device: {
++						pushErrorScope: ( scope ) => events.push( `push:${scope}` ),
++						createPipelineLayout( descriptor ) {
++
++							events.push( `layout:${descriptor.immediateSize}` );
++							return { immediateSize: descriptor.immediateSize };
++
++						},
++						createComputePipeline( descriptor ) {
++
++							events.push( `pipeline:${descriptor.layout.immediateSize}` );
++							return {};
++
++						},
++						popErrorScope() {
++
++							events.push( 'pop' );
++							return Promise.resolve( null );
++
++						}
++					}
++				};
++
++				new WebGPUPipelineUtils( computeBackend ).createComputePipeline( computePipeline, [] );
++				assert.deepEqual(
++					events,
++					[ 'push:validation', 'layout:0', 'pipeline:0', 'pop' ],
++					'keeps compute layout creation in the established validation scope'
++				);
++
++			} );
++
++			QUnit.test( 'draw callsite metadata handoff', ( assert ) => {
++
++				const backend = new WebGPUBackend();
++				const context = { renderTarget: null };
++				const pipeline = {};
++				const pipelineData = { pipeline: 'pipeline', usesDrawIndex: true };
++				const currentSets = { attributes: [], bindingGroups: [], index: null, pipeline: null };
++				const calls = [];
++				backend.renderer = { getPixelRatio: () => 1 };
++				backend.set( pipeline, pipelineData );
++				backend._draw = ( ...args ) => calls.push( args );
++
++				const createRenderObject = ( camera ) => ( {
++					camera,
++					context,
++					getBindingGroup: () => null,
++					getBindings: () => [],
++					getDrawParameters: () => ( { vertexCount: 3, instanceCount: 1, firstVertex: 0 } ),
++					getVertexBuffers: () => [],
++					object: { layers: { test: () => true } },
++					pipeline
++				} );
++
++				backend.set( context, { currentPass: 'pass', currentSets } );
++				backend.draw( createRenderObject( { isArrayCamera: false } ), {} );
++				assert.strictEqual( calls.length, 1, 'regular draw reaches the shared command path' );
++				assert.strictEqual( calls[ 0 ][ 3 ], pipelineData, 'regular draw passes complete pipeline metadata' );
++
++				calls.length = 0;
++				const arrayCamera = {
++					cameras: [ { viewport: null }, { viewport: null } ],
++					isArrayCamera: true
++				};
++				backend.set( arrayCamera, { indexesGPU: [ {}, {} ] } );
++				backend.set( context, {
++					bundleEncoders: [ 'bundle-0', 'bundle-1' ],
++					bundleSets: [ currentSets, currentSets ],
++					currentPass: 'pass',
++					currentSets
++				} );
++				backend.draw( createRenderObject( arrayCamera ), {} );
++
++				assert.strictEqual( calls.length, 2, 'ArrayCamera reaches one draw per view' );
++				assert.ok( calls.every( ( call ) => call[ 3 ] === pipelineData ), 'bundle draws pass complete metadata' );
++				assert.deepEqual( calls.map( ( call ) => call[ 7 ] ), [ 'bundle-0', 'bundle-1' ] );
++
++			} );
++
++			QUnit.test( 'render command ordinals', ( assert ) => {
++
++				const backend = new WebGPUBackend();
++				assert.deepEqual( runDraw( backend ), [
++					[ 'setPipeline', 'pipeline' ],
++					[ 'setImmediates', 0, 0, 1, 0 ],
++					[ 'draw', 6, 1, 2, 0 ]
++				], 'direct draw receives zero' );
++
++				assert.deepEqual( runDraw( backend, { indexed: true } ), [
++					[ 'setPipeline', 'pipeline' ],
++					[ 'setIndexBuffer', 'index-buffer', 'uint16' ],
++					[ 'setImmediates', 0, 0, 1, 0 ],
++					[ 'drawIndexed', 6, 1, 2, 0, 0 ]
++				], 'direct indexed draw receives zero' );
++
++				assert.deepEqual( runDraw( backend, { indirectOffsets: 12 } ), [
++					[ 'setPipeline', 'pipeline' ],
++					[ 'setImmediates', 0, 0, 1, 0 ],
++					[ 'drawIndirect', 'indirect-buffer', 12 ]
++				], 'scalar indirect draw receives zero' );
++
++				assert.deepEqual( runDraw( backend, { indirectOffsets: [ 12, 4 ] } ), [
++					[ 'setPipeline', 'pipeline' ],
++					[ 'setImmediates', 0, 0, 1, 0 ],
++					[ 'drawIndirect', 'indirect-buffer', 12 ],
++					[ 'setImmediates', 0, 0, 1, 1 ],
++					[ 'drawIndirect', 'indirect-buffer', 4 ]
++				], 'array-indirect non-indexed ordinals follow command order' );
++
++				assert.deepEqual( runDraw( backend, { indexed: true, indirectOffsets: [ 40, 0, 20 ] } ), [
++					[ 'setPipeline', 'pipeline' ],
++					[ 'setIndexBuffer', 'index-buffer', 'uint16' ],
++					[ 'setImmediates', 0, 0, 1, 0 ],
++					[ 'drawIndexedIndirect', 'indirect-buffer', 40 ],
++					[ 'setImmediates', 0, 0, 1, 1 ],
++					[ 'drawIndexedIndirect', 'indirect-buffer', 0 ],
++					[ 'setImmediates', 0, 0, 1, 2 ],
++					[ 'drawIndexedIndirect', 'indirect-buffer', 20 ]
++				], 'array-indirect ordinals follow command order' );
++
++				assert.deepEqual( runDraw( backend, { batched: true } ), [
++					[ 'setPipeline', 'pipeline' ],
++					[ 'setImmediates', 0, 0, 1, 0 ],
++					[ 'draw', 3, 1, 0, 0 ],
++					[ 'setImmediates', 0, 0, 1, 1 ],
++					[ 'draw', 6, 1, 3, 1 ]
++				], 'BatchedMesh preserves firstInstance while setting compact ordinals' );
++
++				assert.deepEqual( runDraw( backend, { batched: true, indexed: true } ), [
++					[ 'setPipeline', 'pipeline' ],
++					[ 'setIndexBuffer', 'index-buffer', 'uint16' ],
++					[ 'setImmediates', 0, 0, 1, 0 ],
++					[ 'drawIndexed', 3, 1, 0, 0, 0 ],
++					[ 'setImmediates', 0, 0, 1, 1 ],
++					[ 'drawIndexed', 6, 1, 3, 0, 1 ]
++				], 'indexed BatchedMesh preserves firstInstance and compact ordinals' );
++
++				const control = runDraw( backend, { batched: true, usesDrawIndex: false } );
++				assert.notOk( control.some( ( event ) => event[ 0 ] === 'setImmediates' ), 'ordinary BatchedMesh remains immediate-free' );
++
++				const unsupportedEncoder = createEncoder( false );
++				assert.throws(
++					() => runDraw( backend, { encoder: unsupportedEncoder } ),
++					/cannot provide drawIndex/,
++					'rejects a missing encoder surface'
++				);
++				assert.deepEqual( unsupportedEncoder.events, [], 'fails before encoder mutation' );
++
++				const ordinaryEncoder = createEncoder( false );
++				assert.deepEqual(
++					runDraw( backend, { encoder: ordinaryEncoder, usesDrawIndex: false } ),
++					[[ 'setPipeline', 'pipeline' ], [ 'draw', 6, 1, 2, 0 ]],
++					'ordinary pipelines do not require an immediate encoder surface'
++				);
++
++			} );
++
++		} );
++
++	} );
++
++} );
+diff --git a/test/unit/three.source.unit.js b/test/unit/three.source.unit.js
+index e60c5f9cbb1a637f855c9bcd84dd030b662d9baa..4bec06ecf1eeafbf1a02d126b0152e577ae21b6c 100644
+--- a/test/unit/three.source.unit.js
++++ b/test/unit/three.source.unit.js
+@@ -239,6 +239,10 @@ import './src/renderers/webgl/WebGLExtensions.tests.js';
+ import './src/renderers/webgl/WebGLRenderLists.tests.js';
+ 
+ 
++//src/renderers/webgpu
++import './src/renderers/webgpu/WebGPUDrawIndex.tests.js';
++
++
+ //src/scenes
+ import './src/scenes/Fog.tests.js';
+ import './src/scenes/FogExp2.tests.js';

@@ -1,0 +1,85 @@
+{
+  "schemaVersion": 1,
+  "experiment": "three-webgpu-draw-index-immediates",
+  "upstream": {
+    "repository": "https://github.com/mrdoob/three.js.git",
+    "commit": "994260a7a59abe466de8e59db1ecc9e30352751d",
+    "tree": "7f3d4a048ea19bef1a488b0e2e243e47f6b30002",
+    "srcTree": "acfdb0cb4b58fcfd37917c45f83406652150efdb",
+    "objectFormat": "sha1",
+    "packageVersion": "0.185.0",
+    "runtimeRevision": "186dev"
+  },
+  "sourcePayload": {
+    "root": "src",
+    "fileCount": 754,
+    "totalBytes": 4643565,
+    "gitIndexSha256": "f51261f54f3d52b146ffeabf9107a016523b7deab5efee7b57045f79f84931f2"
+  },
+  "patch": {
+    "path": "patches/three-webgpu-draw-index-immediates.patch",
+    "bytes": 16920,
+    "sha256": "98f469c576ee047ab6fd653f93bcaa1121869759ba5e5e3e63a7b94f26715b25"
+  },
+  "targets": {
+    "src/nodes/accessors/Batch.js": {
+      "gitBlob": "f0b2e65caa03e5f7207817a2bc6f7edefc47d3c4",
+      "afterGitBlob": "1d074008b8cd0c96945263616282948ef6dcc1c2",
+      "beforeSha256": "184a846d3f8a91d0711ae06e4be5e92bb8e2f07327727784a3969057aaab7b14",
+      "afterSha256": "bfd8d0f58b0e1a9b4cc2bd6ed9f5da94fb67a1ad99a5b757cd012582e502a9ef"
+    },
+    "src/nodes/core/IndexNode.js": {
+      "gitBlob": "1da19c93cb7de50183111a3a458f85185b962b41",
+      "afterGitBlob": "01d362a6e66edd90d7093bcabc9c322b55b4430c",
+      "beforeSha256": "2c3689efd3144c39b743d41141f6163e91d9f640369245cb71c6cbc4ebcd1814",
+      "afterSha256": "8f27ce3a9081c3217b57c1ca07b70e030771cd0a1dc831f4e5b7ca2b4ce08b37"
+    },
+    "src/nodes/core/NodeBuilder.js": {
+      "gitBlob": "eaa6f6347c5fcecac4541d73b1e55ad6bb3bff64",
+      "afterGitBlob": "8ecd87906e0a9ecd07a6aec22435eef6638eb924",
+      "beforeSha256": "505a9b0d1068331d0f88e7fa1bcbd5db96e9bddfc354570fd7fa5be4f16bdf56",
+      "afterSha256": "115e463e0387e544a56506ee1cbb7a6a9957326078db1b779d6a03a803a704b0"
+    },
+    "src/renderers/common/nodes/NodeBuilderState.js": {
+      "gitBlob": "5b7f90756cf48598159cf5fd419a35ecc6815c63",
+      "afterGitBlob": "63c964c5e19243cf6f88d604cc11107a46b67c14",
+      "beforeSha256": "2dd0ebc7b0d6ec87c4d013c35616d0c2342c59cdc512ffe525cf9dd810504ec5",
+      "afterSha256": "d506f632b3060532af428dcba3c5b0df5df24162236d0e5ab1278ca3b1a823cd"
+    },
+    "src/renderers/common/nodes/NodeManager.js": {
+      "gitBlob": "47a4b2ca4672aaa9e0eab945e24b59185881a156",
+      "afterGitBlob": "d8225d4969deeabe7fe2f6b1a5c87c8d531fdb14",
+      "beforeSha256": "8ec9afe44c4b8a3e56a1122c0c1bd5d2a5de2ac887dc397a535127a7dbce8076",
+      "afterSha256": "c8300a36a6bb1ec0a83afb5afb230a9ab188ba28ec082dd227fd92fc4686c722"
+    },
+    "src/renderers/webgpu/WebGPUBackend.js": {
+      "gitBlob": "e6345e42e2008f6606971c626326d6479e50a51a",
+      "afterGitBlob": "e0559b9a3d4c149a8b5b60da115dd1b7259c0f86",
+      "beforeSha256": "fe2781e3c7c9e390b6c0121e1d4823d929a8a60e89aae618d49dad0abbc1574e",
+      "afterSha256": "430c63a0fe0a694f9bafc0a03f61123a980f8dffb4346bae391866db003d5f18"
+    },
+    "src/renderers/webgpu/descriptors/GPUPipelineLayoutDescriptor.js": {
+      "gitBlob": "0a393816444a84414489f059fe34ab12f1c416a3",
+      "afterGitBlob": "874b1323eb86c0fd784e7edef742577f66efcdd1",
+      "beforeSha256": "be01afed4209eab3538645cea84bc74c01d1c840f5c224fd9b1e287ae1cc491b",
+      "afterSha256": "2ed211304462586e6b24daa3c30ae6cbb9084165bbc8fa24bd9058ba8b1b8d89"
+    },
+    "src/renderers/webgpu/nodes/WGSLNodeBuilder.js": {
+      "gitBlob": "141480f7109eec5162b8d1dcff4ac551b9a31f91",
+      "afterGitBlob": "bee73d205043d3cddd74a476f076dce440a436d2",
+      "beforeSha256": "f742b3fe5d2a9396c0aadff8c9ba0489a2ce8dc833b199abc95a4b683dd74ed3",
+      "afterSha256": "a1a31685214bf9ebaa66fce9a8eb27263fb0800b1bfbeb14821012eaa48fe52c"
+    },
+    "src/renderers/webgpu/utils/WebGPUPipelineUtils.js": {
+      "gitBlob": "802f98b6e061d4c1580a1e06a43d9b41aeec5b90",
+      "afterGitBlob": "65424a38e2007af4663323bbd44671693877b36c",
+      "beforeSha256": "ed9084df4210ec3f6eb848b0a99cab606821e78319aee0a8757abe57987f85fa",
+      "afterSha256": "b19bd184a814d8a7f994b86798d2031cedf1586aa7abeab2ac397390fe78e278"
+    }
+  },
+  "runtimeAliases": {
+    "^three$": "src/Three.js",
+    "^three/webgpu$": "src/Three.WebGPU.js",
+    "^three/tsl$": "src/Three.TSL.js"
+  }
+}

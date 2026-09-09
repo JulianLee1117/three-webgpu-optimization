@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "kind": "three-webgpu-draw-index-default-exposure-protocol",
+  "executionId": "draw-index-default-exposure-994260a-v1",
+  "executionMode": "timing-free-one-shot-correctness",
+  "claimBoundary": "Correctness and integration on one standards-capable implementation; no performance or cross-device universality claim.",
+  "command": "npm.cmd run probe:three-draw-index -- --browser \"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\"",
+  "output": {
+    "reportPath": "results/development/three-draw-index-default-exposure-canary/canary-draw-index-default-exposure-994260a-v1/report.json",
+    "sha256Path": "results/development/three-draw-index-default-exposure-canary/canary-draw-index-default-exposure-994260a-v1/report.json.sha256",
+    "exclusiveDirectory": true,
+    "overwrite": false,
+    "encoding": "canonical two-space UTF-8 JSON with one trailing LF"
+  },
+  "browser": {
+    "requiredExecutablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "requiredProductVersion": "152.0.7977.82",
+    "requiredByteLength": 4461720,
+    "requiredSha256": "8cd23aec3a30479b9b8db2063e70526c88a7ec2c99cd744603eb26ab598733ed",
+    "playwrightArguments": [],
+    "forbiddenArgumentPrefixes": [
+      "--enable-unsafe-webgpu",
+      "--enable-webgpu-developer-features",
+      "--enable-dawn-features",
+      "--disable-dawn-features",
+      "--use-angle",
+      "--use-vulkan",
+      "--use-webgpu-adapter",
+      "--force-webgpu-compat",
+      "--ignore-gpu-blocklist",
+      "--force-high-performance-gpu"
+    ]
+  },
+  "upstream": {
+    "repository": "https://github.com/mrdoob/three.js.git",
+    "commit": "994260a7a59abe466de8e59db1ecc9e30352751d",
+    "tree": "7f3d4a048ea19bef1a488b0e2e243e47f6b30002",
+    "srcTree": "acfdb0cb4b58fcfd37917c45f83406652150efdb",
+    "runtimeRevision": "186dev"
+  },
+  "patch": {
+    "path": "patches/three-webgpu-draw-index-immediates.patch",
+    "bytes": 16920,
+    "sha256": "98f469c576ee047ab6fd653f93bcaa1121869759ba5e5e3e63a7b94f26715b25"
+  },
+  "page": {
+    "path": "three-draw-index-canary.html",
+    "module": "src/three-draw-index-canary.js",
+    "contract": "src/three-draw-index-canary-contract.js",
+    "timeoutMilliseconds": 120000
+  },
+  "capabilityOrder": [
+    "secure context and navigator.gpu",
+    "WGSL immediate_address_space language feature",
+    "navigator.gpu.requestAdapter() with no descriptor",
+    "adapter.requestDevice() with no descriptor",
+    "actual integer device.limits.maxImmediateSize >= 4",
+    "render-pass and render-bundle setImmediates surfaces",
+    "renderer construction and shader generation"
+  ],
+  "assertions": [
+    "direct fragment draw produces drawIndex zero through a flat u32 varying",
+    "nonmonotonic indexed-indirect order 2,0,3,1 receives compact ordinals 0,1,2,3",
+    "cached render bundle is reused without re-recording",
+    "explicit invalidation produces a distinct correctly recorded bundle",
+    "BatchedMesh order 2,0,3,1 distinguishes compact drawIndex from original batchIndirectIndex",
+    "default BatchedMesh remains immediate-free with layout size zero",
+    "both ArrayCamera layers independently reset drawIndex to zero",
+    "immediate shaders use one requirement and declaration; fragment code has no direct immediate access",
+    "every requiring physical draw has an immediately adjacent exact four-byte setter",
+    "all Three.js errors, browser errors, GPU errors, scope results, and unexpected losses are empty",
+    "source, served runtime, browser executable, overlay, and artifact identities are exact"
+  ],
+  "timingPolicy": {
+    "captureTimings": false,
+    "captureGpuTimestamps": false,
+    "performanceClaim": false,
+    "retries": 0,
+    "browserLaunches": 1,
+    "devices": 1
+  }
+}

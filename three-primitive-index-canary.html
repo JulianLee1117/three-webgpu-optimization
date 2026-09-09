@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:," />
+    <title>Three.js WebGPU native primitiveIndex canary</title>
+  </head>
+  <body>
+    <main>
+      <header>
+        <span class="eyebrow">THREE.JS / WEBGPU / EXACT U32 READBACK</span>
+        <h1>One indexed mesh. No face-ID buffer.</h1>
+        <p>
+          Each wedge is colored from the GPU-native <code>primitiveIndex</code>.
+          The two instances repeat IDs 0-3, proving the per-instance reset.
+        </p>
+      </header>
+      <section id="canvas-host" aria-label="primitiveIndex visualization"></section>
+      <section id="instance-labels" aria-label="instance labels">
+        <span>instance 0 / IDs restart at 0</span>
+        <span>instance 1 / IDs restart at 0</span>
+      </section>
+      <aside id="legend" aria-label="primitive index legend"></aside>
+      <footer>
+        <span id="status" data-state="running">Running exact integer oracle...</span>
+        <span>indexed: 12 x u16 / attributes: position only / instances: 2</span>
+      </footer>
+    </main>
+    <script type="importmap">
+      {
+        "imports": {
+          "three/webgpu": "/__three_primitive_index__/three.webgpu.js"
+        }
+      }
+    </script>
+    <script type="module" src="/src/three-primitive-index-canary.js"></script>
+  </body>
+</html>

@@ -1,4 +1,52 @@
-# Three.js WebGPU Optimization
+# Three.js / WebGPU Research Lab
+
+Small, reproducible experiments toward better tools for editable Three.js scenes.
+Start with the [experiment index](experiments/README.md) and
+[research decisions](docs/RESEARCH_DIRECTIONS.md).
+
+- **Trainable native TSL graphs — new capability experiment.** A forward Three.js
+  shader graph generates its own parameter gradients. Learn procedural or neural
+  surfaces from editable examples and export the weights. Four GPU cases pass;
+  no speed advantage is established. [Run the lab](experiments/trainable-tsl/README.md).
+- **Triangle-distance correctness — verified WebGPU finding.** An obtuse-triangle
+  query in three-mesh-bvh can return a distance about 500× too large. Reproduction,
+  correction and an interactive vertex-order demo are [here](experiments/gpu-deform-collider/README.md).
+- **Native TSL bounds and derivatives — experimental integration.** One shader
+  graph supplies deformation, bounding boxes and analytic time derivatives.
+  Correctness screens pass; performance is mixed. [Evidence and scope](experiments/gpu-deform-collider/README.md).
+- **Editable scene fitting — exploratory tool, no solver advantage.** Fit eight structural dimensions
+  of ordinary Three.js objects to a reference render, then export editable
+  parameters. Compares standard search methods with a GPU finite-difference
+  least-squares adapter. [Run it and inspect the evidence](experiments/scene-fit/README.md).
+- **ZipDepth export fidelity — completed correctness finding.** A minimal patch
+  restores the checkpoint's learned pooling, with six CPU fixtures and a stock
+  Three/WebGPU reproduction. [Finding and local demo](experiments/zipdepth-export/README.md).
+- **External GPU buffers — API prototype, no demonstrated new speed advantage.**
+  [Wave fixture](experiments/ort-surface/README.md) and
+  [strongest-baseline comparison](experiments/ort-handoff/README.md).
+- **Delayed-depth contacts — general candidate rejected.** Rigid-motion gains
+  fail on reversals and independent motion. [CPU screen](experiments/depth-contact/README.md).
+
+```sh
+npm ci
+npm run demo:trainable-tsl
+```
+
+Open the printed localhost URL in a WebGPU-capable Chrome. The training demo starts
+idle and caps each requested fit at 160 steps. No model download is needed.
+The triangle comparison is available separately with `npm run demo:triangle-query`.
+The tested setup is Windows, Chrome 152 and an RTX 5070 Ti; other setups need
+validation. These research prototypes have explicit limits, recorded comparisons
+and documented prior art.
+
+Selected compressed reports and CPU verifiers are included with the trainable-TSL
+and triangle-query experiments. Other raw local reports, model downloads,
+generated bundles and Python environments stay outside Git. Some historical
+analyses refer to local source checkpoints unavailable in a fresh clone. Existing
+historical protocols and consumed attempt limits remain in force.
+
+<details>
+<summary>Historical visibility and indirect-rendering lab documentation</summary>
 
 Evidence-driven research into GPU visibility, indirect rendering, and retained command submission for Three.js WebGPU.
 
@@ -95,6 +143,27 @@ It is descriptive and does not alter the completed candidate decision.
 The follow-up decision design is frozen in the
 [standalone deployment protocol](docs/INDIRECT_FIRST_INSTANCE_STANDALONE_DEPLOYMENT_PROTOCOL.md).
 
+## WebGPU immediate-data address attribution
+
+The current mechanism study adds a third address lane using WebGPU immediate
+data: one host-side `u32` bucket base is copied into the immediate address
+space immediately before each indexed-indirect draw in the cached render
+bundle. This retains zero in indirect word four and removes the portable
+lane's bucket-base vertex stream. The frozen A/I/F design separates the
+attribute, immediate-data, and `firstInstance` routes without treating any one
+contrast as a single-instruction benchmark.
+
+A no-enabling-flags raw WebGPU canary and hardened minimal integration canaries
+for both Three.js r185.1 and pinned upstream revision `186dev` pass on their
+exact Chrome 152 environments. The sole full r185 Phase 0 attempt did not pass:
+its first integrated diagnostic was falsely rejected because the harness
+expected the reverse of Three's generated vertex-location order. The retained
+one-shot remains failed; the development-source run and Phase 1 were not
+started. None of these correctness canaries captured timing. The design is in the
+[immediate-data attribution protocol](docs/WEBGPU_IMMEDIATE_ADDRESS_ATTRIBUTION_PROTOCOL.md),
+and the immutable execution record, raw capability result, and exact limits are in the
+[immediate-data results](docs/WEBGPU_IMMEDIATE_DATA_RESULTS.md).
+
 ## Current status
 
 The package baselines, scheduling probe, fixed-slice lane, and fixed-slice representation control are integrated with lane-specific correctness gates; every compute lane requires exact survivor membership and native indexed-command validation. The representation control additionally requires one shared geometry and material, exactly B retained meshes, exactly B bundle-record callbacks before timing, no bundle rebuild during timing, and exact decoded-pixel parity.
@@ -129,6 +198,25 @@ Render priming was also a repeatable setup exposure: the `R` contrast was
 candidate pass; the next comparison must construct and prime only one lane per
 fresh browser/device session. Exact results and
 limits are reported in [Candidate results](docs/CANDIDATE_RESULTS.md).
+
+The ensuing 96-session, two-matrix standalone deployment replication ran each
+lane alone in fresh browser/device processes. Both matrices passed their
+technical gates, but the high-visibility feature-minus-portable estimates reversed to
++0.067 ms (+3.55%) and +0.144 ms (+7.91%). Persistent, discrete process modes
+were visible in both lanes and remained predictive into each process's later
+20%-visibility trial, while no retained shader, workload, cache, clock, or
+temperature variable explained mode membership. The preregistered standalone
+confirmation was therefore not met. Because browser version and execution
+topology changed together relative to the earlier positive runs, that reversal
+does not identify either cause.
+
+The immediate-data work closes only a narrower feasibility question for the
+pinned implementation: generated, source-attested Three.js overlays can set
+one immediate base at the backend's per-indirect-draw seam and preserve exact
+cached-bundle output with zero `firstInstance`. The full A/I/F attempt stopped
+on a harness-oracle defect before complete evidence existed. That failed
+artifact is not being rerun or reinterpreted as a pass, and no descriptive
+timing is authorized from it.
 
 The core techniques, including GPU frustum culling, survivor compaction, indirect drawing, and retained command submission, are established prior art. The research question is whether a narrower Three.js integration or fixed-ownership specialization produces a material, reproducible difference.
 
@@ -381,3 +469,5 @@ This repository is an experiment harness and does not expose a supported library
 ## License
 
 No license is currently granted for the original source in this repository. Third-party dependencies remain subject to their own terms; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+</details>

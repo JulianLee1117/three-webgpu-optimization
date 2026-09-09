@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "experiment": "three-webgpu-draw-index-immediates-v2",
+  "upstream": {
+    "repository": "https://github.com/mrdoob/three.js",
+    "branch": "dev",
+    "commit": "994260a7a59abe466de8e59db1ecc9e30352751d",
+    "tree": "7f3d4a048ea19bef1a488b0e2e243e47f6b30002",
+    "packageVersion": "0.185.0",
+    "runtimeRevision": "186dev"
+  },
+  "patch": {
+    "path": "patches/three-webgpu-draw-index-immediates-v2.patch",
+    "bytes": 72740,
+    "sha256": "51cd50c1c385a1389ace5903179f6fe354b9d9e7fb93af31474476c7e6f3092e",
+    "files": 15
+  },
+  "scope": {
+    "production": "Semantic drawIndex metadata, WGSL immediate declaration, four-byte pipeline layout, and per-command render encoding.",
+    "compatibility": "Default WebGPU BatchedMesh remains immediate-free and existing WebGL BatchedMesh transports remain intact.",
+    "example": "Deterministic comparison of drawIndex command ordinals and batchIndirectIndex instance IDs.",
+    "tests": "Seven focused QUnit groups covering shader generation, capabilities, metadata, pipeline lifecycle, callsites, and command traces."
+  },
+  "claimBoundary": "Correctness on one tested Chrome/WebGPU implementation; no performance or universal browser/device claim."
+}

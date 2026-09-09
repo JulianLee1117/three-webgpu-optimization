@@ -1,5 +1,106 @@
 # Standalone indirect `firstInstance` deployment protocol
 
+## Corrective v2 amendment - 2026-09-03
+
+This amendment supersedes the original candidate-launch and terminal-failure
+evidence instructions below. It does not change the workload, lane contrast,
+two-matrix schedule, estimator, correctness requirements, nuisance bounds, or
+numerical decision thresholds. The original v1 attempt remains part of the
+record and is not replaced.
+
+### Immutable v1 capture failure
+
+The first full capture used clean source commit
+`52ec935e44bcaf147e1c9a68f1a79f03c30c0144`. It stopped during Matrix 1 while
+opening session 16, after committing 15 of 96 sessions and 30 of 192 trials.
+It completed zero of two matrices. Its exact retained directory is:
+
+```text
+results/candidate-standalone-deployment/first-instance-standalone-deployment-2026-09-03T07-29-33-833Z-959a6905/
+```
+
+`failure.json` has SHA-256
+`838424d99ed429831ba28468a6e7f5d396fa6ca074e2f601b01bca54ca7ae1d1`.
+The retained directory contains 98 files totaling 12,966,684 bytes. All 96
+artifact descriptors referenced by the terminal record were independently
+checked against their recorded lengths and SHA-256 values with zero mismatch.
+The failure record is `analysisEligible: false`; no matrix was complete, no
+standalone decision exists, and the 30 partial trials must not be summarized or
+interpreted for efficacy.
+
+The terminal error was a 120-second `page.waitForFunction` readiness timeout.
+It was not an independently logged browser/device loss, telemetry-collector
+failure, or artifact-I/O failure, so it did not meet the frozen retry rule.
+Starting the same source again would have been an undeclared replacement.
+There was no retry, resume, or replacement. The corrected work below is a new
+source identity and a new v2 series, not a continuation of v1.
+
+### Timestamp-aligned host evidence
+
+The Windows System log contains Tcpip Event ID 4231, record 18340, at
+`2026-09-03T07:32:53.263605Z`, approximately 25 ms after the failed session's
+page was created. The warning states that Windows could not allocate an
+ephemeral port because the global TCP port space was in use. The Vite entry
+document reached the page, but benchmark readiness never appeared. No
+contemporaneous application, display, NVIDIA, browser-crash, or device-loss
+event explained the stop.
+
+The timing and failure shape make transient host-wide TCP ephemeral-port
+exhaustion the strongest supported cause. This remains an attribution with a
+diagnostic caveat: v1 did not persist the failed page's console, failed-request,
+HTTP-response, crash, or bounded readiness state, so the evidence cannot prove
+which module request or socket operation failed. Event 4231 also does not name
+the process responsible. This host evidence says nothing about portable-versus-
+feature efficacy.
+
+### Mandatory startup qualification and terminal observability
+
+Before any v2 full candidate, the exact clean candidate source and installed
+dependency closure must pass the separate
+[standalone startup-endurance qualification](INDIRECT_FIRST_INSTANCE_STANDALONE_STARTUP_ENDURANCE_PROTOCOL.md).
+The qualification uses one disposable forced-feature-off gate followed by 32
+fresh browser/device sessions in the frozen
+`AX AY BX BY AX AY BX BY` quartet prefix. The scheduled sessions balance 16
+portable and 16 feature sessions and both visibility orders, and the probe
+never starts a trial or records an efficacy timing. It is a one-attempt,
+fail-closed prerequisite. A failure or interruption blocks the corresponding
+candidate series; it cannot be rerun to select a passing host interval.
+
+Every qualification pre-launch and post-disconnect snapshot must reject a
+Tcpip Event 4231 within the preceding 10 minutes and must retain at least
+`max(4096, ceil(0.25 * dynamic-port-range size))` free unique local ports in
+every reported Windows dynamic TCP range. Query, parse, lifecycle, page,
+configuration, source, dependency, or environment failure also fails the
+qualification.
+
+The v2 runner upgrades only failure/interruption evidence to terminal schema
+version 2. It races browser operations against fatal observations and retains
+bounded `pageerror`, `console-error`, `requestfailed`, `http-error-response`,
+`page-crash`, `page-close`, and `browser-disconnected` records. Before forced
+cleanup it attempts a readiness snapshot with a two-second deadline, a global
+diagnostic construction budget, and a 64 KiB retained-JSON cap. Expected
+teardown events are marked rather than treated as unexplained failures.
+Successful manifest, session, lifecycle, trial, estimator, and decision schemas
+remain unchanged; schema v2 is not a change to the scientific design.
+
+### Fresh v2 identity and namespace
+
+Only a new clean committed source identity containing the qualification and
+terminal-observability correction may launch the corrected full capture. The
+successful qualification and candidate must retain that exact commit and
+installed dependency closure, with no intervening source or dependency change.
+The v1 directory above stays immutable. Full v2 output is reserved exclusively
+under:
+
+```text
+results/candidate-standalone-deployment-v2/first-instance-standalone-deployment-v2-<timestamp>-<nonce>/
+```
+
+The v2 root must be absent before its sole candidate launch. Development smoke
+artifacts remain outside that namespace and remain analysis-ineligible. The v2
+capture still requires both complete matrices and every originally frozen gate;
+none of the efficacy rules below is relaxed by the infrastructure correction.
+
 ## Purpose and scope
 
 The completed live candidate pair observed a repeatable, render-dominated

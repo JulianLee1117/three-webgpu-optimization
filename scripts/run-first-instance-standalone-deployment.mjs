@@ -69,9 +69,21 @@ export const STANDALONE_EXECUTION_MODES = Object.freeze({
   SMOKE: 'smoke-excluded',
 });
 export const STANDALONE_MODE_ID = 'first-instance-live-standalone-deployment';
+export const STANDALONE_FULL_RUN_ID_STEM = 'first-instance-standalone-deployment-v2';
+export const STANDALONE_FULL_RESULT_ROOT_NAME = 'candidate-standalone-deployment-v2';
 export const STANDALONE_SHADER_CHALLENGE_KIND =
   'live-first-instance-standalone-shader-observation-challenge';
 export const STANDALONE_POST_DISCONNECT_DELAY_MS = 2_000;
+export const STANDALONE_FAILURE_DIAGNOSTIC_LIMITS = Object.freeze({
+  observationRecordsPerKind: 16,
+  diagnosticStringCodeUnits: 8_192,
+  diagnosticArrayItems: 16,
+  diagnosticObjectKeys: 32,
+  diagnosticDepth: 5,
+  diagnosticTotalCodeUnits: 8_192,
+  readinessSnapshotDeadlineMs: 2_000,
+  readinessSnapshotJsonBytes: 64 * 1_024,
+});
 
 const OBJECT_COUNT = 65_536;
 const BUCKET_COUNT = 32;
@@ -102,6 +114,16 @@ const SHADER_CAPTURE_ROLES = Object.freeze([
 ]);
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
 const NONCE_PATTERN = /^[0-9a-f]{64}$/;
+const STANDALONE_BROWSER_OBSERVATION_KINDS = Object.freeze([
+  'pageerror',
+  'console-error',
+  'requestfailed',
+  'http-error-response',
+  'page-crash',
+  'page-close',
+  'browser-disconnected',
+]);
+const PAGE_BROWSER_STATES = new WeakMap();
 
 function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
@@ -153,6 +175,201 @@ async function withDeadline(promise, timeoutMs, label) {
 
 function clone(value) {
   return structuredClone(value);
+}
+
+function boundedDiagnosticString(value) {
+  const text = String(value ?? '');
+  const maximum = STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits;
+  if (text.length <= maximum) return text;
+  const suffix = `...[${text.length - maximum} code units omitted]`;
+  return `${text.slice(0, Math.max(0, maximum - suffix.length))}${suffix}`;
+}
+
+function boundStandaloneFailureDiagnosticValueInternal(value, depth, seen, budget) {
+  if (budget.remaining <= 0) return '[diagnostic budget exhausted]';
+  budget.remaining -= Math.min(8, budget.remaining);
+  if (value === null || typeof value === 'boolean') return value;
+  if (typeof value === 'string') {
+    const maximum = Math.min(
+      STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits,
+      budget.remaining,
+    );
+    const text = String(value);
+    const retained = text.slice(0, maximum);
+    budget.remaining -= retained.length;
+    return text.length <= maximum || retained.length < 32
+      ? retained
+      : `${retained.slice(0, retained.length - 32)}...[diagnostic text omitted]`;
+  }
+  if (typeof value === 'number') return Number.isFinite(value) ? value : String(value);
+  if (typeof value === 'bigint') return `${value}n`;
+  if (value === undefined) return '[undefined]';
+  if (typeof value === 'function' || typeof value === 'symbol') return `[${typeof value}]`;
+  if (depth >= STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticDepth) {
+    return '[maximum diagnostic depth reached]';
+  }
+  if (seen.has(value)) return '[circular diagnostic value]';
+  seen.add(value);
+  if (Array.isArray(value)) {
+    const maximum = STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticArrayItems;
+    const result = value.slice(0, maximum).map(
+      (entry) => boundStandaloneFailureDiagnosticValueInternal(
+        entry,
+        depth + 1,
+        seen,
+        budget,
+      ),
+    );
+    if (value.length > maximum) result.push(`[${value.length - maximum} items omitted]`);
+    seen.delete(value);
+    return result;
+  }
+  const keys = Object.keys(value).sort();
+  const maximum = STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticObjectKeys;
+  const result = {};
+  for (const key of keys.slice(0, maximum)) {
+    if (budget.remaining <= 0) break;
+    const boundedKey = String(key).slice(0, Math.min(
+      STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits,
+      budget.remaining,
+    ));
+    budget.remaining -= boundedKey.length;
+    result[boundedKey] = boundStandaloneFailureDiagnosticValueInternal(
+      value[key],
+      depth + 1,
+      seen,
+      budget,
+    );
+  }
+  if (keys.length > maximum) result.__omittedPropertyCount = keys.length - maximum;
+  seen.delete(value);
+  return result;
+}
+
+export function boundStandaloneFailureDiagnosticValue(value) {
+  return boundStandaloneFailureDiagnosticValueInternal(
+    value,
+    0,
+    new WeakSet(),
+    { remaining: STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticTotalCodeUnits },
+  );
+}
+
+function standaloneBrowserObservationError(observation, label) {
+  const error = new Error(
+    `${label} aborted on ${observation.kind} observation ${observation.ordinal}.`,
+  );
+  error.name = 'StandaloneBrowserObservationError';
+  error.code = 'FIRST_INSTANCE_STANDALONE_BROWSER_OBSERVATION';
+  return error;
+}
+
+export function createStandaloneBrowserObservationRecorder({
+  now = () => new Date().toISOString(),
+  elapsed = () => 0,
+} = {}) {
+  const recordsByKind = Object.fromEntries(
+    STANDALONE_BROWSER_OBSERVATION_KINDS.map((kind) => [kind, []]),
+  );
+  const observedCounts = Object.fromEntries(
+    STANDALONE_BROWSER_OBSERVATION_KINDS.map((kind) => [kind, 0]),
+  );
+  let ordinal = 0;
+  let firstFatalObservation = null;
+  let resolveFatalObservation;
+  const fatalSignal = new Promise((resolve) => {
+    resolveFatalObservation = resolve;
+  });
+  return Object.freeze({
+    fatalSignal,
+    record(kind, detail, { fatal = false, expected = false } = {}) {
+      if (!STANDALONE_BROWSER_OBSERVATION_KINDS.includes(kind)) {
+        throw new RangeError(`Unknown standalone browser observation kind ${kind}.`);
+      }
+      ordinal += 1;
+      observedCounts[kind] += 1;
+      const observation = Object.freeze({
+        ordinal,
+        kind,
+        capturedAt: now(),
+        runElapsedMs: elapsed(),
+        expected,
+        detail: boundStandaloneFailureDiagnosticValue(detail),
+      });
+      if (recordsByKind[kind].length
+        < STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.observationRecordsPerKind) {
+        recordsByKind[kind].push(observation);
+      }
+      if (fatal && !expected && firstFatalObservation === null) {
+        firstFatalObservation = observation;
+        resolveFatalObservation(observation);
+      }
+      return observation;
+    },
+    throwIfFatal(label) {
+      if (firstFatalObservation !== null) {
+        throw standaloneBrowserObservationError(firstFatalObservation, label);
+      }
+    },
+    report() {
+      const retainedCounts = Object.fromEntries(
+        STANDALONE_BROWSER_OBSERVATION_KINDS.map(
+          (kind) => [kind, recordsByKind[kind].length],
+        ),
+      );
+      return Object.freeze({
+        schemaVersion: 1,
+        kind: 'first-instance-standalone-browser-failure-observations',
+        retentionPolicy: clone(STANDALONE_FAILURE_DIAGNOSTIC_LIMITS),
+        totalObserved: Object.values(observedCounts).reduce((sum, count) => sum + count, 0),
+        observedCounts: clone(observedCounts),
+        retainedCounts,
+        droppedCounts: Object.fromEntries(
+          STANDALONE_BROWSER_OBSERVATION_KINDS.map(
+            (kind) => [kind, observedCounts[kind] - retainedCounts[kind]],
+          ),
+        ),
+        firstFatalObservation: clone(firstFatalObservation),
+        recordsByKind: Object.fromEntries(
+          STANDALONE_BROWSER_OBSERVATION_KINDS.map(
+            (kind) => [kind, clone(recordsByKind[kind])],
+          ),
+        ),
+      });
+    },
+  });
+}
+
+export async function guardStandaloneBrowserOperation(operationFactory, recorder, label) {
+  if (typeof operationFactory !== 'function') {
+    throw new TypeError('Standalone browser operations must be supplied as deferred functions.');
+  }
+  recorder.throwIfFatal(label);
+  const operation = Promise.resolve(operationFactory());
+  const result = await Promise.race([
+    operation,
+    recorder.fatalSignal.then((observation) => {
+      throw standaloneBrowserObservationError(observation, label);
+    }),
+  ]);
+  recorder.throwIfFatal(label);
+  return result;
+}
+
+export function createStandaloneTerminalFailureEnvelope({
+  terminationSignal = null,
+  error,
+  activeBrowserFailureDiagnostics = null,
+}) {
+  return Object.freeze({
+    schemaVersion: 2,
+    kind: terminationSignal === null
+      ? 'first-instance-standalone-deployment-capture-failure'
+      : 'first-instance-standalone-deployment-capture-interruption',
+    signal: terminationSignal,
+    error: browserErrorDetail(error),
+    activeBrowserFailureDiagnostics: clone(activeBrowserFailureDiagnostics),
+  });
 }
 
 function frozenSelectionRecord(plan, matrixIndex, sessionIds, trialIds) {
@@ -1117,21 +1334,307 @@ async function findBrowser() {
   throw new Error('No installed Chrome, Chromium, or Edge executable was found.');
 }
 
-function attachErrorCapture(page, records) {
-  page.on('pageerror', (error) => records.push({
-    source: 'pageerror',
-    detail: error.stack ?? error.message,
-    capturedAt: new Date().toISOString(),
-  }));
-  page.on('console', (message) => {
-    if (message.type() === 'error') {
-      records.push({
-        source: 'console',
-        detail: message.text(),
-        capturedAt: new Date().toISOString(),
-      });
-    }
+function browserErrorDetail(error) {
+  return {
+    name: boundedDiagnosticString(error?.name ?? 'Error'),
+    message: boundedDiagnosticString(error?.message ?? String(error)),
+    stack: error?.stack === undefined || error?.stack === null
+      ? null
+      : boundedDiagnosticString(error.stack),
+  };
+}
+
+function appendFatalStateError(state, observation) {
+  if (state.errors.length >= STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.observationRecordsPerKind) {
+    return;
+  }
+  state.errors.push({
+    source: observation.kind,
+    detail: boundedDiagnosticString(JSON.stringify(observation.detail)),
+    capturedAt: observation.capturedAt,
   });
+}
+
+function recordBrowserObservation(state, kind, detail, {
+  fatal = false,
+  expected = false,
+} = {}) {
+  const observation = state.observations.record(kind, detail, { fatal, expected });
+  if (fatal && !expected) appendFatalStateError(state, observation);
+  return observation;
+}
+
+function requestObservationDetail(request) {
+  const failure = request?.failure?.();
+  return {
+    url: boundedDiagnosticString(request?.url?.() ?? ''),
+    method: boundedDiagnosticString(request?.method?.() ?? ''),
+    resourceType: boundedDiagnosticString(request?.resourceType?.() ?? ''),
+    navigationRequest: request?.isNavigationRequest?.() === true,
+    failure: failure === null || failure === undefined
+      ? null
+      : boundStandaloneFailureDiagnosticValue(failure),
+  };
+}
+
+function attachPageObservationCapture(state) {
+  const { page } = state;
+  page.on('pageerror', (error) => {
+    const expected = state.shutdownIntent === 'failure-cleanup';
+    recordBrowserObservation(
+      state,
+      'pageerror',
+      browserErrorDetail(error),
+      { fatal: !expected, expected },
+    );
+  });
+  page.on('console', (message) => {
+    if (message.type() !== 'error') return;
+    let location = null;
+    try {
+      location = message.location();
+    } catch {
+      // The text still preserves the console failure when location lookup is unavailable.
+    }
+    const expected = state.shutdownIntent === 'failure-cleanup';
+    recordBrowserObservation(state, 'console-error', {
+      text: boundedDiagnosticString(message.text()),
+      location: location === null ? null : {
+        url: boundedDiagnosticString(location.url ?? ''),
+        lineNumber: location.lineNumber ?? null,
+        columnNumber: location.columnNumber ?? null,
+      },
+    }, { fatal: !expected, expected });
+  });
+  page.on('requestfailed', (request) => {
+    const expected = state.requestFailuresExpected === true;
+    recordBrowserObservation(
+      state,
+      'requestfailed',
+      requestObservationDetail(request),
+      { fatal: !expected, expected },
+    );
+  });
+  page.on('response', (response) => {
+    if (response.status() < 400) return;
+    const request = response.request();
+    const expected = state.requestFailuresExpected === true;
+    recordBrowserObservation(state, 'http-error-response', {
+      ...requestObservationDetail(request),
+      status: response.status(),
+      statusText: boundedDiagnosticString(response.statusText()),
+    }, { fatal: !expected, expected });
+  });
+  page.on('crash', () => {
+    const expected = state.shutdownIntent === 'failure-cleanup';
+    recordBrowserObservation(state, 'page-crash', {
+      shutdownIntent: state.shutdownIntent,
+    }, { fatal: !expected, expected });
+  });
+  page.on('close', () => {
+    const expected = state.pageCloseExpected === true;
+    recordBrowserObservation(state, 'page-close', {
+      shutdownIntent: state.shutdownIntent,
+    }, { fatal: !expected, expected });
+  });
+}
+
+export async function captureStandaloneReadinessSnapshot(page, {
+  timeoutMs = STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.readinessSnapshotDeadlineMs,
+  now = () => new Date().toISOString(),
+} = {}) {
+  const captureStartedAt = now();
+  const base = {
+    schemaVersion: 1,
+    kind: 'first-instance-standalone-bounded-readiness-snapshot',
+    captureStartedAt,
+    captureCompletedAt: null,
+    deadlineMs: timeoutMs,
+    maximumJsonBytes:
+      STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.readinessSnapshotJsonBytes,
+    captureStatus: null,
+    observedJsonByteLength: null,
+    valueSha256: null,
+    value: null,
+    error: null,
+  };
+  if (page === null || page === undefined || page.isClosed?.() === true) {
+    return Object.freeze({
+      ...base,
+      captureCompletedAt: now(),
+      captureStatus: 'page-unavailable',
+      error: {
+        name: 'Error',
+        message: 'The active page was unavailable before readiness diagnostics.',
+        stack: null,
+      },
+    });
+  }
+  let timeoutId;
+  const timeout = new Promise((resolve) => {
+    timeoutId = setTimeout(
+      () => resolve({ outcome: 'deadline-exceeded' }),
+      timeoutMs,
+    );
+  });
+  const evaluation = page.evaluate((limits) => {
+    let remainingCodeUnits = limits.totalCodeUnits;
+    const boundedString = (input) => {
+      const text = String(input ?? '');
+      const maximum = Math.min(limits.stringCodeUnits, remainingCodeUnits);
+      const retained = text.slice(0, maximum);
+      remainingCodeUnits -= retained.length;
+      if (text.length <= maximum || retained.length < 32) return retained;
+      return `${retained.slice(0, retained.length - 32)}...[diagnostic text omitted]`;
+    };
+    const seen = new WeakSet();
+    const bound = (input, depth = 0) => {
+      if (remainingCodeUnits <= 0) return '[diagnostic budget exhausted]';
+      remainingCodeUnits -= Math.min(8, remainingCodeUnits);
+      if (input === null || typeof input === 'boolean') return input;
+      if (typeof input === 'string') return boundedString(input);
+      if (typeof input === 'number') return Number.isFinite(input) ? input : String(input);
+      if (typeof input === 'bigint') return `${input}n`;
+      if (input === undefined) return '[undefined]';
+      if (typeof input === 'function' || typeof input === 'symbol') return `[${typeof input}]`;
+      if (depth >= limits.depth) return '[maximum diagnostic depth reached]';
+      if (seen.has(input)) return '[circular diagnostic value]';
+      seen.add(input);
+      if (Array.isArray(input)) {
+        const result = input.slice(0, limits.arrayItems).map(
+          (entry) => bound(entry, depth + 1),
+        );
+        if (input.length > limits.arrayItems) {
+          result.push(`[${input.length - limits.arrayItems} items omitted]`);
+        }
+        seen.delete(input);
+        return result;
+      }
+      const keys = Object.keys(input).sort();
+      const result = {};
+      for (const key of keys.slice(0, limits.objectKeys)) {
+        if (remainingCodeUnits <= 0) break;
+        try {
+          result[boundedString(key)] = bound(input[key], depth + 1);
+        } catch (error) {
+          result[boundedString(key)] = {
+            unavailable: true,
+            error: boundedString(error?.message ?? error),
+          };
+        }
+      }
+      if (keys.length > limits.objectKeys) {
+        result.__omittedPropertyCount = keys.length - limits.objectKeys;
+      }
+      seen.delete(input);
+      return result;
+    };
+    const read = (getter) => {
+      try {
+        return { available: true, value: bound(getter()) };
+      } catch (error) {
+        return {
+          available: false,
+          value: null,
+          error: {
+            name: boundedString(error?.name ?? 'Error'),
+            message: boundedString(error?.message ?? error),
+          },
+        };
+      }
+    };
+    const bench = globalThis.__WEBGPU_BENCH__;
+    return {
+      schemaVersion: 1,
+      kind: 'first-instance-standalone-readiness-snapshot-value',
+      locationHref: boundedString(globalThis.location?.href ?? ''),
+      documentReadyState: boundedString(document.readyState),
+      statusText: boundedString(document.getElementById('status')?.textContent ?? ''),
+      benchmarkGlobalPresent: bench !== null && typeof bench === 'object',
+      benchmark: bench === null || typeof bench !== 'object' ? null : {
+        ready: read(() => bench.ready),
+        phase: read(() => bench.phase),
+        trialError: read(() => bench.trialError),
+        initialPageBoot: read(() => bench.initialPageBoot),
+        pageConstructionLifecycle: read(() => bench.pageConstructionLifecycle),
+        selectedConfig: read(() => bench.selectedConfig()),
+        environment: read(() => {
+          const environment = bench.environment;
+          return {
+            threeRevision: environment?.threeRevision ?? null,
+            userAgent: environment?.userAgent ?? null,
+            adapterInfo: environment?.adapterInfo ?? null,
+            rendererBackend: environment?.rendererBackend ?? null,
+            timestampAvailable: environment?.timestampAvailable ?? null,
+            indirectFirstInstanceAvailable:
+              environment?.indirectFirstInstanceAvailable ?? null,
+            webgpuUncapturedErrorCount:
+              environment?.webgpuUncapturedErrorCount ?? null,
+            webgpuDeviceLossCount: environment?.webgpuDeviceLossCount ?? null,
+          };
+        }),
+        webgpuUncapturedErrors: read(() => bench.webgpuUncapturedErrors),
+        webgpuDeviceLosses: read(() => bench.webgpuDeviceLosses),
+      },
+    };
+  }, {
+    stringCodeUnits: STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticStringCodeUnits,
+    arrayItems: STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticArrayItems,
+    objectKeys: STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticObjectKeys,
+    depth: STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticDepth,
+    totalCodeUnits: STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.diagnosticTotalCodeUnits,
+  }).then(
+    (value) => ({ outcome: 'captured', value }),
+    (error) => ({ outcome: 'evaluation-failed', error }),
+  );
+  const result = await Promise.race([evaluation, timeout]);
+  clearTimeout(timeoutId);
+  if (result.outcome === 'deadline-exceeded') {
+    return Object.freeze({
+      ...base,
+      captureCompletedAt: now(),
+      captureStatus: 'deadline-exceeded',
+      error: {
+        name: 'Error',
+        message: `Readiness diagnostic capture exceeded ${timeoutMs} ms.`,
+        stack: null,
+      },
+    });
+  }
+  if (result.outcome === 'evaluation-failed') {
+    return Object.freeze({
+      ...base,
+      captureCompletedAt: now(),
+      captureStatus: 'evaluation-failed',
+      error: browserErrorDetail(result.error),
+    });
+  }
+  const value = boundStandaloneFailureDiagnosticValue(result.value);
+  const valueBytes = Buffer.from(JSON.stringify(value), 'utf8');
+  const oversized = valueBytes.length
+    > STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.readinessSnapshotJsonBytes;
+  return Object.freeze({
+    ...base,
+    captureCompletedAt: now(),
+    captureStatus: oversized ? 'captured-oversize' : 'captured',
+    observedJsonByteLength: valueBytes.length,
+    valueSha256: sha256Bytes(valueBytes),
+    value: oversized ? null : value,
+  });
+}
+
+async function withBrowserObservationDeadline(state, operationFactory, timeoutMs, label) {
+  return withDeadline(
+    guardStandaloneBrowserOperation(operationFactory, state.observations, label),
+    timeoutMs,
+    label,
+  );
+}
+
+async function withPageObservationDeadline(page, operationFactory, timeoutMs, label) {
+  const state = PAGE_BROWSER_STATES.get(page);
+  requireCondition(state !== undefined, `${label} lacks an observed browser state.`);
+  return withBrowserObservationDeadline(state, operationFactory, timeoutMs, label);
 }
 
 class BrowserLifecycleManager {
@@ -1141,10 +1644,16 @@ class BrowserLifecycleManager {
     this.requireRunActive = requireRunActive;
     this.records = [];
     this.active = null;
+    this.terminalAbortPromise = null;
+    this.lastFailureDiagnostics = null;
   }
 
   elapsed() {
     return performance.now() - this.runStartedMonotonic;
+  }
+
+  throwIfActiveFatal(label = 'Active standalone browser') {
+    this.active?.observations.throwIfFatal(label);
   }
 
   async launch({ role, matrixOrdinal = null, session = null }) {
@@ -1204,13 +1713,6 @@ class BrowserLifecycleManager {
       args: BROWSER_ARGS,
       timeout: BROWSER_OPERATION_TIMEOUT_MS,
     });
-    browser.on('disconnected', () => {
-      record.disconnectedEventCount += 1;
-      record.disconnectedAt ??= new Date().toISOString();
-      record.disconnectedRunElapsedMs ??= this.elapsed();
-    });
-    requireCondition(browser.contexts().length === 0,
-      `${role} browser started with an unexpected context.`);
     const state = {
       browser,
       context: null,
@@ -1218,9 +1720,43 @@ class BrowserLifecycleManager {
       errors: [],
       record,
       closePromise: null,
+      shutdownIntent: null,
+      pageCloseExpected: false,
+      browserDisconnectExpected: false,
+      requestFailuresExpected: false,
+      observations: createStandaloneBrowserObservationRecorder({
+        elapsed: () => this.elapsed(),
+      }),
+      readiness: {
+        schemaVersion: 1,
+        kind: 'first-instance-standalone-readiness-observation',
+        requestedUrl: null,
+        navigationStartedAt: null,
+        navigationCompletedAt: null,
+        navigationResponse: null,
+        readinessWaitStartedAt: null,
+        readinessWaitCompletedAt: null,
+        readinessWaitTimeoutMs: 120_000,
+        outcome: 'not-started',
+        error: null,
+      },
+      failureReadinessSnapshot: null,
     };
+    browser.on('disconnected', () => {
+      record.disconnectedEventCount += 1;
+      record.disconnectedAt ??= new Date().toISOString();
+      record.disconnectedRunElapsedMs ??= this.elapsed();
+      const expected = state.browserDisconnectExpected === true;
+      recordBrowserObservation(state, 'browser-disconnected', {
+        shutdownIntent: state.shutdownIntent,
+        disconnectedEventCount: record.disconnectedEventCount,
+        browserConnectedAfterEvent: browser.isConnected(),
+      }, { fatal: !expected, expected });
+    });
     this.records.push(record);
     this.active = state;
+    requireCondition(browser.contexts().length === 0,
+      `${role} browser started with an unexpected context.`);
     this.requireRunActive();
     return state;
   }
@@ -1229,32 +1765,55 @@ class BrowserLifecycleManager {
     this.requireRunActive();
     requireCondition(this.active === state && state.context === null && state.page === null,
       `${state.record.role} attempted more than one context/page.`);
-    state.context = await withDeadline(state.browser.newContext({
+    state.readiness.requestedUrl = boundedDiagnosticString(url);
+    state.context = await withBrowserObservationDeadline(state, () => state.browser.newContext({
       viewport: { width: 1280, height: 900 },
       deviceScaleFactor: 1,
     }), BROWSER_OPERATION_TIMEOUT_MS, `${state.record.role} context creation`);
     state.record.contextCreatedAt = new Date().toISOString();
     requireCondition(state.browser.contexts().length === 1,
       `${state.record.role} did not retain exactly one context.`);
-    state.page = await withDeadline(
-      state.context.newPage(),
+    state.page = await withBrowserObservationDeadline(
+      state,
+      () => state.context.newPage(),
       BROWSER_OPERATION_TIMEOUT_MS,
       `${state.record.role} page creation`,
     );
     state.record.pageCreatedAt = new Date().toISOString();
-    attachErrorCapture(state.page, state.errors);
+    PAGE_BROWSER_STATES.set(state.page, state);
+    attachPageObservationCapture(state);
     requireCondition(state.context.pages().length === 1,
       `${state.record.role} did not retain exactly one page.`);
-    await withDeadline(
-      state.page.goto(url, { waitUntil: 'domcontentloaded' }),
+    state.readiness.navigationStartedAt = new Date().toISOString();
+    const response = await withBrowserObservationDeadline(
+      state,
+      () => state.page.goto(url, { waitUntil: 'domcontentloaded' }),
       BROWSER_OPERATION_TIMEOUT_MS,
       `${state.record.role} entry navigation`,
     );
-    await withDeadline(state.page.waitForFunction(
-      () => window.__WEBGPU_BENCH__?.ready === true,
-      null,
-      { timeout: 120_000 },
-    ), BROWSER_OPERATION_TIMEOUT_MS, `${state.record.role} benchmark readiness`);
+    state.readiness.navigationCompletedAt = new Date().toISOString();
+    state.readiness.navigationResponse = response === null ? null : {
+      url: boundedDiagnosticString(response.url()),
+      status: response.status(),
+      statusText: boundedDiagnosticString(response.statusText()),
+      ok: response.ok(),
+    };
+    state.readiness.readinessWaitStartedAt = new Date().toISOString();
+    try {
+      await withBrowserObservationDeadline(state, () => state.page.waitForFunction(
+        () => window.__WEBGPU_BENCH__?.ready === true,
+        null,
+        { timeout: 120_000 },
+      ), BROWSER_OPERATION_TIMEOUT_MS, `${state.record.role} benchmark readiness`);
+      state.readiness.outcome = 'ready';
+    } catch (error) {
+      state.readiness.outcome = 'failed';
+      state.readiness.error = browserErrorDetail(error);
+      throw error;
+    } finally {
+      state.readiness.readinessWaitCompletedAt = new Date().toISOString();
+    }
+    state.observations.throwIfFatal(`${state.record.role} benchmark readiness`);
     this.requireRunActive();
     return state.page;
   }
@@ -1263,6 +1822,7 @@ class BrowserLifecycleManager {
     if (state.closePromise !== null) return state.closePromise;
     requireCondition(this.active === state,
       `Attempted to close a non-active ${state.record.role} browser.`);
+    state.observations.throwIfFatal(`${state.record.role} browser close`);
     state.closePromise = (async () => {
       const { browser, context, page, record } = state;
       record.contextCountBeforeClose = browser.contexts().length;
@@ -1270,6 +1830,9 @@ class BrowserLifecycleManager {
       requireCondition(record.contextCountBeforeClose === 1
         && record.pageCountBeforeClose === 1,
       `${record.role} violated its one-context/one-page boundary.`, record);
+      state.shutdownIntent = 'normal-close';
+      state.pageCloseExpected = true;
+      state.requestFailuresExpected = true;
       await withDeadline(
         context.close(),
         BROWSER_CLOSE_TIMEOUT_MS,
@@ -1277,6 +1840,7 @@ class BrowserLifecycleManager {
       );
       requireCondition(page.isClosed() === true && browser.contexts().length === 0,
         `${record.role} context/page did not close cleanly.`);
+      state.browserDisconnectExpected = true;
       await withDeadline(
         browser.close(),
         BROWSER_CLOSE_TIMEOUT_MS,
@@ -1289,6 +1853,7 @@ class BrowserLifecycleManager {
       `${record.role} emitted an unexpected disconnected event count.`, record);
       record.closedAt = new Date().toISOString();
       record.closedBeforeNextLaunch = true;
+      state.observations.throwIfFatal(`${record.role} browser close`);
       this.active = null;
       return record;
     })();
@@ -1322,23 +1887,109 @@ class BrowserLifecycleManager {
   }
 
   async forceClose(reason) {
+    if (this.terminalAbortPromise !== null) return this.terminalAbortPromise;
     const state = this.active;
     if (state === null) return null;
-    this.active = null;
     state.record.abortedAt = new Date().toISOString();
     state.record.abortReason = reason;
-    await withDeadline(
-      state.context?.close() ?? Promise.resolve(),
-      BROWSER_CLOSE_TIMEOUT_MS,
-      `${state.record.role} forced context close`,
-    ).catch(() => undefined);
-    await withDeadline(
-      state.browser?.close() ?? Promise.resolve(),
-      BROWSER_CLOSE_TIMEOUT_MS,
-      `${state.record.role} forced browser close`,
-    ).catch(() => undefined);
-    state.record.closedAt ??= new Date().toISOString();
-    return clone(state.record);
+    this.terminalAbortPromise = (async () => {
+      state.failureReadinessSnapshot = await captureStandaloneReadinessSnapshot(
+        state.page,
+      ).catch((error) => ({
+        schemaVersion: 1,
+        kind: 'first-instance-standalone-bounded-readiness-snapshot',
+        captureStartedAt: new Date().toISOString(),
+        captureCompletedAt: new Date().toISOString(),
+        deadlineMs:
+          STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.readinessSnapshotDeadlineMs,
+        maximumJsonBytes:
+          STANDALONE_FAILURE_DIAGNOSTIC_LIMITS.readinessSnapshotJsonBytes,
+        captureStatus: 'capture-threw',
+        observedJsonByteLength: null,
+        valueSha256: null,
+        value: null,
+        error: browserErrorDetail(error),
+      }));
+      state.shutdownIntent = 'failure-cleanup';
+      state.pageCloseExpected = true;
+      state.browserDisconnectExpected = true;
+      state.requestFailuresExpected = true;
+      this.active = null;
+      let contextCloseError = null;
+      let browserCloseError = null;
+      try {
+        await withDeadline(
+          state.context?.close() ?? Promise.resolve(),
+          BROWSER_CLOSE_TIMEOUT_MS,
+          `${state.record.role} forced context close`,
+        );
+      } catch (error) {
+        contextCloseError = browserErrorDetail(error);
+      }
+      try {
+        await withDeadline(
+          state.browser?.close() ?? Promise.resolve(),
+          BROWSER_CLOSE_TIMEOUT_MS,
+          `${state.record.role} forced browser close`,
+        );
+      } catch (error) {
+        browserCloseError = browserErrorDetail(error);
+      }
+      let browserConnectedAfterCleanup = null;
+      let contextCountAfterCleanup = null;
+      let pageClosedAfterCleanup = null;
+      try {
+        browserConnectedAfterCleanup = state.browser?.isConnected() ?? false;
+      } catch {
+        browserConnectedAfterCleanup = null;
+      }
+      try {
+        contextCountAfterCleanup = state.browser?.contexts().length ?? 0;
+      } catch {
+        contextCountAfterCleanup = null;
+      }
+      try {
+        pageClosedAfterCleanup = state.page?.isClosed() ?? true;
+      } catch {
+        pageClosedAfterCleanup = null;
+      }
+      const processObservedClosed = browserConnectedAfterCleanup === false
+        && contextCountAfterCleanup === 0
+        && pageClosedAfterCleanup === true;
+      state.record.forcedCleanup = {
+        schemaVersion: 1,
+        kind: 'first-instance-standalone-forced-browser-cleanup',
+        contextCloseError,
+        browserCloseError,
+        browserConnectedAfterCleanup,
+        contextCountAfterCleanup,
+        pageClosedAfterCleanup,
+        processObservedClosed,
+        clean: processObservedClosed
+          && contextCloseError === null
+          && browserCloseError === null,
+      };
+      if (processObservedClosed) state.record.closedAt ??= new Date().toISOString();
+      this.lastFailureDiagnostics = Object.freeze({
+        schemaVersion: 1,
+        kind: 'first-instance-standalone-active-browser-failure-diagnostics',
+        capturedAt: new Date().toISOString(),
+        browserInstanceSerial: state.record.browserInstanceSerial,
+        role: state.record.role,
+        matrixOrdinal: state.record.matrixOrdinal,
+        sessionId: state.record.sessionId,
+        globalSessionIndex: state.record.globalSessionIndex,
+        sessionNamespace: state.record.sessionNamespace,
+        shutdownIntent: state.shutdownIntent,
+        readiness: boundStandaloneFailureDiagnosticValue(state.readiness),
+        readinessSnapshot: clone(state.failureReadinessSnapshot),
+        activePageErrors: clone(state.errors),
+        observations: state.observations.report(),
+        forcedCleanup: clone(state.record.forcedCleanup),
+      });
+      return clone(state.record);
+    })();
+    return this.terminalAbortPromise;
   }
 }
 
@@ -1595,15 +2246,16 @@ async function runStandaloneTrial({
     planSha256,
     browserRecord,
   });
-  const preflight = await withDeadline(
-    captureEvidencePoint(page, shaderObservationChallenges.slice(0, 2)),
+  const preflight = await withPageObservationDeadline(
+    page,
+    () => captureEvidencePoint(page, shaderObservationChallenges.slice(0, 2)),
     BROWSER_OPERATION_TIMEOUT_MS,
     `${label} preflight evidence`,
   );
   requireEvidencePoint(preflight, canonicalTrial, canonicalSession, `${label} preflight`);
   identityTracker.observe(preflight.environment, preflight.workload, `${label} preflight`);
 
-  const timingParity = await withDeadline(page.evaluate(
+  const timingParity = await withPageObservationDeadline(page, () => page.evaluate(
     (challenge) => window.__WEBGPU_BENCH__.captureRenderParity(challenge),
     shaderObservationChallenges[2],
   ), BROWSER_OPERATION_TIMEOUT_MS, `${label} timing-start parity`);
@@ -1611,7 +2263,7 @@ async function runStandaloneTrial({
     && timingParity?.kind === 'first-instance-live-standalone-exact-render-parity'
     && timingParity?.laneId === canonicalTrial.assignedLaneId,
   `${label} timing-start render parity failed`, timingParity);
-  const timingStart = await withDeadline(page.evaluate(
+  const timingStart = await withPageObservationDeadline(page, () => page.evaluate(
     ({ context, challenge }) => window.__WEBGPU_BENCH__.startTrial(context, challenge),
     { context: auditContext, challenge: shaderObservationChallenges[3] },
   ), BROWSER_OPERATION_TIMEOUT_MS, `${label} timing start`);
@@ -1621,12 +2273,12 @@ async function runStandaloneTrial({
   `${label} timing-start validation failed`, timingStart?.validation);
   identityTracker.observe(configured.environment, timingStart.workload, `${label} timing start`);
 
-  await withDeadline(page.waitForFunction(
+  await withPageObservationDeadline(page, () => page.waitForFunction(
     () => ['complete', 'error'].includes(window.__WEBGPU_BENCH__?.phase),
     null,
     { timeout: BROWSER_OPERATION_TIMEOUT_MS },
   ), BROWSER_OPERATION_TIMEOUT_MS, `${label} timed phase completion`);
-  const timing = await withDeadline(page.evaluate(() => ({
+  const timing = await withPageObservationDeadline(page, () => page.evaluate(() => ({
     phase: window.__WEBGPU_BENCH__.phase,
     error: window.__WEBGPU_BENCH__.trialError,
     rows: window.__WEBGPU_BENCH__.rows,
@@ -1659,8 +2311,9 @@ async function runStandaloneTrial({
     ),
   }));
 
-  const postflight = await withDeadline(
-    captureEvidencePoint(page, shaderObservationChallenges.slice(4, 6)),
+  const postflight = await withPageObservationDeadline(
+    page,
+    () => captureEvidencePoint(page, shaderObservationChallenges.slice(4, 6)),
     BROWSER_OPERATION_TIMEOUT_MS,
     `${label} postflight evidence`,
   );
@@ -1800,7 +2453,7 @@ async function runDisposableForcedFeatureOffGate({
   browserRecord,
   artifactStore,
 }) {
-  const capture = await withDeadline(page.evaluate(async (options) => {
+  const capture = await withPageObservationDeadline(page, () => page.evaluate(async (options) => {
     const bench = window.__WEBGPU_BENCH__;
     const gate = await bench.runFirstInstanceLiveForcedFeatureOffGate(options);
     return {
@@ -1942,7 +2595,9 @@ export async function runFirstInstanceStandaloneDeployment({
   const smokeMode = executionMode === STANDALONE_EXECUTION_MODES.SMOKE;
   const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const runTimestamp = new Date().toISOString().replaceAll(':', '-').replaceAll('.', '-');
-  const runId = `first-instance-standalone-deployment${smokeMode ? '-smoke' : ''}`
+  const runId = `${smokeMode
+    ? 'first-instance-standalone-deployment-smoke'
+    : STANDALONE_FULL_RUN_ID_STEM}`
     + `-${runTimestamp}-${randomBytes(4).toString('hex')}`;
   const resultRoot = smokeMode
     ? path.join(
@@ -1951,7 +2606,7 @@ export async function runFirstInstanceStandaloneDeployment({
       'development',
       'first-instance-standalone-deployment-smoke',
     )
-    : path.join(projectRoot, 'results', 'candidate-standalone-deployment');
+    : path.join(projectRoot, 'results', STANDALONE_FULL_RESULT_ROOT_NAME);
   const runDirectory = path.join(resultRoot, runId);
   const runStartedMonotonic = performance.now();
   const startedAt = new Date().toISOString();
@@ -1980,6 +2635,7 @@ export async function runFirstInstanceStandaloneDeployment({
   };
   const requireRunActive = () => {
     if (terminationSignal !== null) throw terminationError();
+    browserManager?.throwIfActiveFatal();
   };
   const signalHandler = (signal) => {
     if (runCompletionCommitted || terminationSignal !== null) return;
@@ -1993,7 +2649,7 @@ export async function runFirstInstanceStandaloneDeployment({
   process.on('SIGTERM', onSigterm);
 
   try {
-    await mkdir(resultRoot, { recursive: true });
+    await mkdir(resultRoot, { recursive: smokeMode });
     await mkdir(runDirectory, { recursive: false });
     for (const relativeDirectory of ['trials', 'matrices', 'journal']) {
       await mkdir(path.join(runDirectory, relativeDirectory), { recursive: false });
@@ -2219,8 +2875,9 @@ export async function runFirstInstanceStandaloneDeployment({
           visibilityOrder: canonicalSession.visibilityOrder,
         })}`;
         const page = await browserManager.openOnlyPage(sessionState, sessionUrl);
-        const configured = await withDeadline(
-          configureStandaloneSession(page, canonicalSession),
+        const configured = await withPageObservationDeadline(
+          page,
+          () => configureStandaloneSession(page, canonicalSession),
           BROWSER_OPERATION_TIMEOUT_MS,
           `${canonicalSession.sessionId} configuration`,
         );
@@ -2252,8 +2909,9 @@ export async function runFirstInstanceStandaloneDeployment({
               visibilityFraction: canonicalTrial.visibilityFraction,
               phase: 'untimed-visibility-switch',
             });
-            visibilitySwitch = await withDeadline(
-              switchStandaloneVisibility(page, canonicalTrial.visibilityFraction),
+            visibilitySwitch = await withPageObservationDeadline(
+              page,
+              () => switchStandaloneVisibility(page, canonicalTrial.visibilityFraction),
               BROWSER_OPERATION_TIMEOUT_MS,
               `${canonicalSession.sessionId} visibility switch`,
             );
@@ -2306,7 +2964,7 @@ export async function runFirstInstanceStandaloneDeployment({
           `${canonicalSession.sessionId} timestamp history continuity failed`,
           timestampContinuityValidation);
 
-        const sessionEnd = await withDeadline(page.evaluate(async () => ({
+        const sessionEnd = await withPageObservationDeadline(page, () => page.evaluate(async () => ({
           selectedConfig: window.__WEBGPU_BENCH__.selectedConfig(),
           environment: window.__WEBGPU_BENCH__.environment,
           strategyLifecycle: window.__WEBGPU_BENCH__.strategyLifecycle,
@@ -2749,8 +3407,19 @@ export async function runFirstInstanceStandaloneDeployment({
         overlapDetected: false,
       },
     };
-    const manifestArtifact = await artifactStore.json('manifest.json', finalManifest);
+    requireRunActive();
     runCompletionCommitted = true;
+    let manifestArtifact;
+    try {
+      manifestArtifact = await artifactStore.json(
+        'manifest.json',
+        finalManifest,
+        { allowDuringTermination: true },
+      );
+    } catch (error) {
+      runCompletionCommitted = false;
+      throw error;
+    }
     process.stdout.write(
       `Standalone ${smokeMode ? 'smoke' : 'full capture'} complete.\n`
         + `  directory: ${runDirectory}\n`
@@ -2762,6 +3431,9 @@ export async function runFirstInstanceStandaloneDeployment({
     const abortedBrowserLifecycle = await browserManager?.forceClose(
       terminationSignal ?? 'failed-run',
     ).catch(() => null) ?? null;
+    const activeBrowserFailureDiagnostics = clone(
+      browserManager?.lastFailureDiagnostics ?? null,
+    );
     let partialTelemetry = null;
     if (activeTelemetry?.recorder) {
       try {
@@ -2796,11 +3468,13 @@ export async function runFirstInstanceStandaloneDeployment({
     }
     if (artifactStore !== null) {
       const filename = terminationSignal === null ? 'failure.json' : 'interruption.json';
+      const terminalEnvelope = createStandaloneTerminalFailureEnvelope({
+        terminationSignal,
+        error,
+        activeBrowserFailureDiagnostics,
+      });
       await artifactStore.json(filename, {
-        schemaVersion: 1,
-        kind: terminationSignal === null
-          ? 'first-instance-standalone-deployment-capture-failure'
-          : 'first-instance-standalone-deployment-capture-interruption',
+        ...terminalEnvelope,
         executionMode,
         analysisEligible: false,
         scope: smokeMode
@@ -2808,12 +3482,6 @@ export async function runFirstInstanceStandaloneDeployment({
           : 'failed closed; no retry or replacement attempted',
         runId,
         failedAt: new Date().toISOString(),
-        signal: terminationSignal,
-        error: {
-          name: error?.name ?? 'Error',
-          message: error?.message ?? String(error),
-          stack: error?.stack ?? null,
-        },
         completedTrialArtifacts,
         completedSessionArtifacts,
         completedMatrixArtifacts,

@@ -19,6 +19,7 @@ import {
 import {
   buildFirstInstanceLiveCrossoverStrategy,
   createLiveComputeDispatchCommitment,
+  validateLiveComputeLaneIdentity,
 } from '../src/strategies/live-first-instance-crossover.js';
 import { disposeStrategyResources } from '../src/strategies/resources.js';
 import {
@@ -27,6 +28,34 @@ import {
 
 const PORTABLE = 'portable';
 const FEATURE = 'feature';
+
+test('live compute evidence rejects lane/address identity mismatches', () => {
+  const lane = (laneIdentity, addressMode) => ({
+    kind: 'fixed-slice-lane',
+    lane: laneIdentity,
+    addressMode,
+  });
+  assert.equal(
+    validateLiveComputeLaneIdentity(lane('portable', 'bucket-base')).lane,
+    'portable',
+  );
+  assert.equal(
+    validateLiveComputeLaneIdentity(lane('feature', 'indirect-first-instance')).lane,
+    'feature',
+  );
+  assert.equal(
+    validateLiveComputeLaneIdentity(lane('immediate-base', 'immediate-base')).lane,
+    'immediate-base',
+  );
+  assert.throws(
+    () => validateLiveComputeLaneIdentity(lane('portable', 'immediate-base')),
+    /does not match its address transport/,
+  );
+  assert.throws(
+    () => validateLiveComputeLaneIdentity(lane('arbitrary', 'bucket-base')),
+    /does not match its address transport/,
+  );
+});
 
 test('live compute commitments pin count, workgroup, and derived dispatch dimensions', () => {
   assert.deepEqual(

@@ -1,0 +1,244 @@
+{
+  "schemaVersion": 1,
+  "protocolVersion": 2,
+  "kind": "three-ort-webgpu-borrowed-buffer-canary-protocol-v2-ort-1.30.0-dev.20260904-d47fd8824",
+  "executionId": "ort-three-gpu-buffer-31fdc38-v2-ort-1.30.0-dev.20260904-d47fd8824",
+  "executionMode": "timing-free-two-run-correctness",
+  "claimBoundary": "On one normal Chrome/WebGPU implementation, exact official onnxruntime-web 1.30.0-dev.20260904-d47fd8824 writes a preallocated GPUBuffer and Three.js reads that identical object through a 24-byte read-only TSL storage binding without mapping, CPU upload, or a GPU copy involving the target. The input originates on the CPU and the separate integer render target is read back only as a post-render correctness oracle; this protocol makes no performance or cross-device universality claim.",
+  "command": "npm.cmd run probe:three-ort-gpu-buffer-v2 -- --browser \"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --expected-research-commit <40-hex-research-commit>",
+  "offlinePreflightCommand": "npm.cmd run probe:three-ort-gpu-buffer-v2 -- --offline-preflight",
+  "candidate": {
+    "path": ".local-research/three-ort-gpu-buffer-current-dev-candidate",
+    "repository": "https://github.com/mrdoob/three.js.git",
+    "branch": "research/gpu-storage-buffer-attribute",
+    "baseCommit": "c4ffe022f2a4f982b42b7da5af79a87066a138ae",
+    "commit": "31fdc388bc2d001f9a7d7ca27f52ca2c411b1cdc",
+    "tree": "8615edca00b47afe7fb32849182bd4a5ec3b687f",
+    "subject": "WebGPU: Harden borrowed storage buffer adoption"
+  },
+  "build": {
+    "liveDirectory": ".generated/three-ort-gpu-buffer-canary-v2-ort-1.30.0-dev.20260904-d47fd8824-live-build",
+    "offlinePreflightDirectory": ".generated/three-ort-gpu-buffer-canary-v2-ort-1.30.0-dev.20260904-d47fd8824-preflight-build",
+    "route": "/__three_ort_bridge_v2_ort_1.30.0-dev.20260904-d47fd8824__/",
+    "files": {
+      "three.core.js": {
+        "bytes": 1518172,
+        "sha256": "766a32993fedb1834e29804b691a0951914b804826a2de9f0746ea03387dd0e0"
+      },
+      "three.module.js": {
+        "bytes": 679849,
+        "sha256": "3a64a3e531914515523a42cc7bcc8b43f6dad5b1ad1b916f29650d60e2b89513"
+      },
+      "three.tsl.js": {
+        "bytes": 37535,
+        "sha256": "d7bec24ec37cab32f54c50574d5169c9b4a7579de3f8696d3101f7417983993b"
+      },
+      "three.webgpu.js": {
+        "bytes": 2385128,
+        "sha256": "c8b83e3caa47bae8c92d0916620440928fc8cf46b4ccd03642fff2add4f00e49"
+      },
+      "three.webgpu.nodes.js": {
+        "bytes": 2376211,
+        "sha256": "8eba01de184168865c665491f61ab8eecde3ec332341595f25217d8186890fb0"
+      }
+    }
+  },
+  "onnxRuntime": {
+    "package": "onnxruntime-web",
+    "packageAlias": "onnxruntime-web-dev",
+    "dependencySpec": "npm:onnxruntime-web@1.30.0-dev.20260904-d47fd8824",
+    "version": "1.30.0-dev.20260904-d47fd8824",
+    "lockIntegrity": "sha512-vqD58oCa9rtgB+AaSpJPECiQTxX0KDqAqP+4cPvoxOskz7yvvB3oINO/BG23CraRgkhO71Khgjwg0K8E2d5v4A==",
+    "commonPackage": "onnxruntime-common",
+    "commonVersion": "1.30.0-dev.20260813-72e1c9c9b8",
+    "commonLockIntegrity": "sha512-rgjnYrMP7e7CNGZOIygFaeF5qZCoRtBBeMFGjRNCXNyUpxXMGZIn9EE/LnCjCdCix6MYbyNR3JvMTabCutI9hg==",
+    "requiredBundleMarkers": [
+      "_OrtCreateWebGpuInstance"
+    ],
+    "stableBaseline": {
+      "packageAlias": "onnxruntime-web",
+      "version": "1.29.0",
+      "bundle": {
+        "bytes": 116102,
+        "sha256": "2b943893e8b444fd3983c205f3574cddd70b1f8a6170c114b03cc3d6060c4cbb"
+      },
+      "absentBundleMarkers": [
+        "_OrtCreateWebGpuInstance"
+      ]
+    },
+    "route": "/__ort_webgpu_v2_1.30.0-dev.20260904-d47fd8824__/",
+    "proxy": false,
+    "numThreads": 1,
+    "files": {
+      "ort.webgpu.bundle.min.mjs": {
+        "bytes": 117740,
+        "sha256": "bd253faa45065dbf5605879ee0bf187ca5b8ba9846aa1f3ec225162f03ed03c9"
+      },
+      "ort-wasm-simd-threaded.asyncify.wasm": {
+        "bytes": 26653008,
+        "sha256": "19a5d63127fbc4b3cb1da13e082ccc04ebce8cd7a4c29b06cdcdb56046e0ca6a"
+      }
+    }
+  },
+  "browser": {
+    "requiredExecutablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "playwrightArguments": [],
+    "forbiddenArgumentPrefixes": [
+      "--disable-dawn-features",
+      "--enable-dawn-features",
+      "--enable-unsafe-webgpu",
+      "--enable-webgpu-developer-features",
+      "--force-high-performance-gpu",
+      "--force-webgpu-compat",
+      "--ignore-gpu-blocklist",
+      "--use-angle",
+      "--use-vulkan",
+      "--use-webgpu-adapter"
+    ]
+  },
+  "page": {
+    "resultKind": "three-webgpu-onnxruntime-borrowed-gpu-buffer-correctness-canary-v2-ort-1.30.0-dev.20260904-d47fd8824",
+    "path": "three-ort-gpu-buffer-canary-v2.html",
+    "module": "src/three-ort-gpu-buffer-canary-v2.js",
+    "contract": "src/three-ort-gpu-buffer-canary-v2-contract.js",
+    "viewport": [
+      960,
+      540
+    ],
+    "deviceScaleFactor": 1,
+    "timeoutMilliseconds": 180000,
+    "screenshotStage": "screenshot-ready"
+  },
+  "model": {
+    "source": "onnxruntime/test/testdata/mul_1.onnx",
+    "bytes": 130,
+    "sha256": "71f431c4e9321ec6fbeb158d02ed240459a7dcc98673fa79a4f439ce42efaf10",
+    "inputName": "X",
+    "outputName": "Y",
+    "dims": [
+      3,
+      2
+    ],
+    "operation": "Y = X * [1, 2, 3, 4, 5, 6]"
+  },
+  "target": {
+    "physicalBytes": 32,
+    "logicalBytes": 24,
+    "itemSize": 1,
+    "count": 6,
+    "byteOffset": 0,
+    "requiredUsage": [
+      "STORAGE",
+      "COPY_SRC",
+      "COPY_DST"
+    ],
+    "forbiddenBindingRoles": [
+      "vertex",
+      "index",
+      "indirect"
+    ]
+  },
+  "runs": [
+    {
+      "index": 0,
+      "input": [
+        -0.75,
+        -0.375,
+        0.25,
+        -0.1875,
+        0,
+        0.125
+      ],
+      "expectedOutput": [
+        -0.75,
+        -0.75,
+        0.75,
+        -0.75,
+        0,
+        0.75
+      ],
+      "expectedBits": [
+        3208642560,
+        3208642560,
+        1061158912,
+        3208642560,
+        0,
+        1061158912
+      ]
+    },
+    {
+      "index": 1,
+      "input": [
+        -0.625,
+        -0.25,
+        0.125,
+        -0.125,
+        0.125,
+        0.0625
+      ],
+      "expectedOutput": [
+        -0.625,
+        -0.5,
+        0.375,
+        -0.5,
+        0.625,
+        0.375
+      ],
+      "expectedBits": [
+        3206545408,
+        3204448256,
+        1052770304,
+        3204448256,
+        1059061760,
+        1052770304
+      ]
+    }
+  ],
+  "oracle": {
+    "textureFormat": "rgba32uint",
+    "typedArray": "Uint32Array",
+    "width": 256,
+    "height": 256,
+    "sentinel": 1330795571,
+    "markerNdcSize": 0.18,
+    "minimumPixelsPerTuple": 300,
+    "maximumPixelsPerTuple": 800,
+    "maximumCentroidErrorPixels": 2
+  },
+  "lifecycle": {
+    "order": [
+      "ORT run 1 into target",
+      "Three exact oracle and visual render",
+      "screenshot handshake",
+      "explicitly release the first borrowed attribute from Three's attribute manager, then dispose geometry, materials, render target, and renderer",
+      "ORT run 2 into the same target",
+      "fresh Three renderer and attribute exact oracle",
+      "explicitly release the second borrowed attribute, then dispose the second Three resources",
+      "release ORT session last"
+    ],
+    "ownerCleanupAfterEvidence": true
+  },
+  "assertions": [
+    "the v2 protocol, npm alias, exact official ORT nightly, candidate, outer source, Three build, ORT bundle, ORT wasm, transitive ORT common package, and embedded model are identity- and content-pinned",
+    "one explicitly-created GPUDevice is passed to both ONNX Runtime WebGPU and each Three WebGPURenderer",
+    "ORT returns the supplied preallocated Tensor and its exact GPUBuffer object on both runs",
+    "an ORT target-containing bind group is set before a compute dispatch on both runs",
+    "every decisive dispatch and draw is encoded into a finished command buffer that is submitted on the target GPUDevice",
+    "target-using compute and draw commands occur only in their two declared ORT and Three proof phases",
+    "Three caches and binds the identical target with explicit offset 0, size 24, no dynamic offset, a read-only-storage layout, and matching generated WGSL whose target variable is read by both active pipeline stages before each proof draw",
+    "the 32-byte target is never mapped, CPU-written, cleared, copied, used as vertex/index/indirect data, or destroyed before owner cleanup",
+    "each Three attribute manager and backend cache contains the borrowed attribute before explicit release and neither retains it afterward",
+    "explicit borrowed-attribute release and both renderer disposals leave the target undestroyed",
+    "a distinct second ORT output and fresh Three renderer prove target reuse after teardown",
+    "both rgba32uint readbacks contain only exact expected float-bit tuples at their expected spatial locations",
+    "shader compilation messages, GPU errors, page errors, network errors, and unexpected device loss are absent",
+    "the screenshot is captured before teardown and truthfully labels the bounded claim"
+  ],
+  "output": {
+    "directory": "results/development/three-ort-gpu-buffer-canary-v2/ort-three-gpu-buffer-31fdc38-v2-ort-1.30.0-dev.20260904-d47fd8824",
+    "report": "report.json",
+    "screenshot": "ort-three-shared-gpu-buffer-v2-ort-1.30.0-dev.20260904-d47fd8824.png",
+    "exclusiveDirectory": true,
+    "overwrite": false
+  }
+}

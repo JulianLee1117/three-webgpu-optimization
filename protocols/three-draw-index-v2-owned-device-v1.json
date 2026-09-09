@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "protocol": "three-webgpu-draw-index-v2-owned-device-v1",
+  "execution": "single-use correctness canary",
+  "upstream": {
+    "commit": "994260a7a59abe466de8e59db1ecc9e30352751d",
+    "tree": "7f3d4a048ea19bef1a488b0e2e243e47f6b30002"
+  },
+  "patch": {
+    "path": "patches/three-webgpu-draw-index-immediates-v2.patch",
+    "bytes": 72740,
+    "sha256": "51cd50c1c385a1389ace5903179f6fe354b9d9e7fb93af31474476c7e6f3092e"
+  },
+  "browser": {
+    "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "bytes": 4461720,
+    "productVersion": "152.0.7977.82",
+    "sha256": "8cd23aec3a30479b9b8db2063e70526c88a7ec2c99cd744603eb26ab598733ed",
+    "launch": "Playwright Chromium, headless, args: []",
+    "forbiddenArgumentPrefixes": [
+      "--disable-dawn-features",
+      "--enable-dawn-features",
+      "--enable-unsafe-webgpu",
+      "--enable-webgpu-developer-features",
+      "--force-high-performance-gpu",
+      "--force-webgpu-compat",
+      "--ignore-gpu-blocklist",
+      "--use-angle",
+      "--use-vulkan",
+      "--use-webgpu-adapter"
+    ]
+  },
+  "renderer": {
+    "constructor": "new THREE.WebGPURenderer( { antialias: true } )",
+    "deviceOwnership": "Three.js",
+    "requiredLimitsPromotion": false,
+    "rawAdapterOrDeviceInjection": false
+  },
+  "build": {
+    "files": {
+      "three.core.js": {
+        "bytes": 1518172,
+        "sha256": "766a32993fedb1834e29804b691a0951914b804826a2de9f0746ea03387dd0e0"
+      },
+      "three.module.js": {
+        "bytes": 679841,
+        "sha256": "52d447c6397ac9924a0c873f97cd455f11e3825fcf491f893e96eb26d83e8129"
+      },
+      "three.tsl.js": {
+        "bytes": 37535,
+        "sha256": "d7bec24ec37cab32f54c50574d5169c9b4a7579de3f8696d3101f7417983993b"
+      },
+      "three.webgpu.js": {
+        "bytes": 2379229,
+        "sha256": "eef8dcd7f5fafe62baa99b725b9daf3cc015d8248003917a5d5cc4bec5741aac"
+      },
+      "three.webgpu.nodes.js": {
+        "bytes": 2370312,
+        "sha256": "61ace30bcfdc624f95faa03374d02645448c1a10b36d8a7c153756135c166e3c"
+      }
+    }
+  },
+  "example": {
+    "path": "examples/webgpu_tsl_draw_index.html",
+    "viewport": [
+      960,
+      540
+    ],
+    "deviceScaleFactor": 1,
+    "phase": 3,
+    "order": [
+      3,
+      4,
+      5,
+      6,
+      7,
+      0,
+      1,
+      2
+    ]
+  },
+  "assertions": [
+    "the candidate working diff is byte-identical to the frozen patch",
+    "the ordinary renderer path owns the sole adapter and device acquisition",
+    "the acquired adapter reports that it is not a fallback adapter",
+    "requiredLimits contains no maxImmediateSize promotion",
+    "the actual device reports maxImmediateSize at least four and the WGSL language feature is present",
+    "one immediate and one ordinary scene pipeline render eight indexed BatchedMesh commands each, followed by the expected ordinary output-transform draw",
+    "immediate setters carry exact uint32 ordinals zero through seven immediately before their draws",
+    "the ordinary batch emits no immediate setter",
+    "the immediate WGSL requirement and declaration compile without messages",
+    "all WebGPU validation scopes are balanced, settled, and empty",
+    "the deterministic example reaches phase three and both actual BatchedMesh command lists equal the expected order",
+    "browser, page, GPU, network, and harness-teardown diagnostics are empty",
+    "a full-resolution screenshot is captured for visual inspection"
+  ],
+  "output": {
+    "directory": "results/development/three-draw-index-v2-owned-device-canary/canary-994260a-v2",
+    "report": "report.json",
+    "screenshot": "draw-index-example.png"
+  },
+  "claimBoundary": "Correctness and integration on one Chrome/WebGPU implementation using Three-owned device acquisition; no performance or cross-device universality claim."
+}

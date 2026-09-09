@@ -1,0 +1,1641 @@
+diff --git a/src/Three.WebGPU.Nodes.js b/src/Three.WebGPU.Nodes.js
+index dcb8e7c..5276035 100644
+--- a/src/Three.WebGPU.Nodes.js
++++ b/src/Three.WebGPU.Nodes.js
+@@ -16,6 +16,7 @@ import * as RendererUtils from './renderers/common/RendererUtils.js';
+ export { RendererUtils };
+ export { default as StorageTexture } from './renderers/common/StorageTexture.js';
+ export { default as StorageBufferAttribute } from './renderers/common/StorageBufferAttribute.js';
++export { default as ExternalStorageBufferAttribute } from './renderers/common/ExternalStorageBufferAttribute.js';
+ export { default as StorageInstancedBufferAttribute } from './renderers/common/StorageInstancedBufferAttribute.js';
+ export { default as IndirectStorageBufferAttribute } from './renderers/common/IndirectStorageBufferAttribute.js';
+ export { default as IESSpotLight } from './lights/webgpu/IESSpotLight.js';
+diff --git a/src/Three.WebGPU.js b/src/Three.WebGPU.js
+index 5d7825f..1cc9b1c 100644
+--- a/src/Three.WebGPU.js
++++ b/src/Three.WebGPU.js
+@@ -22,6 +22,7 @@ export { default as StorageTexture } from './renderers/common/StorageTexture.js'
+ export { default as Storage3DTexture } from './renderers/common/Storage3DTexture.js';
+ export { default as StorageArrayTexture } from './renderers/common/StorageArrayTexture.js';
+ export { default as StorageBufferAttribute } from './renderers/common/StorageBufferAttribute.js';
++export { default as ExternalStorageBufferAttribute } from './renderers/common/ExternalStorageBufferAttribute.js';
+ export { default as StorageInstancedBufferAttribute } from './renderers/common/StorageInstancedBufferAttribute.js';
+ export { default as IndirectStorageBufferAttribute } from './renderers/common/IndirectStorageBufferAttribute.js';
+ export { default as IESSpotLight } from './lights/webgpu/IESSpotLight.js';
+diff --git a/src/nodes/accessors/BufferAttributeNode.js b/src/nodes/accessors/BufferAttributeNode.js
+index b80504a..f74875e 100644
+--- a/src/nodes/accessors/BufferAttributeNode.js
++++ b/src/nodes/accessors/BufferAttributeNode.js
+@@ -78,6 +78,12 @@ class BufferAttributeNode extends InputNode {
+ 	 */
+ 	constructor( value, bufferType = null, bufferStride = 0, bufferOffset = 0 ) {
+ 
++		if ( value && value.isExternalStorageBufferAttribute === true ) {
++
++			throw new Error( 'THREE.BufferAttributeNode: ExternalStorageBufferAttribute is storage-binding only and cannot be used as a vertex attribute.' );
++
++		}
++
+ 		super( value, bufferType );
+ 
+ 		/**
+diff --git a/src/nodes/accessors/StorageBufferNode.js b/src/nodes/accessors/StorageBufferNode.js
+index 5d68605..5dfe553 100644
+--- a/src/nodes/accessors/StorageBufferNode.js
++++ b/src/nodes/accessors/StorageBufferNode.js
+@@ -47,7 +47,7 @@ class StorageBufferNode extends BufferNode {
+ 	/**
+ 	 * Constructs a new storage buffer node.
+ 	 *
+-	 * @param {StorageBufferAttribute|StorageInstancedBufferAttribute|BufferAttribute} value - The buffer data.
++	 * @param {ExternalStorageBufferAttribute|StorageBufferAttribute|StorageInstancedBufferAttribute|BufferAttribute} value - The buffer data.
+ 	 * @param {?(string|Struct)} [bufferType=null] - The buffer type (e.g. `'vec3'`).
+ 	 * @param {number} [bufferCount=0] - The buffer count.
+ 	 */
+@@ -55,7 +55,24 @@ class StorageBufferNode extends BufferNode {
+ 
+ 		let nodeType, structTypeNode = null;
+ 
+-		if ( bufferType && bufferType.isStructTypeNode ) {
++		if ( value.isExternalStorageBufferAttribute === true ) {
++
++			if ( bufferType !== null && bufferType !== value.type ) {
++
++				throw new Error( 'THREE.StorageBufferNode: The explicit type must match ExternalStorageBufferAttribute.type.' );
++
++			}
++
++			if ( bufferCount !== 0 && bufferCount !== value.count ) {
++
++				throw new Error( 'THREE.StorageBufferNode: The explicit count must match ExternalStorageBufferAttribute.count.' );
++
++			}
++
++			nodeType = value.type;
++			bufferCount = value.count;
++
++		} else if ( bufferType && bufferType.isStructTypeNode ) {
+ 
+ 			nodeType = 'struct';
+ 			structTypeNode = bufferType;
+@@ -228,6 +245,12 @@ class StorageBufferNode extends BufferNode {
+ 	 */
+ 	setPBO( value ) {
+ 
++		if ( value === true && this.value.isExternalStorageBufferAttribute === true ) {
++
++			throw new Error( 'THREE.StorageBufferNode: ExternalStorageBufferAttribute does not support PBO access.' );
++
++		}
++
+ 		this.isPBO = value;
+ 
+ 		return this;
+@@ -278,6 +301,12 @@ class StorageBufferNode extends BufferNode {
+ 	 */
+ 	setAtomic( value ) {
+ 
++		if ( value === true && this.value.isExternalStorageBufferAttribute === true ) {
++
++			throw new Error( 'THREE.StorageBufferNode: ExternalStorageBufferAttribute does not support atomic access.' );
++
++		}
++
+ 		this.isAtomic = value;
+ 
+ 		return this;
+@@ -397,7 +426,7 @@ export default StorageBufferNode;
+  *
+  * @tsl
+  * @function
+- * @param {StorageBufferAttribute|StorageInstancedBufferAttribute|BufferAttribute} value - The buffer data.
++ * @param {ExternalStorageBufferAttribute|StorageBufferAttribute|StorageInstancedBufferAttribute|BufferAttribute} value - The buffer data.
+  * @param {?(string|Struct)} [type=null] - The buffer type (e.g. `'vec3'`).
+  * @param {number} [count=0] - The buffer count.
+  * @returns {StorageBufferNode}
+diff --git a/src/renderers/common/Attributes.js b/src/renderers/common/Attributes.js
+index 5be5dc8..cbbbe49 100644
+--- a/src/renderers/common/Attributes.js
++++ b/src/renderers/common/Attributes.js
+@@ -35,6 +35,14 @@ class Attributes extends DataMap {
+ 		 */
+ 		this.info = info;
+ 
++		/**
++		 * Externally-backed attributes with registered disposal listeners.
++		 *
++		 * @private
++		 * @type {Set<ExternalStorageBufferAttribute>}
++		 */
++		this._externalAttributes = new Set();
++
+ 	}
+ 
+ 	/**
+@@ -49,6 +57,13 @@ class Attributes extends DataMap {
+ 
+ 		if ( attributeData !== null ) {
+ 
++			if ( attribute.isExternalStorageBufferAttribute === true && attributeData.onDispose !== undefined ) {
++
++				attribute.removeEventListener( 'dispose', attributeData.onDispose );
++				this._externalAttributes.delete( attribute );
++
++			}
++
+ 			this.backend.destroyAttribute( attribute );
+ 
+ 			this.info.destroyAttribute( attribute );
+@@ -96,6 +111,19 @@ class Attributes extends DataMap {
+ 
+ 			data.version = this._getBufferAttribute( attribute ).version;
+ 
++			if ( attribute.isExternalStorageBufferAttribute === true ) {
++
++				data.onDispose = () => {
++
++					this.delete( attribute );
++
++				};
++
++				attribute.addEventListener( 'dispose', data.onDispose );
++				this._externalAttributes.add( attribute );
++
++			}
++
+ 		} else {
+ 
+ 			const bufferAttribute = this._getBufferAttribute( attribute );
+@@ -112,6 +140,23 @@ class Attributes extends DataMap {
+ 
+ 	}
+ 
++	/**
++	 * Frees internal resources and removes external-attribute listeners.
++	 */
++	dispose() {
++
++		for ( const attribute of Array.from( this._externalAttributes ) ) {
++
++			this.delete( attribute );
++
++		}
++
++		this._externalAttributes.clear();
++
++		super.dispose();
++
++	}
++
+ 	/**
+ 	 * Utility method for handling interleaved buffer attributes correctly.
+ 	 * To process them, their `InterleavedBuffer` is returned.
+diff --git a/src/renderers/common/Bindings.js b/src/renderers/common/Bindings.js
+index d2f7db1..9abc967 100644
+--- a/src/renderers/common/Bindings.js
++++ b/src/renderers/common/Bindings.js
+@@ -65,6 +65,15 @@ class Bindings extends DataMap {
+ 		 */
+ 		this.info = info;
+ 
++		/**
++		 * Renderer-local tokens retained by external storage attributes while
++		 * native bind groups reference them.
++		 *
++		 * @private
++		 * @type {Set<Object>}
++		 */
++		this._externalStorageBufferBindingTokens = new Set();
++
+ 		this.pipelines.bindings = this; // assign bindings to pipelines
+ 
+ 	}
+@@ -263,6 +272,7 @@ class Bindings extends DataMap {
+ 				// each object defines an array of bindings (ubos, textures, samplers etc.)
+ 
+ 				this.backend.createBindings( bindGroup, bindings, '' );
++				this._syncExternalStorageBufferBindings( bindGroup, groupData );
+ 
+ 				groupData.bindGroup = bindGroup;
+ 				groupData.usedTimes = 1;
+@@ -291,6 +301,8 @@ class Bindings extends DataMap {
+ 
+ 			if ( groupData.usedTimes === 0 ) {
+ 
++				this._releaseExternalStorageBufferBindings( groupData );
++
+ 				for ( const binding of bindGroup.bindings ) {
+ 
+ 					if ( binding.isUniformBuffer ) {
+@@ -366,6 +378,17 @@ class Bindings extends DataMap {
+ 
+ 		for ( const binding of bindGroup.bindings ) {
+ 
++			// Native bind groups that reference borrowed buffers must not enter the
++			// backend's resource cache. A cached group can outlive the binding's
++			// current attribute and would make an otherwise released external buffer
++			// unsafe to destroy or recycle.
++
++			if ( binding.isStorageBuffer === true && binding.attribute?.isExternalStorageBufferAttribute === true ) {
++
++				cacheBindings = false;
++
++			}
++
+ 			const updatedGroup = this.nodes.updateGroup( binding );
+ 
+ 			// every uniforms group is a uniform buffer. So if no update is required,
+@@ -499,9 +522,114 @@ class Bindings extends DataMap {
+ 		if ( needsBindingsUpdate === true ) {
+ 
+ 			this.backend.updateBindings( bindGroup, bindings, cacheBindings ? cacheKey : '', version );
++			this._syncExternalStorageBufferBindings( bindGroup, this.get( bindGroup ) );
++
++		}
++
++	}
++
++	/**
++	 * Synchronizes external-attribute lifetime tokens with a bind group's
++	 * current storage bindings.
++	 *
++	 * @private
++	 * @param {BindGroup} bindGroup - The bind group.
++	 * @param {Object} groupData - The bind group's renderer data.
++	 */
++	_syncExternalStorageBufferBindings( bindGroup, groupData ) {
++
++		const attributes = new Set();
++
++		for ( const binding of bindGroup.bindings ) {
++
++			const attribute = binding.isStorageBuffer === true ? binding.attribute : null;
++
++			if ( attribute?.isExternalStorageBufferAttribute === true ) attributes.add( attribute );
++
++		}
++
++		const tokens = groupData.externalStorageBufferBindingTokens || new Map();
++
++		for ( const [ attribute, token ] of tokens ) {
++
++			if ( attributes.has( attribute ) === false ) {
++
++				this._releaseExternalStorageBufferBindingToken( token );
++				tokens.delete( attribute );
++
++			}
++
++		}
++
++		for ( const attribute of attributes ) {
++
++			if ( tokens.has( attribute ) === false ) {
++
++				const token = { attribute };
++				attribute._retainBinding( token );
++				tokens.set( attribute, token );
++				this._externalStorageBufferBindingTokens.add( token );
++
++			}
++
++		}
++
++		groupData.externalStorageBufferBindingTokens = tokens;
++
++	}
++
++	/**
++	 * Releases all external-attribute tokens retained by a bind group.
++	 *
++	 * @private
++	 * @param {Object} groupData - The bind group's renderer data.
++	 */
++	_releaseExternalStorageBufferBindings( groupData ) {
++
++		const tokens = groupData.externalStorageBufferBindingTokens;
++
++		if ( tokens === undefined ) return;
++
++		for ( const token of tokens.values() ) {
++
++			this._releaseExternalStorageBufferBindingToken( token );
++
++		}
++
++		tokens.clear();
++
++	}
++
++	/**
++	 * Releases one renderer-local external-attribute token.
++	 *
++	 * @private
++	 * @param {Object} token - The binding token.
++	 */
++	_releaseExternalStorageBufferBindingToken( token ) {
++
++		if ( this._externalStorageBufferBindingTokens.delete( token ) ) {
++
++			token.attribute._releaseBinding( token );
++
++		}
++
++	}
++
++	/**
++	 * Frees internal resources and releases any remaining external-attribute
++	 * binding tokens, including tokens owned by undisposed compute nodes.
++	 */
++	dispose() {
++
++		for ( const token of Array.from( this._externalStorageBufferBindingTokens ) ) {
++
++			this._releaseExternalStorageBufferBindingToken( token );
+ 
+ 		}
+ 
++		super.dispose();
++
+ 	}
+ 
+ }
+diff --git a/src/renderers/common/Info.js b/src/renderers/common/Info.js
+index 1374caa..66429cd 100644
+--- a/src/renderers/common/Info.js
++++ b/src/renderers/common/Info.js
+@@ -522,6 +522,12 @@ class Info {
+ 
+ 		if ( attribute.isInterleavedBufferAttribute ) attribute = attribute.data;
+ 
++		if ( attribute.isExternalStorageBufferAttribute ) {
++
++			return attribute.byteLength;
++
++		}
++
+ 		if ( attribute.array ) {
+ 
+ 			return attribute.array.byteLength;
+diff --git a/src/renderers/common/Renderer.js b/src/renderers/common/Renderer.js
+index c05aa68..4924021 100644
+--- a/src/renderers/common/Renderer.js
++++ b/src/renderers/common/Renderer.js
+@@ -2088,10 +2088,10 @@ class Renderer {
+ 	 * from the GPU to the CPU in context of compute shaders.
+ 	 *
+ 	 * @async
+-	 * @param {BufferAttribute} attribute - The storage buffer attribute to read frm.
+-	 * @param {ReadbackBuffer|ArrayBuffer} target - The storage buffer attribute.
+-	 * @param {number} offset - The storage buffer attribute.
+-	 * @param {number} count - The offset from which to start reading the
++	 * @param {BufferAttribute|ExternalStorageBufferAttribute} attribute - The storage buffer attribute to read from.
++	 * @param {ReadbackBuffer|ArrayBuffer} target - The readback target.
++	 * @param {number} offset - The byte offset. For external attributes, this is relative to the bound range.
++	 * @param {number} count - The number of bytes to read, or `-1` for the remaining bytes.
+ 	 * @return {Promise<ArrayBuffer|ReadbackBuffer>} A promise that resolves with the buffer data when the data are ready.
+ 	 */
+ 	async getArrayBufferAsync( attribute, target = null, offset = 0, count = - 1 ) {
+@@ -2706,6 +2706,7 @@ class Renderer {
+ 			this._pipelines.dispose();
+ 			this._nodes.dispose();
+ 			this._bindings.dispose();
++			this._attributes.dispose();
+ 			this._renderLists.dispose();
+ 			this._renderContexts.dispose();
+ 			this._textures.dispose();
+diff --git a/src/renderers/common/nodes/NodeStorageBuffer.js b/src/renderers/common/nodes/NodeStorageBuffer.js
+index 19b462b..9256df8 100644
+--- a/src/renderers/common/nodes/NodeStorageBuffer.js
++++ b/src/renderers/common/nodes/NodeStorageBuffer.js
+@@ -50,7 +50,7 @@ class NodeStorageBuffer extends StorageBuffer {
+ 	/**
+ 	 * The storage buffer attribute node.
+ 	 *
+-	 * @type {StorageBufferAttribute}
++	 * @type {ExternalStorageBufferAttribute|StorageBufferAttribute}
+ 	 */
+ 	get attribute() {
+ 
+@@ -61,11 +61,13 @@ class NodeStorageBuffer extends StorageBuffer {
+ 	/**
+ 	 * The storage buffer.
+ 	 *
+-	 * @type {Float32Array}
++	 * @type {Float32Array|GPUBuffer}
+ 	 */
+ 	get buffer() {
+ 
+-		return this.nodeUniform.value.array;
++		const value = this.nodeUniform.value;
++
++		return value.isExternalStorageBufferAttribute === true ? value.buffer : value.array;
+ 
+ 	}
+ 
+diff --git a/src/renderers/webgl-fallback/utils/WebGLAttributeUtils.js b/src/renderers/webgl-fallback/utils/WebGLAttributeUtils.js
+index 5e2cf31..487cc1e 100644
+--- a/src/renderers/webgl-fallback/utils/WebGLAttributeUtils.js
++++ b/src/renderers/webgl-fallback/utils/WebGLAttributeUtils.js
+@@ -88,6 +88,12 @@ class WebGLAttributeUtils {
+ 		const backend = this.backend;
+ 		const { gl } = backend;
+ 
++		if ( attribute.isExternalStorageBufferAttribute === true ) {
++
++			throw new Error( 'THREE.WebGLAttributeUtils: ExternalStorageBufferAttribute requires the WebGPU backend.' );
++
++		}
++
+ 		const array = attribute.array;
+ 		const usage = attribute.usage || gl.STATIC_DRAW;
+ 
+diff --git a/src/renderers/webgpu/WebGPUBackend.js b/src/renderers/webgpu/WebGPUBackend.js
+index e6345e4..f6ce811 100644
+--- a/src/renderers/webgpu/WebGPUBackend.js
++++ b/src/renderers/webgpu/WebGPUBackend.js
+@@ -404,10 +404,10 @@ class WebGPUBackend extends Backend {
+ 	 * new allocation.
+ 	 *
+ 	 * @async
+-	 * @param {BufferAttribute} attribute - The storage buffer attribute to read frm.
+-	 * @param {number} count - The offset from which to start reading the
+-	 * @param {number} offset - The storage buffer attribute.
+-	 * @param {ReadbackBuffer|ArrayBuffer} target - The storage buffer attribute.
++	 * @param {BufferAttribute|ExternalStorageBufferAttribute} attribute - The storage buffer attribute to read from.
++	 * @param {ReadbackBuffer|ArrayBuffer} target - The readback target.
++	 * @param {number} offset - The byte offset. For external attributes, this is relative to the bound range.
++	 * @param {number} count - The number of bytes to read, or `-1` for the remaining bytes.
+ 	 * @return {Promise<ArrayBuffer|ReadbackBuffer>} A promise that resolves with the buffer data when the data are ready.
+ 	 */
+ 	async getArrayBufferAsync( attribute, target = null, offset = 0, count = - 1 ) {
+diff --git a/src/renderers/webgpu/utils/WebGPUAttributeUtils.js b/src/renderers/webgpu/utils/WebGPUAttributeUtils.js
+index 0d4ab9c..7b3039e 100644
+--- a/src/renderers/webgpu/utils/WebGPUAttributeUtils.js
++++ b/src/renderers/webgpu/utils/WebGPUAttributeUtils.js
+@@ -72,6 +72,90 @@ class WebGPUAttributeUtils {
+ 		const bufferData = backend.get( bufferAttribute );
+ 
+ 		let buffer = bufferData.buffer;
++		const isExternalStorageBufferAttribute = bufferAttribute.isExternalStorageBufferAttribute === true;
++
++		if ( isExternalStorageBufferAttribute ) {
++
++			const externalBuffer = bufferAttribute.buffer;
++
++			if ( bufferAttribute.device !== backend.device ) {
++
++				throw new Error( 'THREE.WebGPUAttributeUtils: External GPUBuffer\'s declared GPUDevice does not match this renderer\'s GPUDevice.' );
++
++			}
++
++			if ( ( usage & GPUBufferUsage.STORAGE ) === 0 ) {
++
++				throw new Error( 'THREE.WebGPUAttributeUtils: ExternalStorageBufferAttribute is storage-binding only and cannot be used as a vertex attribute.' );
++
++			}
++
++			if ( ( usage & GPUBufferUsage.INDEX ) !== 0 ) {
++
++				throw new Error( 'THREE.WebGPUAttributeUtils: ExternalStorageBufferAttribute cannot be used as an index buffer.' );
++
++			}
++
++			if ( ( usage & GPUBufferUsage.INDIRECT ) !== 0 ) {
++
++				throw new Error( 'THREE.WebGPUAttributeUtils: ExternalStorageBufferAttribute cannot be used as an indirect buffer.' );
++
++			}
++
++			if ( externalBuffer.mapState !== 'unmapped' ) {
++
++				throw new Error( 'THREE.WebGPUAttributeUtils: External GPUBuffer must be unmapped.' );
++
++			}
++
++			if ( ( externalBuffer.usage & GPUBufferUsage.STORAGE ) === 0 ) {
++
++				throw new Error( 'THREE.WebGPUAttributeUtils: External GPUBuffer must have GPUBufferUsage.STORAGE.' );
++
++			}
++
++			const { minStorageBufferOffsetAlignment, maxStorageBufferBindingSize } = backend.device.limits;
++
++			if ( bufferAttribute.byteOffset % minStorageBufferOffsetAlignment !== 0 ) {
++
++				throw new Error( `THREE.WebGPUAttributeUtils: External GPUBuffer byteOffset must be aligned to ${ minStorageBufferOffsetAlignment } bytes.` );
++
++			}
++
++			if ( bufferAttribute.byteLength > maxStorageBufferBindingSize ) {
++
++				throw new Error( `THREE.WebGPUAttributeUtils: External GPUBuffer range exceeds maxStorageBufferBindingSize (${ maxStorageBufferBindingSize } bytes).` );
++
++			}
++
++			const rangeEnd = bufferAttribute.byteOffset + bufferAttribute.byteLength;
++
++			if ( rangeEnd > externalBuffer.size ) {
++
++				throw new Error( `THREE.WebGPUAttributeUtils: External GPUBuffer range ends at byte ${ rangeEnd }, but the buffer is ${ externalBuffer.size } bytes.` );
++
++			}
++
++			if ( buffer !== undefined ) {
++
++				if ( buffer !== externalBuffer || bufferData.bindingOffset !== bufferAttribute.byteOffset || bufferData.bindingSize !== bufferAttribute.byteLength ) {
++
++					throw new Error( 'THREE.WebGPUAttributeUtils: A borrowed GPU buffer attribute cannot be replaced after adoption.' );
++
++				}
++
++				return;
++
++			}
++
++			bufferData.buffer = externalBuffer;
++			bufferData.bindingOffset = bufferAttribute.byteOffset;
++			bufferData.bindingSize = bufferAttribute.byteLength;
++			bufferData.ownsBuffer = false;
++
++			return;
++
++		}
+ 
+ 		if ( buffer === undefined ) {
+ 
+@@ -186,6 +270,8 @@ class WebGPUAttributeUtils {
+ 
+ 		const bufferAttribute = this._getBufferAttribute( attribute );
+ 
++		if ( bufferAttribute.isExternalStorageBufferAttribute === true ) return;
++
+ 		const backend = this.backend;
+ 		const device = backend.device;
+ 
+@@ -290,6 +376,13 @@ class WebGPUAttributeUtils {
+ 		for ( let slot = 0; slot < attributes.length; slot ++ ) {
+ 
+ 			const geometryAttribute = attributes[ slot ];
++
++			if ( geometryAttribute.isExternalStorageBufferAttribute === true ) {
++
++				throw new Error( 'THREE.WebGPUAttributeUtils: ExternalStorageBufferAttribute is storage-binding only and cannot be used as a vertex attribute.' );
++
++			}
++
+ 			const bytesPerElement = geometryAttribute.array.BYTES_PER_ELEMENT;
+ 			const bufferAttribute = this._getBufferAttribute( geometryAttribute );
+ 
+@@ -354,7 +447,7 @@ class WebGPUAttributeUtils {
+ 		const backend = this.backend;
+ 		const data = backend.get( this._getBufferAttribute( attribute ) );
+ 
+-		data.buffer.destroy();
++		if ( data.buffer !== undefined && data.ownsBuffer !== false ) data.buffer.destroy();
+ 
+ 		backend.delete( attribute );
+ 
+@@ -367,10 +460,10 @@ class WebGPUAttributeUtils {
+ 	 * new allocation.
+ 	 *
+ 	 * @async
+-	 * @param {BufferAttribute} attribute - The storage buffer attribute to read frm.
+-	 * @param {number} count - The offset from which to start reading the
+-	 * @param {number} offset - The storage buffer attribute.
+-	 * @param {ReadbackBuffer|ArrayBuffer} target - The storage buffer attribute.
++	 * @param {BufferAttribute|ExternalStorageBufferAttribute} attribute - The storage buffer attribute to read from.
++	 * @param {ReadbackBuffer|ArrayBuffer} target - The readback target.
++	 * @param {number} offset - The byte offset. For external attributes, this is relative to the bound range.
++	 * @param {number} count - The number of bytes to read, or `-1` for the remaining bytes.
+ 	 * @return {Promise<ArrayBuffer|ReadbackBuffer>} A promise that resolves with the buffer data when the data are ready.
+ 	 */
+ 	async getArrayBufferAsync( attribute, target = null, offset = 0, count = - 1 ) {
+@@ -378,9 +471,69 @@ class WebGPUAttributeUtils {
+ 		const backend = this.backend;
+ 		const device = backend.device;
+ 
+-		const data = backend.get( this._getBufferAttribute( attribute ) );
++		const bufferAttribute = this._getBufferAttribute( attribute );
++		const data = backend.get( bufferAttribute );
+ 		const bufferGPU = data.buffer;
+-		const byteLength = count === - 1 ? bufferGPU.size - offset : count;
++		const isExternal = bufferAttribute.isExternalStorageBufferAttribute === true;
++
++		let sourceOffset = offset;
++		let byteLength;
++
++		if ( isExternal ) {
++
++			if ( ( bufferGPU.usage & GPUBufferUsage.COPY_SRC ) === 0 ) {
++
++				throw new Error( 'THREE.WebGPUAttributeUtils: External buffer readback requires GPUBufferUsage.COPY_SRC.' );
++
++			}
++
++			if ( Number.isSafeInteger( offset ) === false || offset < 0 ) {
++
++				throw new RangeError( 'THREE.WebGPUAttributeUtils: External buffer readback offset must be a non-negative safe integer.' );
++
++			}
++
++			if ( count !== - 1 && ( Number.isSafeInteger( count ) === false || count <= 0 ) ) {
++
++				throw new RangeError( 'THREE.WebGPUAttributeUtils: External buffer readback count must be a positive safe integer or -1.' );
++
++			}
++
++			const bindingOffset = data.bindingOffset;
++			const bindingSize = data.bindingSize;
++			byteLength = count === - 1 ? bindingSize - offset : count;
++
++			if ( offset > bindingSize || byteLength <= 0 || offset + byteLength > bindingSize ) {
++
++				throw new RangeError( 'THREE.WebGPUAttributeUtils: Readback range is outside the external attribute\'s bound range.' );
++
++			}
++
++			sourceOffset = bindingOffset + offset;
++
++			if ( sourceOffset % 4 !== 0 || byteLength % 4 !== 0 ) {
++
++				throw new RangeError( 'THREE.WebGPUAttributeUtils: External buffer readback offset and count must be aligned to 4 bytes.' );
++
++			}
++
++			if ( target !== null && target.isReadbackBuffer && target.maxByteLength < byteLength ) {
++
++				throw new RangeError( 'THREE.WebGPUAttributeUtils: ReadbackBuffer is too small for the external attribute readback range.' );
++
++			}
++
++			if ( target !== null && target.isReadbackBuffer !== true && target.byteLength < byteLength ) {
++
++				throw new RangeError( 'THREE.WebGPUAttributeUtils: ArrayBuffer is too small for the external attribute readback range.' );
++
++			}
++
++		} else {
++
++			byteLength = count === - 1 ? bufferGPU.size - offset : count;
++
++		}
+ 
+ 		let readBufferGPU;
+ 		if ( target !== null && target.isReadbackBuffer ) {
+@@ -462,7 +615,7 @@ class WebGPUAttributeUtils {
+ 
+ 		cmdEncoder.copyBufferToBuffer(
+ 			bufferGPU,
+-			offset,
++			sourceOffset,
+ 			readBufferGPU,
+ 			0,
+ 			byteLength,
+diff --git a/src/renderers/webgpu/utils/WebGPUBindingUtils.js b/src/renderers/webgpu/utils/WebGPUBindingUtils.js
+index 1d06928..77ee0eb 100644
+--- a/src/renderers/webgpu/utils/WebGPUBindingUtils.js
++++ b/src/renderers/webgpu/utils/WebGPUBindingUtils.js
+@@ -319,9 +319,17 @@ class WebGPUBindingUtils {
+ 
+ 			} else if ( binding.isStorageBuffer ) {
+ 
+-				const buffer = backend.get( binding.attribute ).buffer;
++				const bufferData = backend.get( binding.attribute );
++				const resource = { buffer: bufferData.buffer };
+ 
+-				_bindGroupDescriptor.entries.push( { binding: bindingPoint, resource: { buffer: buffer } } );
++				if ( bufferData.bindingOffset !== undefined ) {
++
++					resource.offset = bufferData.bindingOffset;
++					resource.size = bufferData.bindingSize;
++
++				}
++
++				_bindGroupDescriptor.entries.push( { binding: bindingPoint, resource } );
+ 
+ 			} else if ( binding.isSampledTexture ) {
+ 
+diff --git a/test/unit/three.source.unit.js b/test/unit/three.source.unit.js
+index e60c5f9..7695c09 100644
+--- a/test/unit/three.source.unit.js
++++ b/test/unit/three.source.unit.js
+@@ -238,6 +238,9 @@ import './src/renderers/shaders/UniformsUtils.tests.js';
+ import './src/renderers/webgl/WebGLExtensions.tests.js';
+ import './src/renderers/webgl/WebGLRenderLists.tests.js';
+ 
++//src/renderers/webgpu
++import './src/renderers/webgpu/ExternalStorageBufferAttribute.tests.js';
++
+ 
+ //src/scenes
+ import './src/scenes/Fog.tests.js';
+diff --git a/src/renderers/common/ExternalStorageBufferAttribute.js b/src/renderers/common/ExternalStorageBufferAttribute.js
+new file mode 100644
+--- /dev/null
++++ b/src/renderers/common/ExternalStorageBufferAttribute.js
+@@ -0,0 +1,304 @@
++import { EventDispatcher } from '../../core/EventDispatcher.js';
++
++let _id = 0;
++
++const _typeItemSizes = new Map( [
++	[ 'float', 1 ],
++	[ 'vec2', 2 ],
++	[ 'vec4', 4 ],
++	[ 'int', 1 ],
++	[ 'ivec2', 2 ],
++	[ 'ivec4', 4 ],
++	[ 'uint', 1 ],
++	[ 'uvec2', 2 ],
++	[ 'uvec4', 4 ]
++] );
++
++/**
++ * A storage buffer attribute backed by an externally-created {@link GPUBuffer}.
++ *
++ * This class represents a borrowed GPU resource. `WebGPURenderer` does not
++ * create, upload, or destroy its buffer. The application must keep the buffer
++ * and its originating device alive while the attribute is in use.
++ *
++ * The supported element types are 32-bit float, signed integer, and unsigned
++ * integer scalars, vec2s, and vec4s. A packed `vec3` array has a 12-byte CPU
++ * stride but WGSL storage arrays require a 16-byte stride, so `vec3` types are
++ * deliberately rejected. Packed three-component data can instead be exposed
++ * as a scalar attribute with `count` set to three times the logical item count.
++ *
++ * The attribute is storage-binding only. It cannot be used as a vertex, index,
++ * indirect, structured, atomic, or PBO buffer. The declared device must be the
++ * same device used by the renderer. The buffer must be unmapped and include
++ * `GPUBufferUsage.STORAGE`. `byteOffset` must obey the device's
++ * `minStorageBufferOffsetAlignment`, and the exact logical range must fit the
++ * buffer and `maxStorageBufferBindingSize`.
++ *
++ * ```js
++ * const attribute = new ExternalStorageBufferAttribute( buffer, {
++ * 	device,
++ * 	type: 'vec2',
++ * 	count: 3
++ * } );
++ * const positions = storage( attribute ).toReadOnly();
++ * ```
++ *
++ * Dispose every material or compute node that consumes this attribute before
++ * disposing the attribute. `dispose()` releases Three.js bookkeeping but never
++ * destroys the external buffer. Before the owner destroys or recycles the
++ * buffer, wait for submitted GPU work with `device.queue.onSubmittedWorkDone()`.
++ * A disposed attribute can be adopted again by a fresh consumer while its
++ * external buffer remains valid.
++ *
++ * Note: This type of buffer attribute can only be used with `WebGPURenderer`'s
++ * WebGPU backend.
++ *
++ * @augments EventDispatcher
++ */
++class ExternalStorageBufferAttribute extends EventDispatcher {
++
++	/**
++	 * Constructs a new external storage buffer attribute.
++	 *
++	 * @param {GPUBuffer} buffer - The externally-owned GPU buffer.
++	 * @param {Object} options - The typed range and originating device.
++	 * @param {GPUDevice} options.device - The GPU device that created the buffer.
++	 * @param {('float'|'vec2'|'vec4'|'int'|'ivec2'|'ivec4'|'uint'|'uvec2'|'uvec4')} options.type - The TSL element type.
++	 * @param {number} options.count - The element count.
++	 * @param {number} [options.byteOffset=0] - The byte offset of the first element.
++	 */
++	constructor( buffer, options ) {
++
++		super();
++
++		if ( buffer === null || typeof buffer !== 'object' ) {
++
++			throw new TypeError( 'THREE.ExternalStorageBufferAttribute: buffer must be a GPUBuffer.' );
++
++		}
++
++		if ( options === null || typeof options !== 'object' || Array.isArray( options ) ) {
++
++			throw new TypeError( 'THREE.ExternalStorageBufferAttribute: options must be an object.' );
++
++		}
++
++		const { device, type, count, byteOffset = 0 } = options;
++
++		if ( device === null || typeof device !== 'object' ) {
++
++			throw new TypeError( 'THREE.ExternalStorageBufferAttribute: options.device must be the GPUDevice that created the buffer.' );
++
++		}
++
++		const itemSize = _typeItemSizes.get( type );
++
++		if ( itemSize === undefined ) {
++
++			throw new TypeError( 'THREE.ExternalStorageBufferAttribute: options.type must be float, vec2, vec4, int, ivec2, ivec4, uint, uvec2, or uvec4.' );
++
++		}
++
++		if ( Number.isSafeInteger( count ) === false || count <= 0 ) {
++
++			throw new TypeError( 'THREE.ExternalStorageBufferAttribute: options.count must be a positive safe integer.' );
++
++		}
++
++		if ( Number.isSafeInteger( byteOffset ) === false || byteOffset < 0 ) {
++
++			throw new TypeError( 'THREE.ExternalStorageBufferAttribute: options.byteOffset must be a non-negative safe integer.' );
++
++		}
++
++		const byteLength = count * itemSize * Float32Array.BYTES_PER_ELEMENT;
++
++		if ( Number.isSafeInteger( byteLength ) === false || Number.isSafeInteger( byteOffset + byteLength ) === false ) {
++
++			throw new RangeError( 'THREE.ExternalStorageBufferAttribute: The requested buffer range exceeds JavaScript\'s safe integer range.' );
++
++		}
++
++		/**
++		 * This flag can be used for type testing.
++		 *
++		 * @type {boolean}
++		 * @readonly
++		 * @default true
++		 */
++		this.isExternalStorageBufferAttribute = true;
++
++		/**
++		 * Marks this object as a storage buffer attribute.
++		 *
++		 * @type {boolean}
++		 * @readonly
++		 * @default true
++		 */
++		this.isStorageBufferAttribute = true;
++
++		/**
++		 * The ID of the buffer attribute.
++		 *
++		 * @type {string}
++		 * @readonly
++		 */
++		Object.defineProperty( this, 'id', { value: `external-${ _id ++ }` } );
++
++		/**
++		 * The name of the buffer attribute.
++		 *
++		 * @type {string}
++		 */
++		this.name = '';
++
++		/**
++		 * The externally-owned GPU buffer.
++		 *
++		 * @type {GPUBuffer}
++		 * @readonly
++		 */
++		this.buffer = buffer;
++
++		/**
++		 * The GPU device that created {@link ExternalStorageBufferAttribute#buffer}.
++		 *
++		 * @type {GPUDevice}
++		 * @readonly
++		 */
++		this.device = device;
++
++		/**
++		 * The TSL element type exposed by the storage binding.
++		 *
++		 * @type {string}
++		 * @readonly
++		 */
++		this.type = type;
++
++		/**
++		 * The number of 32-bit components per element.
++		 *
++		 * @type {number}
++		 * @readonly
++		 */
++		this.itemSize = itemSize;
++
++		/**
++		 * The number of elements represented by this attribute.
++		 *
++		 * @type {number}
++		 * @readonly
++		 */
++		this.count = count;
++
++		/**
++		 * The byte offset of the first element in the buffer.
++		 *
++		 * @type {number}
++		 * @readonly
++		 */
++		this.byteOffset = byteOffset;
++
++		/**
++		 * The exact logical length of the bound range in bytes.
++		 *
++		 * @type {number}
++		 * @readonly
++		 */
++		this.byteLength = byteLength;
++
++		/**
++		 * The version of the buffer attribute.
++		 *
++		 * @type {number}
++		 * @readonly
++		 */
++		this.version = 0;
++
++		Object.defineProperty( this, '_bindingTokens', { value: new Set() } );
++
++		Object.defineProperties( this, {
++			buffer: { writable: false, configurable: false },
++			device: { writable: false, configurable: false },
++			type: { writable: false, configurable: false },
++			itemSize: { writable: false, configurable: false },
++			count: { writable: false, configurable: false },
++			byteOffset: { writable: false, configurable: false },
++			byteLength: { writable: false, configurable: false },
++			version: { writable: false, configurable: false }
++		} );
++
++	}
++
++	/**
++	 * Registers an internal live bind-group reference.
++	 *
++	 * @private
++	 * @param {Object} token - A renderer-local binding token.
++	 */
++	_retainBinding( token ) {
++
++		this._bindingTokens.add( token );
++
++	}
++
++	/**
++	 * Releases an internal live bind-group reference.
++	 *
++	 * @private
++	 * @param {Object} token - A renderer-local binding token.
++	 */
++	_releaseBinding( token ) {
++
++		this._bindingTokens.delete( token );
++
++	}
++
++	/**
++	 * Releases Three.js resources associated with this attribute without
++	 * destroying the externally-owned GPU buffer.
++	 *
++	 * All materials and compute nodes that consume the attribute must be
++	 * disposed first.
++	 *
++	 * @fires ExternalStorageBufferAttribute#dispose
++	 */
++	dispose() {
++
++		if ( this._bindingTokens.size > 0 ) {
++
++			throw new Error( 'THREE.ExternalStorageBufferAttribute: Dispose every material and compute node using this attribute before disposing it.' );
++
++		}
++
++		/**
++		 * Fires when the attribute has been disposed of.
++		 *
++		 * @event ExternalStorageBufferAttribute#dispose
++		 * @type {Object}
++		 */
++		this.dispatchEvent( { type: 'dispose' } );
++
++	}
++
++	/**
++	 * External storage attributes have no CPU data to upload.
++	 *
++	 * @type {boolean}
++	 * @default false
++	 * @param {boolean} value - The update flag.
++	 */
++	set needsUpdate( value ) {
++
++		if ( value === true ) {
++
++			throw new Error( 'THREE.ExternalStorageBufferAttribute: External GPU buffers cannot be updated from the CPU.' );
++
++		}
++
++	}
++
++}
++
++export default ExternalStorageBufferAttribute;
+diff --git a/test/unit/src/renderers/webgpu/ExternalStorageBufferAttribute.tests.js b/test/unit/src/renderers/webgpu/ExternalStorageBufferAttribute.tests.js
+new file mode 100644
+--- /dev/null
++++ b/test/unit/src/renderers/webgpu/ExternalStorageBufferAttribute.tests.js
+@@ -0,0 +1,595 @@
++import ExternalStorageBufferAttribute from '../../../../../src/renderers/common/ExternalStorageBufferAttribute.js';
++import { BufferAttribute } from '../../../../../src/core/BufferAttribute.js';
++import Attributes from '../../../../../src/renderers/common/Attributes.js';
++import Bindings from '../../../../../src/renderers/common/Bindings.js';
++import WebGPUAttributeUtils from '../../../../../src/renderers/webgpu/utils/WebGPUAttributeUtils.js';
++import WebGPUBindingUtils from '../../../../../src/renderers/webgpu/utils/WebGPUBindingUtils.js';
++import WebGLAttributeUtils from '../../../../../src/renderers/webgl-fallback/utils/WebGLAttributeUtils.js';
++import BufferAttributeNode from '../../../../../src/nodes/accessors/BufferAttributeNode.js';
++import StorageBufferNode, { storage } from '../../../../../src/nodes/accessors/StorageBufferNode.js';
++import { ExternalStorageBufferAttribute as WebGPUExport } from '../../../../../src/Three.WebGPU.js';
++import { ExternalStorageBufferAttribute as WebGPUNodesExport } from '../../../../../src/Three.WebGPU.Nodes.js';
++
++const COPY_SRC = 0x0004;
++const COPY_DST = 0x0008;
++const INDEX = 0x0010;
++const VERTEX = 0x0020;
++const STORAGE = 0x0080;
++const INDIRECT = 0x0100;
++const STORAGE_ATTRIBUTE_USAGE = STORAGE | VERTEX | COPY_SRC | COPY_DST;
++
++class MockBackend {
++
++	constructor( device ) {
++
++		this.device = device;
++		this.data = new WeakMap();
++		this.attributeUtils = null;
++		this.createBindingsCount = 0;
++		this.deleteBindGroupDataCount = 0;
++		this.updateBindingsCalls = [];
++
++	}
++
++	get( object ) {
++
++		let data = this.data.get( object );
++
++		if ( data === undefined ) {
++
++			data = {};
++			this.data.set( object, data );
++
++		}
++
++		return data;
++
++	}
++
++	has( object ) {
++
++		return this.data.has( object );
++
++	}
++
++	delete( object ) {
++
++		this.data.delete( object );
++
++	}
++
++	createStorageAttribute( attribute ) {
++
++		if ( attribute.isExternalStorageBufferAttribute === true ) {
++
++			this.attributeUtils.createAttribute( attribute, STORAGE_ATTRIBUTE_USAGE );
++
++		} else {
++
++			this.get( attribute ).buffer = {};
++
++		}
++
++	}
++
++	destroyAttribute( attribute ) {
++
++		if ( attribute.isExternalStorageBufferAttribute === true ) {
++
++			this.attributeUtils.destroyAttribute( attribute );
++
++		} else {
++
++			this.delete( attribute );
++
++		}
++
++	}
++
++	createBindings() {
++
++		this.createBindingsCount ++;
++
++	}
++
++	updateBindings( bindGroup, bindings, cacheKey, version ) {
++
++		this.updateBindingsCalls.push( { bindGroup, bindings, cacheKey, version } );
++
++	}
++
++	deleteBindGroupData() {
++
++		this.deleteBindGroupDataCount ++;
++
++	}
++
++}
++
++function createDevice( limits = {} ) {
++
++	const calls = {
++		createBuffer: 0,
++		writeBuffer: 0,
++		submit: 0,
++		copy: null,
++		bindGroupResource: null
++	};
++
++	const device = {
++		limits: {
++			minStorageBufferOffsetAlignment: 256,
++			maxStorageBufferBindingSize: 1024,
++			...limits
++		},
++		createBuffer( descriptor ) {
++
++			calls.createBuffer ++;
++			const size = descriptor.size;
++
++			return {
++				async mapAsync() {},
++				getMappedRange() {
++
++					return new ArrayBuffer( size );
++
++				},
++				destroy() {}
++			};
++
++		},
++		createCommandEncoder() {
++
++			return {
++				copyBufferToBuffer( ...args ) {
++
++					calls.copy = args;
++
++				},
++				finish() {
++
++					return {};
++
++				}
++			};
++
++		},
++		createBindGroup( descriptor ) {
++
++			const { buffer, offset, size } = descriptor.entries[ 0 ].resource;
++			calls.bindGroupResource = { buffer, offset, size };
++			return {};
++
++		},
++		queue: {
++			writeBuffer() {
++
++				calls.writeBuffer ++;
++
++			},
++			submit() {
++
++				calls.submit ++;
++
++			}
++		}
++	};
++
++	return { calls, device };
++
++}
++
++function createExternalBuffer( overrides = {} ) {
++
++	return {
++		size: 512,
++		usage: STORAGE | COPY_SRC,
++		mapState: 'unmapped',
++		destroyCount: 0,
++		destroy() {
++
++			this.destroyCount ++;
++
++		},
++		...overrides
++	};
++
++}
++
++function createHarness( limits ) {
++
++	const { calls, device } = createDevice( limits );
++	const backend = new MockBackend( device );
++	const utils = new WebGPUAttributeUtils( backend );
++	backend.attributeUtils = utils;
++
++	return { backend, calls, device, utils };
++
++}
++
++function createManagerHarness( limits ) {
++
++	const harness = createHarness( limits );
++	const info = {
++		createdStorageAttributes: 0,
++		destroyedStorageAttributes: 0,
++		createStorageAttribute() {
++
++			this.createdStorageAttributes ++;
++
++		},
++		destroyAttribute() {
++
++			this.destroyedStorageAttributes ++;
++
++		}
++	};
++	const attributes = new Attributes( harness.backend, info );
++	const nodes = {
++		updateGroup() {
++
++			return true;
++
++		}
++	};
++	const pipelines = {};
++	const bindings = new Bindings( harness.backend, nodes, {}, attributes, pipelines, info );
++
++	return { ...harness, attributes, bindings, info, nodes, pipelines };
++
++}
++
++export default QUnit.module( 'Renderers', () => {
++
++	QUnit.module( 'ExternalStorageBufferAttribute', () => {
++
++		QUnit.test( 'constructor defines an immutable typed range without a CPU array', ( assert ) => {
++
++			const { device } = createDevice();
++			const buffer = createExternalBuffer();
++			const attribute = new ExternalStorageBufferAttribute( buffer, { device, type: 'vec2', count: 3, byteOffset: 256 } );
++
++			assert.strictEqual( attribute.isExternalStorageBufferAttribute, true, 'is an external storage buffer attribute' );
++			assert.strictEqual( attribute.isStorageBufferAttribute, true, 'is a storage buffer attribute' );
++			assert.strictEqual( attribute.isBufferAttribute, undefined, 'is not a CPU BufferAttribute' );
++			assert.strictEqual( attribute.array, undefined, 'does not expose a fake CPU array' );
++			assert.strictEqual( attribute.type, 'vec2', 'retains the declared element type' );
++			assert.strictEqual( attribute.itemSize, 2, 'derives the component count' );
++			assert.strictEqual( attribute.count, 3, 'retains the element count' );
++			assert.strictEqual( attribute.byteOffset, 256, 'retains the byte offset' );
++			assert.strictEqual( attribute.byteLength, 24, 'computes the exact logical byte length' );
++			assert.strictEqual( attribute.id.startsWith( 'external-' ), true, 'uses a namespace distinct from numeric BufferAttribute IDs' );
++			assert.notStrictEqual( String( attribute.id ), String( new BufferAttribute( new Float32Array( 1 ), 1 ).id ), 'cannot collide in string cache keys' );
++			assert.notStrictEqual( attribute.id, new ExternalStorageBufferAttribute( buffer, { device, type: 'float', count: 1 } ).id, 'assigns a unique ID' );
++			assert.throws( () => {
++
++				attribute.buffer = createExternalBuffer();
++
++			}, 'buffer identity is immutable' );
++			assert.throws( () => {
++
++				attribute.device = {};
++
++			}, 'originating device is immutable' );
++			assert.throws( () => {
++
++				attribute.version = 1;
++
++			}, 'version is immutable' );
++			assert.throws( () => {
++
++				attribute.needsUpdate = true;
++
++			}, /cannot be updated from the CPU/ );
++
++			assert.throws( () => new ExternalStorageBufferAttribute( null, { device, type: 'float', count: 1 } ), /buffer must be a GPUBuffer/ );
++			assert.throws( () => new ExternalStorageBufferAttribute( buffer ), /options must be an object/ );
++			assert.throws( () => new ExternalStorageBufferAttribute( buffer, { device: null, type: 'float', count: 1 } ), /options\.device/ );
++			assert.throws( () => new ExternalStorageBufferAttribute( buffer, { device, type: 'vec3', count: 1 } ), /options\.type must be/ );
++			assert.throws( () => new ExternalStorageBufferAttribute( buffer, { device, type: 'float', count: 0 } ), /options\.count must be a positive safe integer/ );
++			assert.throws( () => new ExternalStorageBufferAttribute( buffer, { device, type: 'float', count: 1, byteOffset: - 1 } ), /options\.byteOffset must be a non-negative safe integer/ );
++
++		} );
++
++		QUnit.test( 'supports and infers the nine scalar, vec2, and vec4 element types', ( assert ) => {
++
++			const { device } = createDevice();
++			const cases = [
++				[ 'float', 1 ],
++				[ 'vec2', 2 ],
++				[ 'vec4', 4 ],
++				[ 'int', 1 ],
++				[ 'ivec2', 2 ],
++				[ 'ivec4', 4 ],
++				[ 'uint', 1 ],
++				[ 'uvec2', 2 ],
++				[ 'uvec4', 4 ]
++			];
++
++			for ( const [ type, itemSize ] of cases ) {
++
++				const attribute = new ExternalStorageBufferAttribute( createExternalBuffer(), { device, type, count: 3 } );
++				const node = storage( attribute );
++
++				assert.strictEqual( attribute.itemSize, itemSize, `${ type } has the expected item size` );
++				assert.strictEqual( attribute.byteLength, 3 * itemSize * 4, `${ type } has the expected byte length` );
++				assert.strictEqual( node.bufferType, type, `${ type } is inferred by storage(attribute)` );
++				assert.strictEqual( node.bufferCount, 3, `${ type } retains the declared count` );
++				assert.strictEqual( new StorageBufferNode( attribute, type, 3 ).bufferType, type, `${ type } accepts matching explicit metadata` );
++
++			}
++
++		} );
++
++		QUnit.test( 'exports from both WebGPU entry points', ( assert ) => {
++
++			assert.strictEqual( WebGPUExport, ExternalStorageBufferAttribute, 'exports from Three.WebGPU.js' );
++			assert.strictEqual( WebGPUNodesExport, ExternalStorageBufferAttribute, 'exports from Three.WebGPU.Nodes.js' );
++
++		} );
++
++		QUnit.test( 'adopts the exact buffer range without allocation, upload, or destruction', ( assert ) => {
++
++			const { backend, calls, device, utils } = createHarness();
++			const buffer = createExternalBuffer();
++			const attribute = new ExternalStorageBufferAttribute( buffer, { device, type: 'vec2', count: 3, byteOffset: 256 } );
++
++			utils.createAttribute( attribute, STORAGE_ATTRIBUTE_USAGE );
++
++			const data = backend.get( attribute );
++
++			assert.strictEqual( data.buffer, buffer, 'adopts the exact GPUBuffer object' );
++			assert.strictEqual( data.bindingOffset, 256, 'stores the binding offset' );
++			assert.strictEqual( data.bindingSize, 24, 'stores the exact binding size' );
++			assert.strictEqual( data.ownsBuffer, false, 'records borrowed ownership' );
++			assert.strictEqual( calls.createBuffer, 0, 'does not allocate a replacement GPUBuffer' );
++			assert.strictEqual( calls.writeBuffer, 0, 'does not upload CPU data' );
++
++			utils.updateAttribute( attribute );
++
++			assert.strictEqual( calls.writeBuffer, 0, 'does not update the borrowed buffer' );
++
++			utils.destroyAttribute( attribute );
++
++			assert.strictEqual( buffer.destroyCount, 0, 'does not destroy the borrowed GPUBuffer' );
++			assert.strictEqual( backend.has( attribute ), false, 'removes backend lifecycle data' );
++
++		} );
++
++		QUnit.test( 'binds the exact borrowed range', ( assert ) => {
++
++			const { backend, calls, device, utils } = createHarness();
++			const buffer = createExternalBuffer();
++			const attribute = new ExternalStorageBufferAttribute( buffer, { device, type: 'vec2', count: 3, byteOffset: 256 } );
++
++			utils.createAttribute( attribute, STORAGE_ATTRIBUTE_USAGE );
++
++			const bindingUtils = new WebGPUBindingUtils( backend );
++			const bindGroup = {
++				name: 'borrowed',
++				bindings: [ { isStorageBuffer: true, attribute } ]
++			};
++
++			bindingUtils.createBindGroup( bindGroup, {} );
++
++			assert.strictEqual( calls.bindGroupResource.buffer, buffer, 'binds the exact GPUBuffer object' );
++			assert.strictEqual( calls.bindGroupResource.offset, 256, 'binds the requested byte offset' );
++			assert.strictEqual( calls.bindGroupResource.size, 24, 'binds only the logical byte range' );
++
++		} );
++
++		QUnit.test( 'does not silently reuse a replaced or incompatible cached buffer', ( assert ) => {
++
++			const { backend, device, utils } = createHarness();
++			const attribute = new ExternalStorageBufferAttribute( createExternalBuffer(), { device, type: 'vec2', count: 3 } );
++
++			utils.createAttribute( attribute, STORAGE_ATTRIBUTE_USAGE );
++
++			assert.throws( () => utils.createAttribute( attribute, STORAGE | INDEX ), /cannot be used as an index buffer/ );
++
++			backend.get( attribute ).buffer = createExternalBuffer();
++
++			assert.throws( () => utils.createAttribute( attribute, STORAGE_ATTRIBUTE_USAGE ), /cannot be replaced after adoption/ );
++
++		} );
++
++		QUnit.test( 'rejects a different renderer device and failed-adoption disposal is safe', ( assert ) => {
++
++			const { device: originDevice } = createDevice();
++			const { backend, device: rendererDevice, utils } = createHarness();
++			const buffer = createExternalBuffer();
++			const attribute = new ExternalStorageBufferAttribute( buffer, { device: originDevice, type: 'vec2', count: 3 } );
++
++			assert.notStrictEqual( originDevice, rendererDevice, 'test uses distinct devices' );
++			assert.throws( () => utils.createAttribute( attribute, STORAGE_ATTRIBUTE_USAGE ), /declared GPUDevice does not match/ );
++			assert.strictEqual( backend.get( attribute ).buffer, undefined, 'does not cache a failed adoption' );
++			assert.strictEqual( utils.destroyAttribute( attribute ), undefined, 'failed adoption can be disposed' );
++			assert.strictEqual( buffer.destroyCount, 0, 'failed adoption never destroys the borrowed buffer' );
++
++		} );
++
++		QUnit.test( 'validates mapping, usage, alignment, range, and device limits', ( assert ) => {
++
++			const cases = [
++				[ createHarness(), createExternalBuffer( { mapState: 'mapped' } ), 0, /must be unmapped/ ],
++				[ createHarness(), createExternalBuffer( { usage: COPY_SRC } ), 0, /GPUBufferUsage\.STORAGE/ ],
++				[ createHarness(), createExternalBuffer(), 4, /aligned to 256 bytes/ ],
++				[ createHarness(), createExternalBuffer( { size: 16 } ), 0, /range ends at byte 24/ ],
++				[ createHarness( { maxStorageBufferBindingSize: 16 } ), createExternalBuffer(), 0, /exceeds maxStorageBufferBindingSize/ ]
++			];
++
++			for ( const [ harness, buffer, byteOffset, message ] of cases ) {
++
++				const attribute = new ExternalStorageBufferAttribute( buffer, { device: harness.device, type: 'vec2', count: 3, byteOffset } );
++
++				assert.throws( () => harness.utils.createAttribute( attribute, STORAGE_ATTRIBUTE_USAGE ), message );
++
++			}
++
++		} );
++
++		QUnit.test( 'rejects vertex, index, indirect, and mismatched metadata paths', ( assert ) => {
++
++			const { device, utils } = createHarness();
++			const attribute = new ExternalStorageBufferAttribute( createExternalBuffer(), { device, type: 'vec2', count: 3 } );
++
++			assert.throws( () => utils.createAttribute( attribute, VERTEX | COPY_SRC | COPY_DST ), /storage-binding only/ );
++			assert.throws( () => utils.createAttribute( attribute, STORAGE | INDEX ), /cannot be used as an index buffer/ );
++			assert.throws( () => utils.createAttribute( attribute, STORAGE | INDIRECT ), /cannot be used as an indirect buffer/ );
++			assert.throws( () => utils.createShaderVertexBuffers( { getAttributes: () => [ attribute ] } ), /storage-binding only/ );
++			assert.throws( () => new BufferAttributeNode( attribute, 'vec2' ), /storage-binding only/ );
++			assert.throws( () => new WebGLAttributeUtils( { gl: {} } ).createAttribute( attribute ), /requires the WebGPU backend/ );
++			assert.throws( () => new StorageBufferNode( attribute, 'vec4', 3 ), /explicit type must match/ );
++			assert.throws( () => new StorageBufferNode( attribute, 'vec2', 4 ), /explicit count must match/ );
++			assert.throws( () => new StorageBufferNode( attribute, { isStructTypeNode: true }, 3 ), /explicit type must match/ );
++
++			const node = storage( attribute );
++			assert.strictEqual( node.bufferType, 'vec2', 'storage(attribute) infers the declared type' );
++			assert.strictEqual( node.bufferCount, 3, 'storage(attribute) uses the declared item count' );
++			assert.throws( () => node.setAtomic( true ), /does not support atomic access/ );
++			assert.throws( () => node.setPBO( true ), /does not support PBO access/ );
++
++		} );
++
++		QUnit.test( 'dispose refuses live consumers and never destroys the borrowed GPUBuffer', ( assert ) => {
++
++			const { device } = createDevice();
++			const buffer = createExternalBuffer();
++			const attribute = new ExternalStorageBufferAttribute( buffer, { device, type: 'uint', count: 4 } );
++			const bindingToken = {};
++			let disposeEvents = 0;
++
++			attribute.addEventListener( 'dispose', () => disposeEvents ++ );
++			attribute._retainBinding( bindingToken );
++
++			assert.throws( () => attribute.dispose(), /Dispose every material and compute node/ );
++			assert.strictEqual( disposeEvents, 0, 'failed disposal does not dispatch a dispose event' );
++			assert.strictEqual( buffer.destroyCount, 0, 'failed disposal does not destroy the borrowed buffer' );
++
++			attribute._releaseBinding( bindingToken );
++			attribute.dispose();
++
++			assert.strictEqual( disposeEvents, 1, 'disposal succeeds once the consumer releases its binding' );
++			assert.strictEqual( buffer.destroyCount, 0, 'successful disposal leaves ownership with the caller' );
++
++			attribute.dispose();
++
++			assert.strictEqual( disposeEvents, 2, 'repeated disposal remains safe and emits the conventional event again' );
++			assert.strictEqual( buffer.destroyCount, 0, 'repeated disposal never destroys the borrowed buffer' );
++
++		} );
++
++		QUnit.test( 'Bindings retains one token per native bind group until its final user is deleted', ( assert ) => {
++
++			const { attributes, backend, bindings, device, info } = createManagerHarness();
++			const buffer = createExternalBuffer();
++			const attribute = new ExternalStorageBufferAttribute( buffer, { device, type: 'vec4', count: 2 } );
++			const bindGroup = {
++				bindings: [ { isStorageBuffer: true, attribute } ]
++			};
++
++			bindings._createBindings( [ bindGroup ] );
++
++			assert.strictEqual( attribute._bindingTokens.size, 1, 'first native bind group retains one token' );
++			assert.strictEqual( bindings.get( bindGroup ).usedTimes, 1, 'tracks the first bind-group user' );
++			assert.strictEqual( backend.createBindingsCount, 1, 'creates the native bind group once' );
++			assert.strictEqual( info.createdStorageAttributes, 1, 'registers the external attribute once' );
++
++			bindings._createBindings( [ bindGroup ] );
++
++			assert.strictEqual( attribute._bindingTokens.size, 1, 'shared users do not duplicate the native-group token' );
++			assert.strictEqual( bindings.get( bindGroup ).usedTimes, 2, 'tracks both bind-group users' );
++			assert.strictEqual( backend.createBindingsCount, 1, 'reuses the same native bind group' );
++			assert.throws( () => attribute.dispose(), /Dispose every material and compute node/, 'public disposal refuses a live shared group' );
++
++			bindings._destroyBindings( [ bindGroup ] );
++
++			assert.strictEqual( attribute._bindingTokens.size, 1, 'the token remains for the surviving bind-group user' );
++			assert.strictEqual( bindings.get( bindGroup ).usedTimes, 1, 'decrements the shared use count' );
++
++			bindings._destroyBindings( [ bindGroup ] );
++
++			assert.strictEqual( attribute._bindingTokens.size, 0, 'the final delete releases the native-group token' );
++			assert.strictEqual( backend.deleteBindGroupDataCount, 1, 'deletes native bind-group data after the final user' );
++
++			attribute.dispose();
++
++			assert.strictEqual( attributes.has( attribute ), false, 'the dispose listener removes Attributes bookkeeping' );
++			assert.strictEqual( backend.has( attribute ), false, 'the dispose listener removes backend bookkeeping' );
++			assert.strictEqual( info.destroyedStorageAttributes, 1, 'updates attribute accounting exactly once' );
++			assert.strictEqual( buffer.destroyCount, 0, 'Attributes disposal never destroys the borrowed GPUBuffer' );
++
++		} );
++
++		QUnit.test( 'Bindings.dispose releases tokens left by undisposed consumers', ( assert ) => {
++
++			const { attributes, bindings, device } = createManagerHarness();
++			const buffer = createExternalBuffer();
++			const attribute = new ExternalStorageBufferAttribute( buffer, { device, type: 'int', count: 4 } );
++			const bindGroup = {
++				bindings: [ { isStorageBuffer: true, attribute } ]
++			};
++
++			bindings._createBindings( [ bindGroup ] );
++			assert.strictEqual( attribute._bindingTokens.size, 1, 'an active consumer retains a token' );
++
++			bindings.dispose();
++
++			assert.strictEqual( attribute._bindingTokens.size, 0, 'renderer binding disposal releases the abandoned token' );
++			assert.strictEqual( bindings._externalStorageBufferBindingTokens.size, 0, 'clears the renderer token registry' );
++
++			attribute.dispose();
++
++			assert.strictEqual( attributes.has( attribute ), false, 'the attribute can be disposed after renderer teardown' );
++			assert.strictEqual( buffer.destroyCount, 0, 'renderer teardown and attribute disposal preserve caller ownership' );
++
++		} );
++
++		QUnit.test( 'readback is range-relative and requires COPY_SRC', async ( assert ) => {
++
++			const { calls, device, utils } = createHarness();
++			const buffer = createExternalBuffer();
++			const attribute = new ExternalStorageBufferAttribute( buffer, { device, type: 'vec2', count: 3, byteOffset: 256 } );
++
++			utils.createAttribute( attribute, STORAGE_ATTRIBUTE_USAGE );
++
++			const wholeResult = await utils.getArrayBufferAsync( attribute );
++
++			assert.strictEqual( wholeResult.byteLength, 24, 'default readback excludes physical buffer padding' );
++			assert.strictEqual( calls.copy[ 1 ], 256, 'default readback starts at the bound range' );
++			assert.strictEqual( calls.copy[ 4 ], 24, 'default readback uses the logical range size' );
++
++			const result = await utils.getArrayBufferAsync( attribute, null, 4, 8 );
++
++			assert.strictEqual( result.byteLength, 8, 'returns the requested number of bytes' );
++			assert.strictEqual( calls.copy[ 0 ], buffer, 'copies from the borrowed buffer' );
++			assert.strictEqual( calls.copy[ 1 ], 260, 'adds the range base to the relative offset' );
++			assert.strictEqual( calls.copy[ 4 ], 8, 'copies only the requested byte count' );
++			assert.strictEqual( calls.submit, 2, 'submits each readback copy' );
++
++			await assert.rejects( utils.getArrayBufferAsync( attribute, null, 20, 8 ), /outside the external attribute's bound range/ );
++
++			const noCopyBuffer = createExternalBuffer( { usage: STORAGE } );
++			const noCopyAttribute = new ExternalStorageBufferAttribute( noCopyBuffer, { device, type: 'vec2', count: 3 } );
++
++			utils.createAttribute( noCopyAttribute, STORAGE_ATTRIBUTE_USAGE );
++			await assert.rejects( utils.getArrayBufferAsync( noCopyAttribute ), /requires GPUBufferUsage\.COPY_SRC/ );
++
++		} );
++
++		QUnit.test( 'normal renderer-owned buffers are still destroyed', ( assert ) => {
++
++			const { backend, utils } = createHarness();
++			const attribute = {};
++			const buffer = createExternalBuffer();
++
++			backend.get( attribute ).buffer = buffer;
++			utils.destroyAttribute( attribute );
++
++			assert.strictEqual( buffer.destroyCount, 1, 'destroys a renderer-owned buffer' );
++
++		} );
++
++	} );
++
++} );

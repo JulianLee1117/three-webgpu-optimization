@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ZipDepth export fidelity</title>
+<link rel="icon" href="data:,"><style>
+*{box-sizing:border-box}body{margin:0;background:#0a111c;color:#ecf3ff;font:16px system-ui,sans-serif}main{max-width:1240px;margin:auto;padding:30px 20px}h1{font-size:32px;letter-spacing:-1px;margin:6px 0 10px}p{color:#a8b8cd;line-height:1.55;max-width:1000px}.eyebrow{font-size:12px;letter-spacing:2px;color:#65dbba}.labels{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:22px}.labels div{border-top:2px solid #486078;padding-top:12px}.labels b{display:block}.labels small{color:#9bafc6}canvas{display:block;width:100%;height:auto}button{background:#65dbba;color:#07241f;border:0;border-radius:6px;padding:10px 16px;font-weight:700;cursor:pointer}button:disabled{opacity:.5}.result{font:14px ui-monospace,monospace;white-space:pre-wrap;line-height:1.7}footer{font-size:13px;color:#879aaf;border-top:1px solid #253345;padding-top:16px}
+</style><script type="importmap">{"imports":{"three/webgpu":"/node_modules/three/build/three.webgpu.js","three/tsl":"/node_modules/three/build/three.tsl.js"}}</script></head>
+<body><main><div class="eyebrow">REPRODUCIBLE MODEL EXPORT CHECK</div><h1>One export substitution changes the surface.</h1>
+<p>The released ZipDepth checkpoint uses learned attention. Its exporter replaces that with averaging. This experiment keeps the input, weights and height scale fixed, then removes that substitution. The two ONNX models write directly into stock three.js GPU buffers.</p>
+<button id="run">Run two bounded inferences</button><span id="status" style="margin-left:16px">Idle · no model loaded</span>
+<div class="labels"><div><b>Preserved checkpoint</b><small>PyTorch CPU reference</small></div><div><b>Original export</b><small>Learned attention replaced by mean</small></div><div><b>Corrected export</b><small>Learned attention retained</small></div></div>
+<div id="view"></div><p id="metrics" class="result"></p>
+<footer>One procedural RGB gradient, 384 × 384. Shared height scale; no per-panel normalization. This checks numerical fidelity, not depth accuracy on photographs. Each run ends after two model inferences; there is no animation loop.</footer></main>
+<script type="module" src="/experiments/zipdepth-export/browser.js"></script></body></html>

@@ -1,0 +1,76 @@
+{
+  "kind": "trainable-tsl-public-evidence-v1",
+  "reports": [
+    {
+      "id": "2026-09-09T20-10-03.419Z-neural-11",
+      "included": true,
+      "file": "2026-09-09T20-10-03.419Z-neural-11.json.gz",
+      "originalRawSHA256": "87d653c1d40774ea05cc5930e281f668b0b8d5d2bd002e8ee60c3e72e2e67c98",
+      "publicJSONSHA256": "87d653c1d40774ea05cc5930e281f668b0b8d5d2bd002e8ee60c3e72e2e67c98",
+      "gzipSHA256": "da0aa15fc1cdcbcafb4602629b57cbe8ee1ff3294843bf9398d44d3ac70e2b16",
+      "rawBytes": 2042101,
+      "publicBytes": 2042101,
+      "gzipBytes": 572265,
+      "redactions": [],
+      "exclusionReason": null
+    },
+    {
+      "id": "2026-09-09T20-10-11.217Z-islands-11",
+      "included": true,
+      "file": "2026-09-09T20-10-11.217Z-islands-11.json.gz",
+      "originalRawSHA256": "593f5ee3cc9796dc35f3ce55826aab133fb20c1337522a67876f86032d78571c",
+      "publicJSONSHA256": "593f5ee3cc9796dc35f3ce55826aab133fb20c1337522a67876f86032d78571c",
+      "gzipSHA256": "f72d205fe74eefa72c5fc1358396f9e8f875b9f8a254d7c78516b4bd2d69a867",
+      "rawBytes": 1211327,
+      "publicBytes": 1211327,
+      "gzipBytes": 333129,
+      "redactions": [],
+      "exclusionReason": null
+    },
+    {
+      "id": "2026-09-09T20-10-18.800Z-neural-29",
+      "included": true,
+      "file": "2026-09-09T20-10-18.800Z-neural-29.json.gz",
+      "originalRawSHA256": "81d5640a792c20f6082c6c0f1ac6dd1b5c5a11c2e09b57487e58a67f60109154",
+      "publicJSONSHA256": "81d5640a792c20f6082c6c0f1ac6dd1b5c5a11c2e09b57487e58a67f60109154",
+      "gzipSHA256": "b51a0b786cc1d3d9bece95ff8585c9c79a006295ff1863705f328ff7549c5f02",
+      "rawBytes": 2049116,
+      "publicBytes": 2049116,
+      "gzipBytes": 572672,
+      "redactions": [],
+      "exclusionReason": null
+    },
+    {
+      "id": "2026-09-09T20-10-27.198Z-islands-29",
+      "included": true,
+      "file": "2026-09-09T20-10-27.198Z-islands-29.json.gz",
+      "originalRawSHA256": "1ae4d09b2f090c8cb41eea786ab2287e2863628c9acfd111705966bec984d2ad",
+      "publicJSONSHA256": "1ae4d09b2f090c8cb41eea786ab2287e2863628c9acfd111705966bec984d2ad",
+      "gzipSHA256": "2d1f72866b6ccfdfe1b60b71d0410b87f7a914e28e25a5b165b1d725ab1de1de",
+      "rawBytes": 1208462,
+      "publicBytes": 1208462,
+      "gzipBytes": 332569,
+      "redactions": [],
+      "exclusionReason": null
+    },
+    {
+      "id": "2026-09-09T20-08-22.166Z-neural-11",
+      "included": false,
+      "file": "2026-09-09T20-08-22.166Z-neural-11.json.gz",
+      "originalRawSHA256": "08a2e9c4e50c44b40cc74930b8cab24ac35bc156164e76fa2aad6f20cc4560f5",
+      "publicJSONSHA256": "c8bdb94f853d503e07a427336f94d39d72c4b967dc1694bf6ecb685c58ed16ef",
+      "gzipSHA256": "ad3b747cebd0f704d2c7ff29436624e1a3a4d3843aec6b90aa5f90feae67f55d",
+      "rawBytes": 2052093,
+      "publicBytes": 2052052,
+      "gzipBytes": 574857,
+      "redactions": [
+        {
+          "path": "/failure",
+          "kind": "workspace-prefix",
+          "replacement": "<workspace>"
+        }
+      ],
+      "exclusionReason": "Excluded from the final numerical cohort: strict runner failed on the favicon 404; later review also identified a second-lane reset alias in this canary version. Retained for transparency, not counted as a passing final run."
+    }
+  ]
+}

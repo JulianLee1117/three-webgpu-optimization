@@ -1,0 +1,185 @@
+{
+  "format": "triangle-query-portable-evidence-v1",
+  "createdAt": "2026-09-09T20:15:51.773Z",
+  "upstream": {
+    "package": "three-mesh-bvh",
+    "version": "0.9.15",
+    "revision": "8747a3c418f1dafa7c3ab1b3c1ffdecc531a2eab",
+    "module": "src/webgpu/tsl/fns.js"
+  },
+  "compression": {
+    "format": "gzip",
+    "level": 9,
+    "lossless": true,
+    "filenameStored": false
+  },
+  "scope": "Archived isolated 200-case single-dispatch nondegenerate-triangle WebGPU correctness evidence, not a universal correctness or performance claim.",
+  "reports": [
+    {
+      "variant": "original",
+      "archive": "original-200-report.json.gz",
+      "sourceReport": "results/development/gpu-deform-collider/2026-09-09T19-18-49.653Z-wave-16-128/report.json",
+      "rawBytes": 344728,
+      "rawSha256": "3121e489aea3c620ed5f49d3ce73b76f577642499e39c3cc413eddd37c05a4f7",
+      "sanitization": {
+        "applied": false,
+        "changes": [],
+        "archivedJsonSha256": "3121e489aea3c620ed5f49d3ce73b76f577642499e39c3cc413eddd37c05a4f7",
+        "review": "No credential material or user home paths found in report keys/values. Loopback helper URLs and coarse device/browser telemetry retained."
+      },
+      "status": "reproduced-upstream-failure",
+      "caseCount": 200,
+      "analyticCaseCount": 72,
+      "randomCaseCount": 128,
+      "mismatchCount": 10,
+      "cpuOracleMismatchCount": 0,
+      "groups": {
+        "known-obtuse-edge-failure": {
+          "count": 6,
+          "mismatches": 3
+        },
+        "face-interior": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "above-face": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "below-face": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "edge-ab": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "edge-bc": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "edge-ca": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "vertex-a": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "vertex-b": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "vertex-c": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "thin-obtuse": {
+          "count": 12,
+          "mismatches": 6
+        },
+        "random": {
+          "count": 128,
+          "mismatches": 1
+        }
+      },
+      "servedTriangleHelperSha256": "ddd53d39cca6b095df625448c17e43826087614fab2a56f308cf4c21cb2b7b66"
+    },
+    {
+      "variant": "corrected",
+      "archive": "corrected-200-report.json.gz",
+      "sourceReport": "results/development/gpu-deform-collider/2026-09-09T19-18-51.659Z-wave-16-128/report.json",
+      "rawBytes": 345184,
+      "rawSha256": "75c1b1c87a57dad99a2ff59d8137e56b64f403bd528d2754747925d15a265ce0",
+      "sanitization": {
+        "applied": false,
+        "changes": [],
+        "archivedJsonSha256": "75c1b1c87a57dad99a2ff59d8137e56b64f403bd528d2754747925d15a265ce0",
+        "review": "No credential material or user home paths found in report keys/values. Loopback helper URLs and coarse device/browser telemetry retained."
+      },
+      "status": "passed",
+      "caseCount": 200,
+      "analyticCaseCount": 72,
+      "randomCaseCount": 128,
+      "mismatchCount": 0,
+      "cpuOracleMismatchCount": 0,
+      "groups": {
+        "known-obtuse-edge-failure": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "face-interior": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "above-face": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "below-face": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "edge-ab": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "edge-bc": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "edge-ca": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "vertex-a": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "vertex-b": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "vertex-c": {
+          "count": 6,
+          "mismatches": 0
+        },
+        "thin-obtuse": {
+          "count": 12,
+          "mismatches": 0
+        },
+        "random": {
+          "count": 128,
+          "mismatches": 0
+        }
+      },
+      "servedTriangleHelperSha256": "4b81a1348d16857dc29639ea823c21c7ffa89e80eed03ea19ce28609d2cbe462"
+    }
+  ],
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 3701,
+      "sha256": "9e0258332d5bef5c3e38e25b7a39f7f20e41baf1201f1c10b2e988082008bb74"
+    },
+    {
+      "file": "verify.mjs",
+      "bytes": 6202,
+      "sha256": "d50f9eefd690ad20962b4cdf7c0eef4b819cbcccaa1d7511e49c2ee78552e4bc"
+    },
+    {
+      "file": "original-200-report.json.gz",
+      "bytes": 47679,
+      "sha256": "dd6e94a6548d75e1bdda190aa674d24b2c96dd1848e28c07cf281c17bbe2d143"
+    },
+    {
+      "file": "corrected-200-report.json.gz",
+      "bytes": 47765,
+      "sha256": "3746bcab202d509a49fdeba36b9e60ddeeb3fb1062aecbefff3469f94f89fbed"
+    }
+  ],
+  "manifestHashExclusions": [
+    "manifest.json",
+    "manifest.sha256"
+  ]
+}

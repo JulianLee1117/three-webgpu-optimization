@@ -79,6 +79,96 @@ export async function fingerprintGeometryFixtures(geometries, tier) {
   return { ...manifest, sha256: await sha256Json(manifest) };
 }
 
+async function fingerprintPhase0Attribute(attribute) {
+  if (!attribute?.array || !ArrayBuffer.isView(attribute.array)) {
+    throw new TypeError('Phase 0 geometry fingerprints require typed-array buffer attributes.');
+  }
+  return {
+    arrayType: attribute.array.constructor.name,
+    byteLength: attribute.array.byteLength,
+    count: attribute.count,
+    itemSize: attribute.itemSize,
+    normalized: attribute.normalized === true,
+    usage: attribute.usage,
+    gpuType: attribute.gpuType ?? null,
+    sha256: await sha256Bytes(attribute.array),
+  };
+}
+
+async function fingerprintPhase0MorphAttributes(morphAttributes) {
+  const result = {};
+  for (const name of Object.keys(morphAttributes ?? {}).sort()) {
+    result[name] = [];
+    for (const attribute of morphAttributes[name]) {
+      result[name].push(await fingerprintPhase0Attribute(attribute));
+    }
+  }
+  return result;
+}
+
+/**
+ * Phase 0's stronger geometry identity. This is deliberately a distinct v2
+ * schema so the long-lived v1 artifact hashes above remain reproducible.
+ */
+export async function fingerprintImmediateAifPhase0GeometryFixture(geometry, bucket) {
+  if (!geometry?.index || !geometry.boundingBox || !geometry.boundingSphere) {
+    throw new Error(`Phase 0 geometry bucket ${bucket} is missing indexed bounds data.`);
+  }
+  const attributeEntries = [];
+  for (const name of Object.keys(geometry.attributes).sort()) {
+    attributeEntries.push([
+      name,
+      await fingerprintPhase0Attribute(geometry.getAttribute(name)),
+    ]);
+  }
+  const record = {
+    bucket,
+    family: bucket % 4,
+    name: geometry.name,
+    attributes: Object.fromEntries(attributeEntries),
+    index: await fingerprintPhase0Attribute(geometry.index),
+    morphAttributes: await fingerprintPhase0MorphAttributes(geometry.morphAttributes),
+    morphTargetsRelative: geometry.morphTargetsRelative === true,
+    groups: geometry.groups.map((group) => ({
+      start: group.start,
+      count: group.count,
+      materialIndex: group.materialIndex,
+    })),
+    drawRange: {
+      start: geometry.drawRange.start,
+      count: Number.isFinite(geometry.drawRange.count) ? geometry.drawRange.count : 'Infinity',
+    },
+    boundingBox: {
+      min: vectorRecord(geometry.boundingBox.min),
+      max: vectorRecord(geometry.boundingBox.max),
+    },
+    boundingSphere: {
+      center: vectorRecord(geometry.boundingSphere.center),
+      radius: geometry.boundingSphere.radius,
+    },
+  };
+  return { ...record, sha256: await sha256Json(record) };
+}
+
+export async function fingerprintImmediateAifPhase0GeometryFixtures(geometries, tier) {
+  const records = [];
+  for (let bucket = 0; bucket < geometries.length; bucket += 1) {
+    records.push(await fingerprintImmediateAifPhase0GeometryFixture(
+      geometries[bucket],
+      bucket,
+    ));
+  }
+  const manifest = {
+    schemaVersion: 2,
+    kind: 'immediate-aif-phase0-geometry-fixture-manifest',
+    generator: 'createIndexedGeometryFixtures',
+    tier,
+    bucketCount: records.length,
+    geometries: records,
+  };
+  return { ...manifest, sha256: await sha256Json(manifest) };
+}
+
 export async function fingerprintFixedSubsetScenario(scenario, seed) {
   const arrayNames = [
     'bucketCounts',

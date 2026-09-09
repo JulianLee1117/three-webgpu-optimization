@@ -5,6 +5,7 @@ import {
 } from '../benchmark/plan.js';
 import { registerComputeTimestampGroup } from '../benchmark/gpu-timestamps.js';
 import { updateFrustumPlaneState } from '../culling/frustum-planes.js';
+import { validateStorageTransformAddressMode } from '../materials/storage-transform.js';
 import {
   createFirstInstanceShaderEvidence,
 } from '../validation/first-instance-shader-evidence.js';
@@ -438,7 +439,12 @@ function firstInstanceFieldAudit(source) {
  * offline verifier responsibility for the standalone deployment experiment.
  */
 export async function collectLiveComputeLaneEvidence(renderer, shared, lane) {
-  validateFixedSliceLane(lane?.lane);
+  validateLiveComputeLaneIdentity(lane);
+  if (!lane || lane.kind !== 'fixed-slice-lane'
+    || typeof lane.lane !== 'string' || lane.lane.length === 0) {
+    throw new TypeError('Live compute evidence requires a named fixed-slice lane.');
+  }
+  validateStorageTransformAddressMode(lane.addressMode);
   if (!shared || shared.kind !== 'fixed-slice-shared-resources') {
     throw new TypeError('Standalone compute evidence requires fixed-slice shared resources.');
   }
@@ -511,6 +517,25 @@ export async function collectLiveComputeLaneEvidence(renderer, shared, lane) {
     maxStorageBindingCount,
     phases,
   };
+}
+
+export function validateLiveComputeLaneIdentity(lane) {
+  if (!lane || lane.kind !== 'fixed-slice-lane'
+    || typeof lane.lane !== 'string' || lane.lane.length === 0) {
+    throw new TypeError('Live compute evidence requires a named fixed-slice lane.');
+  }
+  validateStorageTransformAddressMode(lane.addressMode);
+  const legacyLaneMappingExact = Object.hasOwn(
+    FIXED_SLICE_ADDRESS_MODE_BY_LANE,
+    lane.lane,
+  ) && FIXED_SLICE_ADDRESS_MODE_BY_LANE[lane.lane] === lane.addressMode;
+  const genericAddressLaneMappingExact = lane.lane === lane.addressMode;
+  if (!legacyLaneMappingExact && !genericAddressLaneMappingExact) {
+    throw new Error(
+      'Live compute evidence lane identity does not match its address transport.',
+    );
+  }
+  return lane;
 }
 
 async function collectComputeShaderEvidence(renderer, lanes) {

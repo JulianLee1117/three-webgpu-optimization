@@ -1,0 +1,17 @@
+--- a/scripts/export.py
++++ b/scripts/export.py
+@@ -66,13 +66,7 @@
+     s16 = (H // 16, W // 16)
+ 
+     for m in model.modules():
+-        if type(m).__name__ == 'GlobalContextBlock':
+-            def _fwd(self_m, x, _h=s16[0], _w=s16[1]):
+-                ctx = F.avg_pool2d(x, kernel_size=(_h, _w))
+-                return x + self_m.transform(ctx)
+-            m.forward = types.MethodType(_fwd, m)
+-
+-        elif type(m).__name__ == 'StripPoolingAttention':
++        if type(m).__name__ == 'StripPoolingAttention':
+             def _fwd(self_m, x):
+                 B, C, H, W = x.shape
+                 gate = self_m.gate_conv(

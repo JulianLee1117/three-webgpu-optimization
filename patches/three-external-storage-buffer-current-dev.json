@@ -1,0 +1,7 @@
+{
+  "upstreamCommit": "aaf21735d5eef2321d84ec6623c500ac935cbab7",
+  "status": "applies-to-exact-upstream-index",
+  "sha256": "7e92046f0f26c7c3f3d5bb7c71535d29f973d9e7e2630e95e71e5f46206333e4",
+  "validationBoundary": "Mechanical source rebase only. Browser tests use the separately pinned c4ffe022 base.",
+  "resolution": "Preserve new upstream frameBufferTargets disposal and insert attribute cleanup after binding cleanup."
+}

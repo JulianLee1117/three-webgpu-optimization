@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GPU without the round trip · ONNX × three.js</title>
+<link rel="icon" href="data:,">
+<script type="importmap">{"imports":{"three/webgpu":"/.generated/ort-surface/three.webgpu.js"}}</script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#090e14;color:#e6eee9;font:15px/1.5 system-ui,sans-serif}header{padding:28px 38px 10px}small,.muted{color:#95a7ab}header small{font-size:12px;letter-spacing:2px}h1{font-size:34px;letter-spacing:-1px;margin:7px 0}header p{max-width:740px;margin:8px 0;color:#adbfbd}main{display:grid;grid-template-columns:1fr 285px;gap:20px;padding:12px 38px}#stage{min-height:450px;height:56vh;position:relative;border:1px solid #24323b;border-radius:8px;overflow:hidden}canvas{display:block;width:100%;height:100%}#overlay{position:absolute;bottom:18px;left:22px;font:12px/1.7 monospace;pointer-events:none;color:#b6d7ce}aside{border-left:1px solid #24323b;padding-left:24px}aside h2{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:#9dafad;margin:10px 0}strong.metric{display:block;font-size:38px;color:#82e9c2;font-weight:500;letter-spacing:-1px}button,select{font:inherit;color:inherit;background:#182730;border:1px solid #39505b;border-radius:5px;padding:10px 14px;cursor:pointer}button:disabled{opacity:.45;cursor:wait}button.primary{color:#08201a;background:#82e9c2;border-color:#82e9c2}#controls{display:flex;gap:9px;flex-wrap:wrap;margin:17px 0}label{font-size:12px;color:#9dafad}select{font-size:13px;width:100%;margin:5px 0}#status{color:#82e9c2;min-height:48px;font-size:13px}#flow{display:flex;align-items:center;justify-content:center;gap:20px;font-size:13px;border-top:1px solid #24323b;margin:8px 38px;padding:20px}#flow b{color:#82e9c2}footer{margin:0 38px 24px;color:#809594;font-size:12px;max-width:1030px}#result{font-size:13px;white-space:pre-wrap;color:#acbebb}@media(max-width:850px){main{grid-template-columns:1fr}aside{border:0;padding:0}#flow{flex-wrap:wrap}#stage{height:380px}header,main{padding-left:20px;padding-right:20px}}
+</style></head><body>
+<header><small>THREE.JS / WEBGPU RESEARCH</small><h1>GPU without the round trip.</h1><p>A small ONNX model drives a surface directly in three.js. Input generation, inference and vertex displacement share one GPU device.</p></header>
+<main><section id="stage"><div id="overlay">RIDGE-TRAINED SINE NETWORK<br>synthetic traveling wave · 161 parameters</div></section><aside>
+<h2>Output crossing the CPU</h2><strong class="metric" id="bytes">0 bytes</strong><p class="muted" id="path-label">Shared-buffer path, per update</p>
+<label for="lane">Data path</label><select id="lane"><option value="shared">Shared GPU buffer</option><option value="roundtrip">CPU round trip (comparison)</option></select>
+<label for="size">Surface resolution</label><select id="size"><option value="64">4,096 vertices</option><option value="128" selected>16,384 vertices</option><option value="256">65,536 vertices</option></select>
+<div id="controls"><button id="start" class="primary">Load demo</button><button id="play" disabled>Animate 8s</button><button id="check" disabled>Check parity</button></div>
+<div id="status">Idle. GPU work starts when loaded.</div><div id="result"></div>
+</aside></main>
+<div id="flow"><span>TSL generates input</span><b>→</b><span>ONNX WebGPU inference</span><b>→</b><span>same GPUBuffer</span><b>→</b><span>three.js surface</span></div>
+<footer>Experimental three.js patch + ONNX Runtime Web 1.30 nightly. The model is fitted to a synthetic wave; it is not a physics solver. Animation is limited to 15 updates/s and stops after 8 seconds or when hidden. “0 bytes” concerns the model-output handoff; correctness checks intentionally read back data. No performance claim is implied.</footer>
+<script type="module" src="./surface.js"></script></body></html>

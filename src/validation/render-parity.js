@@ -11,16 +11,17 @@ import {
 } from 'three/webgpu';
 import {
   Fn,
-  attribute,
   float,
-  instanceIndex,
   positionGeometry,
   storage,
   uint,
   vec4,
 } from 'three/tsl';
 import { VIEWPORT } from '../config.js';
-import { STORAGE_TRANSFORM_ADDRESS_MODES } from '../materials/storage-transform.js';
+import {
+  STORAGE_TRANSFORM_ADDRESS_MODES,
+  createVisibleIdAddressNode,
+} from '../materials/storage-transform.js';
 
 function freezeStaticTransform(object) {
   object.matrixAutoUpdate = false;
@@ -146,9 +147,7 @@ function createObjectIdMaterial({
 }) {
   const matrixRead = storage(matrixAttribute, 'mat4', objectCount).toReadOnly();
   const visibleRead = storage(visibleIdsAttribute, 'uint', visibleIdsCount).toReadOnly();
-  const localIndex = addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.INDIRECT_FIRST_INSTANCE
-    ? instanceIndex
-    : attribute('bucketBase', 'uint').add(instanceIndex);
+  const localIndex = createVisibleIdAddressNode({ addressMode });
   const sliceIndex = uint(visibleIdOffset).add(localIndex);
   const objectId = visibleRead.element(sliceIndex);
   const fragmentObjectId = objectId.toVarying('v_renderParityObjectId');

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101315">
+  <title>Same triangle. Different collision answer.</title>
+  <link rel="icon" href="data:,">
+  <script type="importmap">{"imports":{"three":"/node_modules/three/build/three.core.js","three/webgpu":"/node_modules/three/build/three.webgpu.js","three/tsl":"/node_modules/three/build/three.tsl.js","three-mesh-bvh/webgpu":"/node_modules/three-mesh-bvh/src/webgpu/index.js"}}</script>
+  <style>
+    :root{color-scheme:dark;--bg:#101315;--panel:#181d20;--line:#30373b;--ink:#f0f0e9;--muted:#a0aaae;--red:#ff947d;--green:#91e4be}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,select{font:inherit}button:focus-visible,select:focus-visible,a:focus-visible{outline:3px solid var(--green);outline-offset:4px}
+    main{max-width:1160px;margin:auto;padding:30px 32px 48px}.masthead{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:20px;font-size:11px;letter-spacing:.17em;text-transform:uppercase;color:var(--muted)}.brand{color:var(--ink);font-weight:750}.brand:before{content:"";display:inline-block;width:9px;height:9px;background:var(--green);margin-right:12px}.tag{border:1px solid var(--line);border-radius:99px;padding:5px 10px;font-size:10px;letter-spacing:.08em}
+    .intro{padding:34px 0 26px}h1{font-size:clamp(34px,5.2vw,62px);font-weight:650;letter-spacing:-.055em;line-height:1.08;margin:0 0 18px}h1 span{color:var(--red)}.intro p{max-width:720px;font-size:16px;line-height:1.65;color:var(--muted);margin:0}.intro strong{color:var(--ink);font-weight:500}
+    .controls{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;padding:18px 0 22px;border-top:1px solid var(--line)}label{display:grid;gap:7px;color:var(--muted);font-size:11px;letter-spacing:.055em;text-transform:uppercase}select{min-height:42px;background:var(--panel);border:1px solid var(--line);border-radius:7px;color:var(--ink);padding:0 34px 0 12px;letter-spacing:0;font-size:14px;text-transform:none}button{min-height:42px;border-radius:7px;cursor:pointer;padding:0 17px;transition:background .15s}#compare{margin-left:auto;background:var(--green);border:1px solid var(--green);color:#12271e;font-weight:700}#compare:hover{background:#b6f3d6}#stop{background:transparent;border:1px solid var(--line);color:var(--muted)}button:disabled,select:disabled{opacity:.45;cursor:default}
+    .experiment{display:grid;grid-template-columns:minmax(0,1.55fr) minmax(270px,1fr);gap:18px}.diagram-panel{min-width:0;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}.panel-top{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding:17px 20px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted);letter-spacing:.07em;text-transform:uppercase}.panel-top strong{color:var(--ink);font-weight:500}.diagram-panel svg{display:block;width:100%;height:auto;background:radial-gradient(ellipse at 45% 35%,#232c30,transparent 70%)}.plot-caption{padding:0 20px 17px;color:var(--muted);font-size:11px}.legend{display:flex;gap:20px;flex-wrap:wrap;padding:0 20px 12px;font-size:12px}.legend span{display:flex;align-items:center;gap:7px}.swatch{width:19px;height:3px;display:inline-block}.swatch.red{background:var(--red)}.swatch.green{background:var(--green)}
+    .results{display:flex;flex-direction:column;gap:12px}.ratio-panel{padding:22px 23px;background:#20272a;border:1px solid #3c464b;border-radius:12px}.eyebrow{color:var(--muted);font-size:11px;letter-spacing:.10em;text-transform:uppercase}.ratio{font-size:clamp(44px,5vw,65px);font-weight:650;line-height:1.1;letter-spacing:-.05em;margin:7px 0 6px;font-variant-numeric:tabular-nums}.ratio-caption{color:var(--muted);font-size:12px}.answer{padding:16px 20px;border:1px solid var(--line);border-radius:10px;display:grid;grid-template-columns:1fr auto;gap:4px 12px}.answer.original{background:#251f1d;border-color:#49362f}.answer.fixed{background:#192821;border-color:#314e3f}.answer .name{font-size:12px;letter-spacing:.035em}.original .name{color:var(--red)}.fixed .name{color:var(--green)}.distance{font-size:28px;letter-spacing:-.035em;font-variant-numeric:tabular-nums;line-height:1.25}.badge{grid-column:2;grid-row:1/3;align-self:center;font-size:10px;letter-spacing:.07em;border:1px solid var(--line);border-radius:99px;padding:4px 9px;color:var(--muted)}.badge.hit{border-color:#487459;color:var(--green)}.badge.miss{border-color:#825b4b;color:var(--red)}.answer small{grid-column:1/-1;font-size:11px;color:var(--muted)}.contact{font-size:12px;color:var(--muted);padding:1px 4px}.contact strong{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:500}
+    .status{display:flex;align-items:flex-start;gap:9px;margin-top:20px;min-height:24px;font-size:12px;color:var(--muted)}.status:before{content:"";width:6px;height:6px;flex:none;border-radius:50%;background:var(--muted);margin-top:6px}.status[data-state=ready]:before{background:var(--green)}.status[data-state=error]:before{background:var(--red)}.status[data-state=busy]:before{background:#e9d393}
+    .explanation{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:25px;padding-top:23px;border-top:1px solid var(--line)}.explanation h2{font-size:13px;font-weight:600;margin:0 0 7px}.explanation p{font-size:12px;color:var(--muted);line-height:1.75;margin:0}.explanation code{color:#c9d3d7;font-size:11px}.explanation a{color:var(--green);text-underline-offset:3px}details{margin-top:20px;color:var(--muted);font-size:11px}summary{cursor:pointer}pre{padding:14px;background:var(--panel);border:1px solid var(--line);border-radius:8px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:11px;color:#c7d5dc;max-height:300px;overflow:auto}
+    @media(max-width:720px){main{padding:20px 19px 35px}.tag{display:none}.intro{padding-top:27px}.intro p{font-size:14px}.controls{gap:10px}#compare{margin-left:0}.experiment{grid-template-columns:1fr}.results{display:grid;min-width:0;grid-template-columns:repeat(2,minmax(0,1fr))}.ratio-panel{grid-column:1/-1}.ratio{font-size:50px}.answer{padding:14px;min-width:0;display:flex;flex-direction:column;align-items:flex-start}.badge{grid-column:1;grid-row:auto;justify-self:start}.distance{font-size:24px}.contact{grid-column:1/-1}.explanation{grid-template-columns:1fr;gap:20px}}
+    @media(prefers-reduced-motion:reduce){button{transition:none}}
+  </style>
+</head>
+<body>
+<main>
+  <header class="masthead"><span class="brand">Geometry / Field notes</span><span class="tag">Three.js · WebGPU · Bug reproduction</span></header>
+  <section class="intro"><h1>Same triangle.<br><span>Different collision answer.</span></h1><p>A closest-point query can choose the wrong edge of an obtuse triangle. Compare the original <strong>three-mesh-bvh</strong> GPU function with a local correction, on your own GPU.</p></section>
+  <section class="controls" aria-label="Experiment controls">
+    <label>Triangle height<select id="height"><option value="1">1 · regular</option><option value="0.01">0.01 · thin</option><option value="0.001" selected>0.001 · thinner</option></select></label>
+    <label>Vertex order<select id="order"><option>ABC</option><option>ACB</option><option>BAC</option><option>BCA</option><option>CAB</option><option>CBA</option></select></label>
+    <button id="compare" type="button">Compare on my GPU ↗</button><button id="stop" type="button" disabled>Stop / release</button>
+  </section>
+  <section class="experiment" aria-label="Measured comparison">
+    <div class="diagram-panel"><div class="panel-top"><strong>One triangle. One query point.</strong><span id="scale">Y magnified 1,000×</span></div>
+      <svg id="diagram" viewBox="0 0 820 510" role="img" aria-label="Triangle ABC and query point P. Run the comparison to see the GPU closest points."></svg>
+      <div class="legend"><span><i class="swatch red"></i>Original GPU answer</span><span><i class="swatch green"></i>Corrected GPU answer</span></div>
+      <div class="plot-caption" id="plot-caption">Vertical magnification makes the thin triangle visible. Distances use actual coordinates.</div>
+    </div>
+    <div class="results">
+      <div class="ratio-panel"><div class="eyebrow">Measured distance overestimate</div><div class="ratio" id="ratio">—</div><div class="ratio-caption" id="ratio-caption">Original distance ÷ corrected distance.<br>Waiting for a GPU comparison.</div></div>
+      <div class="answer original"><span class="name">Original upstream</span><strong class="distance" id="original-distance">—</strong><span class="badge" id="original-contact">UNTESTED</span><small>Distance from query point to reported closest point</small></div>
+      <div class="answer fixed"><span class="name">Local correction</span><strong class="distance" id="fixed-distance">—</strong><span class="badge" id="fixed-contact">UNTESTED</span><small>Standard closest-point region tests</small></div>
+      <div class="contact">Contact radius <strong id="radius">0.004</strong> = 4 × triangle height.<br>A contact is detected when distance ≤ radius.</div>
+    </div>
+  </section>
+  <div id="status" class="status" role="status" aria-live="polite" data-state="idle">Idle. No GPU device allocated. One comparison runs only when you press the button.</div>
+  <section class="explanation"><div><h2>Why vertex order matters here</h2><p>The original function can stop at the first negative barycentric coordinate and select the wrong boundary edge. Reordering the same triangle exposes the error. Some orders already return the right answer.</p></div><div><h2>A distance error, not a speedup</h2><p>The ratio comes from two functions in the same GPU dispatch. The correction is local; the installed library stays unchanged. This is a specific geometric correctness finding. <a href="./TRIANGLE-QUERY-FINDING.md">Read the reproduction and scope ↗</a></p></div></section>
+  <details><summary>Inspect actual coordinates and GPU outputs</summary><pre id="raw">No GPU output yet.</pre></details>
+</main>
+<script type="module" src="./triangle-demo.js"></script>
+</body>
+</html>

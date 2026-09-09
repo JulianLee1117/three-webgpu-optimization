@@ -5,6 +5,7 @@ import {
 import {
   Fn,
   attribute,
+  expression,
   instanceIndex,
   normalLocal,
   positionGeometry,
@@ -15,8 +16,11 @@ import {
 
 export const STORAGE_TRANSFORM_ADDRESS_MODES = Object.freeze({
   BUCKET_BASE: 'bucket-base',
+  IMMEDIATE_BASE: 'immediate-base',
   INDIRECT_FIRST_INSTANCE: 'indirect-first-instance',
 });
+
+export const IMMEDIATE_DRAW_BASE_EXPRESSION = 'threeImmediateDrawBase';
 
 const STORAGE_TRANSFORM_ADDRESS_MODE_VALUES = Object.freeze(
   Object.values(STORAGE_TRANSFORM_ADDRESS_MODES),
@@ -36,9 +40,12 @@ export function createVisibleIdAddressNode({
   visibleIdOffsetNode = null,
 } = {}) {
   validateStorageTransformAddressMode(addressMode);
-  const localIndex = addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE
-    ? attribute('bucketBase', 'uint').add(instanceIndex)
-    : instanceIndex;
+  let localIndex = instanceIndex;
+  if (addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.BUCKET_BASE) {
+    localIndex = attribute('bucketBase', 'uint').add(instanceIndex);
+  } else if (addressMode === STORAGE_TRANSFORM_ADDRESS_MODES.IMMEDIATE_BASE) {
+    localIndex = expression(IMMEDIATE_DRAW_BASE_EXPRESSION, 'uint').add(instanceIndex);
+  }
   return visibleIdOffsetNode === null
     ? localIndex
     : visibleIdOffsetNode.add(localIndex);

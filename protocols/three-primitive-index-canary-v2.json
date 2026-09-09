@@ -1,0 +1,147 @@
+{
+  "schemaVersion": 1,
+  "kind": "three-webgpu-primitive-index-canary-protocol",
+  "executionId": "primitive-index-c788032-v2",
+  "executionMode": "timing-free-one-shot-correctness",
+  "methodRevision": "The preserved v1 attempt stopped before module evaluation because the standalone Three TSL build retains the bare specifier three/webgpu. V2 adds an explicit browser import map for that exact built module and otherwise retains the frozen candidate, geometry, integer oracle, browser policy, and acceptance gates.",
+  "claimBoundary": "Exact primitive and instance indices, feature negotiation, and Three.js integration on one standards-capable Chrome/WebGPU implementation; no performance or cross-device universality claim.",
+  "command": "npm.cmd run probe:three-primitive-index -- --browser \"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\" --expected-research-commit <40-hex-research-commit>",
+  "offlinePreflightCommand": "npm.cmd run probe:three-primitive-index -- --offline-preflight",
+  "candidate": {
+    "path": ".generated/three-primitive-index-current-dev-candidate",
+    "repository": "https://github.com/mrdoob/three.js.git",
+    "baseCommit": "c4ffe022f2a4f982b42b7da5af79a87066a138ae",
+    "commit": "c7880322c2be17269210c305636b929f43d671f1",
+    "tree": "d3dc72787fb4247224dd3ef6bd1623c18cf96bd3",
+    "subject": "WebGPURenderer: Add TSL primitiveIndex"
+  },
+  "build": {
+    "liveDirectory": ".generated/three-primitive-index-canary-v2-live-build",
+    "offlinePreflightDirectory": ".generated/three-primitive-index-canary-v2-preflight-build",
+    "files": {
+      "three.core.js": {
+        "bytes": 1518172,
+        "sha256": "766a32993fedb1834e29804b691a0951914b804826a2de9f0746ea03387dd0e0"
+      },
+      "three.module.js": {
+        "bytes": 679849,
+        "sha256": "3a64a3e531914515523a42cc7bcc8b43f6dad5b1ad1b916f29650d60e2b89513"
+      },
+      "three.tsl.js": {
+        "bytes": 37592,
+        "sha256": "f4b8ba6acf0927475c4862baf5ddc9af525e819a092fa0abd6273e973487d116"
+      },
+      "three.webgpu.js": {
+        "bytes": 2376146,
+        "sha256": "dbb291dbcad58f8a519dfae93bc3827dbc3f429815ab6d284796f97603555027"
+      },
+      "three.webgpu.nodes.js": {
+        "bytes": 2367229,
+        "sha256": "72fb896f2a6cf34016d06f808c2b19b1fb5e51c4c6c125f3194b07ae3bb8bdc9"
+      }
+    }
+  },
+  "browser": {
+    "requiredExecutablePath": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "playwrightArguments": [],
+    "forbiddenArgumentPrefixes": [
+      "--disable-dawn-features",
+      "--enable-dawn-features",
+      "--enable-unsafe-webgpu",
+      "--enable-webgpu-developer-features",
+      "--force-high-performance-gpu",
+      "--force-webgpu-compat",
+      "--ignore-gpu-blocklist",
+      "--use-angle",
+      "--use-vulkan",
+      "--use-webgpu-adapter"
+    ]
+  },
+  "page": {
+    "path": "three-primitive-index-canary.html",
+    "module": "src/three-primitive-index-canary.js",
+    "contract": "src/three-primitive-index-canary-contract.js",
+    "viewport": [
+      960,
+      540
+    ],
+    "deviceScaleFactor": 1,
+    "timeoutMilliseconds": 120000
+  },
+  "geometry": {
+    "attributes": [
+      "position"
+    ],
+    "indexArrayType": "Uint16Array",
+    "indexCount": 12,
+    "indexValues": [
+      0,
+      1,
+      2,
+      0,
+      2,
+      3,
+      0,
+      3,
+      4,
+      0,
+      4,
+      1
+    ],
+    "positionCount": 5,
+    "instanceCount": 2,
+    "gpuDraw": [
+      12,
+      2,
+      0,
+      0,
+      0
+    ]
+  },
+  "oracle": {
+    "textureFormat": "rgba32uint",
+    "typedArray": "Uint32Array",
+    "width": 320,
+    "height": 180,
+    "sentinel": 23063,
+    "minimumPixelsPerTuple": 1000,
+    "expectedPrimitiveIdsByInstance": [
+      [
+        0,
+        1,
+        2,
+        3
+      ],
+      [
+        0,
+        1,
+        2,
+        3
+      ]
+    ]
+  },
+  "wgsl": {
+    "feature": "primitive-index",
+    "directive": "enable primitive_index;",
+    "builtin": "@builtin( primitive_index ) primitiveIndex : u32",
+    "stage": "fragment"
+  },
+  "assertions": [
+    "the standalone TSL module is resolved only through the explicit import map to the frozen Three WebGPU build",
+    "the adapter advertises primitive-index, Three requests it in requiredFeatures, and the created device enables it",
+    "the actual geometry has one position attribute, a shared Uint16 index buffer, and no primitive-ID attribute",
+    "the oracle and visual passes each issue one indexed draw with 12 indices and instanceCount two",
+    "an rgba32uint readback contains every literal tuple (primitiveIndex 0..3, instanceIndex 0..1, sentinel, 1)",
+    "primitive IDs restart at zero for the second instance and each instance ID stays in its expected screen half",
+    "generated fragment WGSL contains exactly one primitive_index directive and builtin declaration per using module",
+    "shader compilation messages, validation errors, uncaptured errors, page errors, and network errors are empty",
+    "a full-resolution labeled screenshot makes the per-primitive and per-instance result visually inspectable"
+  ],
+  "output": {
+    "directory": "results/development/three-primitive-index-canary/canary-c788032-v2",
+    "report": "report.json",
+    "screenshot": "primitive-index-reset.png",
+    "exclusiveDirectory": true,
+    "overwrite": false
+  }
+}

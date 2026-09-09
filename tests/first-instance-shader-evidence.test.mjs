@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   FIRST_INSTANCE_SHADER_EVIDENCE_SCHEMA_VERSION,
+  createImmediateAifRenderShaderEvidence,
   createFirstInstanceLaneShaderEvidence,
   createFirstInstanceShaderEvidence,
+  normalizeImmediateAifRenderShaderLanes,
 } from '../src/validation/first-instance-shader-evidence.js';
 import {
   runtimeStorageBindingEvidence,
@@ -15,6 +17,7 @@ const VERTEX_COUNT = 6_440;
 
 function vertexShader({
   feature,
+  immediate = false,
   matrixName,
   visibleIdsName,
   extraBeforeAddress = '',
@@ -27,8 +30,15 @@ function vertexShader({
 \t@location( 0 ) position : vec3<f32>,
 \t@location( 1 ) bucketBase : u32,
 \t@location( 2 ) normal : vec3<f32> ) -> VaryingsStruct {`;
-  const visibleIndex = feature ? 'instanceIndex' : '( bucketBase + instanceIndex )';
-  return `
+  const visibleIndex = immediate
+    ? '( threeImmediateDrawBase + instanceIndex )'
+    : feature
+      ? 'instanceIndex'
+      : '( bucketBase + instanceIndex )';
+  const immediateHeader = immediate
+    ? 'requires immediate_address_space;\n\n// immediate data\nvar<immediate> threeImmediateDrawBase : u32;\n'
+    : '';
+  return `${immediateHeader}
 struct ${matrixName}Struct {
 \tvalue : array< mat4x4<f32> >
 };
@@ -183,6 +193,43 @@ function storageBindings() {
   ];
 }
 
+function phase0Contrast() {
+  const commonFragment = fragmentShader();
+  return {
+    A: {
+      vertexShader: vertexShader({
+        feature: false,
+        matrixName: 'NodeBuffer_5000',
+        visibleIdsName: 'NodeBuffer_5001',
+      }),
+      fragmentShader: commonFragment,
+      vertexInputs: vertexInputs(false),
+      storageBindings: storageBindings(),
+    },
+    I: {
+      vertexShader: vertexShader({
+        feature: true,
+        immediate: true,
+        matrixName: 'NodeBuffer_6000',
+        visibleIdsName: 'NodeBuffer_6001',
+      }),
+      fragmentShader: commonFragment,
+      vertexInputs: vertexInputs(true),
+      storageBindings: storageBindings(),
+    },
+    F: {
+      vertexShader: vertexShader({
+        feature: true,
+        matrixName: 'NodeBuffer_7000',
+        visibleIdsName: 'NodeBuffer_7001',
+      }),
+      fragmentShader: commonFragment,
+      vertexInputs: vertexInputs(true),
+      storageBindings: storageBindings(),
+    },
+  };
+}
+
 function contrast(overrides = {}) {
   const portableOptions = {
     feature: false,
@@ -262,6 +309,49 @@ test('shader evidence accepts only the pinned first-instance addressing contrast
     'storageBindings',
     'vertexInputs',
   ]);
+});
+
+test('Phase 0 render normalizer accepts only the exact A/I/F shader contrast', async () => {
+  const input = phase0Contrast();
+  const normalized = normalizeImmediateAifRenderShaderLanes(input);
+  assert.equal(normalized.pass, true, normalized.reasons.join('\n'));
+  assert.equal(normalized.comparison.normalizedVertexEqual, true);
+  assert.equal(normalized.comparison.rawFragmentEqual, true);
+  assert.equal(normalized.comparison.rawVertexPairwiseDifferent, true);
+  assert.equal(normalized.lanes.I.immediateNormalization.requirementCount, 1);
+  assert.equal(normalized.lanes.I.immediateNormalization.declarationCount, 1);
+  assert.equal(normalized.lanes.I.immediateNormalization.totalImmediateDeclarationCount, 1);
+  assert.equal(normalized.lanes.I.immediateNormalization.addressExpressionCount, 1);
+  assert.equal(new Set(Object.values(normalized.lanes).map(
+    (lane) => lane.normalizedVertexShader,
+  )).size, 1);
+
+  const evidence = await createImmediateAifRenderShaderEvidence(input);
+  assert.equal(evidence.pass, true, evidence.reasons.join('\n'));
+  assert.match(evidence.commonVertexSha256, /^[a-f0-9]{64}$/);
+  assert.match(evidence.commonFragmentSha256, /^[a-f0-9]{64}$/);
+  assert.equal(evidence.lanes.A.normalizedSha256, evidence.lanes.I.normalizedSha256);
+  assert.equal(evidence.lanes.I.normalizedSha256, evidence.lanes.F.normalizedSha256);
+
+  const extraImmediateUse = clone(input);
+  extraImmediateUse.I.vertexShader = extraImmediateUse.I.vertexShader.replace(
+    '\tvar objectMatrix : mat4x4<f32>;\n',
+    '\tvar objectMatrix : mat4x4<f32>;\n\tlet forbidden = threeImmediateDrawBase;\n',
+  );
+  assertFailed(
+    normalizeImmediateAifRenderShaderLanes(extraImmediateUse),
+    /only the declaration and address use/,
+  );
+
+  const extraImmediateVariable = clone(input);
+  extraImmediateVariable.I.vertexShader = extraImmediateVariable.I.vertexShader.replace(
+    'var<immediate> threeImmediateDrawBase : u32;\n',
+    'var<immediate> threeImmediateDrawBase : u32;\nvar<immediate> hiddenImmediate : u32;\n',
+  );
+  assertFailed(
+    normalizeImmediateAifRenderShaderLanes(extraImmediateVariable),
+    /exactly one total immediate variable declaration/,
+  );
 });
 
 test('lane-local shader evidence audits feature semantics without a portable lane', async () => {
