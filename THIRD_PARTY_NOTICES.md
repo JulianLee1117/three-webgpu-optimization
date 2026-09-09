@@ -2,13 +2,14 @@
 
 ## Three.js and three-mesh-bvh
 
-The shader-training examples and generated shaders use Three.js 0.185.1. The
+The shader-training, constrained-editing and material-shading examples, retained
+source snapshots and generated shaders use Three.js 0.185.1. The
 triangle-query reproduction, retained shader evidence and minimal correction
 derive from three-mesh-bvh 0.9.15. Both projects use the MIT license; their complete
 notices are retained in [Three.js](licenses/three-MIT.txt) and
 [three-mesh-bvh](licenses/three-mesh-bvh-MIT.txt). Portable bundles retain the
 applicable notices and bundle legal comments. No Three Blocks implementation is
-included in either the trainable-TSL or triangle-query portable demo.
+included in the trainable-TSL, constrained-editing or triangle-query portable demos.
 
 ## Three Blocks
 

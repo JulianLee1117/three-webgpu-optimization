@@ -1,0 +1,157 @@
+{
+  "kind": "constraint-editing-public-evidence-v1",
+  "created": "2026-09-09T21:12:45.339Z",
+  "reports": [
+    {
+      "id": "cpu-v1",
+      "reportKind": "constraint-editing-cpu-v1",
+      "file": "cpu-v1.json.gz",
+      "included": true,
+      "experimentStatus": "failed",
+      "originalRawSHA256": "f57da1bf064596d130c872554b6f8ec0875cedf51861a4b38fa7076253400369",
+      "publicJSONSHA256": "f57da1bf064596d130c872554b6f8ec0875cedf51861a4b38fa7076253400369",
+      "gzipSHA256": "d9316acf056e4c95fc76b98a58536e61e4fe4f3180b445ebfbd9769a420a4ec4",
+      "gzipBytes": 93350,
+      "publicBytes": 490978,
+      "redactions": [],
+      "exclusionReason": null,
+      "sourceSnapshot": "cpu-v1"
+    },
+    {
+      "id": "cpu-v2",
+      "reportKind": "constrained-motion-cpu-v2",
+      "file": "cpu-v2.json.gz",
+      "included": true,
+      "experimentStatus": "passed",
+      "originalRawSHA256": "69fe78ff3fa33b5af96a993812752884704fd2071b0606881830adc830f1cd21",
+      "publicJSONSHA256": "69fe78ff3fa33b5af96a993812752884704fd2071b0606881830adc830f1cd21",
+      "gzipSHA256": "214063984f1f65d5e78f01205a691da772641813b6745f8fe292bb747115f892",
+      "gzipBytes": 211966,
+      "publicBytes": 1387678,
+      "redactions": [],
+      "exclusionReason": null,
+      "sourceSnapshot": "cpu-v2"
+    },
+    {
+      "id": "2026-09-09T21-11-59.435Z-ribbon-original-fit",
+      "reportKind": "constraint-editing-gpu-v2",
+      "file": "2026-09-09T21-11-59.435Z-ribbon-original-fit.json.gz",
+      "included": true,
+      "experimentStatus": "passed",
+      "originalRawSHA256": "f7e0cea277a06556e1f191e323ea7daedc77822e96cc763fa4b5da937a2d64e6",
+      "publicJSONSHA256": "f7e0cea277a06556e1f191e323ea7daedc77822e96cc763fa4b5da937a2d64e6",
+      "gzipSHA256": "eaa32de7ab52557ee0014132833606c15f99b8cda1633b421148232138905451",
+      "gzipBytes": 228049,
+      "publicBytes": 1439384,
+      "rawBytes": 1439384,
+      "redactions": [],
+      "exclusionReason": null,
+      "sourceSnapshotsEmbedded": true
+    },
+    {
+      "id": "2026-09-09T21-12-28.902Z-tentacle-original-fit",
+      "reportKind": "constraint-editing-gpu-v2",
+      "file": "2026-09-09T21-12-28.902Z-tentacle-original-fit.json.gz",
+      "included": true,
+      "experimentStatus": "passed",
+      "originalRawSHA256": "896fff27e952fb56410e9cda01deb4281ff382b37831fd58b86c350810ccadfa",
+      "publicJSONSHA256": "896fff27e952fb56410e9cda01deb4281ff382b37831fd58b86c350810ccadfa",
+      "gzipSHA256": "3d3c9b0c011f1097e997f48c38784f92df517333f18cc4a0badc95e789b7bff7",
+      "gzipBytes": 287264,
+      "publicBytes": 1769099,
+      "rawBytes": 1769099,
+      "redactions": [],
+      "exclusionReason": null,
+      "sourceSnapshotsEmbedded": true
+    },
+    {
+      "id": "2026-09-09T21-12-56.261Z-ribbon-late-target-fit",
+      "reportKind": "constraint-editing-gpu-v2",
+      "file": "2026-09-09T21-12-56.261Z-ribbon-late-target-fit.json.gz",
+      "included": true,
+      "experimentStatus": "passed",
+      "originalRawSHA256": "f84b74f30e3a16994794712afd154f605015a3c92907529b7f8e0706cc9ee28d",
+      "publicJSONSHA256": "f84b74f30e3a16994794712afd154f605015a3c92907529b7f8e0706cc9ee28d",
+      "gzipSHA256": "da115435366bead3df900424305cfe80d556524adc17763ee328655009c2d63b",
+      "gzipBytes": 209117,
+      "publicBytes": 1188153,
+      "rawBytes": 1188153,
+      "redactions": [],
+      "exclusionReason": null,
+      "sourceSnapshotsEmbedded": true
+    },
+    {
+      "id": "2026-09-09T21-13-05.152Z-tentacle-late-target-fit",
+      "reportKind": "constraint-editing-gpu-v2",
+      "file": "2026-09-09T21-13-05.152Z-tentacle-late-target-fit.json.gz",
+      "included": true,
+      "experimentStatus": "passed",
+      "originalRawSHA256": "7b29e5d4ccca7ba68820a8148ecd45d730a504203f1238293bf54f9495c10128",
+      "publicJSONSHA256": "7b29e5d4ccca7ba68820a8148ecd45d730a504203f1238293bf54f9495c10128",
+      "gzipSHA256": "6eb1625cbb2878f151b9a440c1559f0fb391fffa15c0d4e61f4592c1fffad6b0",
+      "gzipBytes": 280213,
+      "publicBytes": 1825261,
+      "rawBytes": 1825261,
+      "redactions": [],
+      "exclusionReason": null,
+      "sourceSnapshotsEmbedded": true
+    },
+    {
+      "id": "2026-09-09T20-59-37.966Z-tentacle-parity",
+      "reportKind": "constraint-editing-gpu-v1",
+      "file": "2026-09-09T20-59-37.966Z-tentacle-parity.json.gz",
+      "included": true,
+      "experimentStatus": "passed",
+      "originalRawSHA256": "172fd9dff96b9b0c01f58f7060abf4451bbbafa7eca89c5ceaebf781cb8bd768",
+      "publicJSONSHA256": "172fd9dff96b9b0c01f58f7060abf4451bbbafa7eca89c5ceaebf781cb8bd768",
+      "gzipSHA256": "9f71cd505826e292b2c8bdba23e4be82e4392ea561ddd5c5602618b14e9e092d",
+      "gzipBytes": 62245,
+      "publicBytes": 242982,
+      "rawBytes": 242982,
+      "redactions": [],
+      "exclusionReason": null,
+      "sourceSnapshotsEmbedded": false
+    },
+    {
+      "id": "2026-09-09T20-59-59.242Z-ribbon-parity",
+      "reportKind": "constraint-editing-gpu-v1",
+      "file": "2026-09-09T20-59-59.242Z-ribbon-parity.json.gz",
+      "included": true,
+      "experimentStatus": "passed",
+      "originalRawSHA256": "08c85d106d620e2b117cc3bba0cccd1d3c58bf4011b82c63bd7134abb49641d3",
+      "publicJSONSHA256": "08c85d106d620e2b117cc3bba0cccd1d3c58bf4011b82c63bd7134abb49641d3",
+      "gzipSHA256": "58e37411c32c63a8d9f4294aeaec266d4c6422b6d8bec2dcff219dc3e45043b2",
+      "gzipBytes": 52877,
+      "publicBytes": 226288,
+      "rawBytes": 226288,
+      "redactions": [],
+      "exclusionReason": null,
+      "sourceSnapshotsEmbedded": false
+    }
+  ],
+  "sourceSnapshots": {
+    "cpu-v1": {
+      "directory": "source/cpu-v1",
+      "files": {
+        "experiments/constraint-editing/programs.js": "54347cc926286bda6a08f03f7fc2f9473123562ae7e3b1a6b0ec3f5796f07f83",
+        "experiments/constraint-editing/fixtures.mjs": "638f09b62e3f1b35877543e12f9195905f36de8a8aacef1e7fcc412795ea7e1f",
+        "experiments/constraint-editing/solver.mjs": "6fbeedd34e53cd73881722ed652ef92df2aea2e5dfe425a90b3579704420f4c1",
+        "experiments/constraint-editing/PROTOCOL.md": "734c72bcf96284d2f5cefdbb21a444e3da24a539f6027a1d421fcbb71d92d01a",
+        "scripts/check-constraint-editing.mjs": "10375e6be982925f3e66adeae360a5e5508776a6297f6238e0f8beb665b22dec"
+      }
+    },
+    "cpu-v2": {
+      "directory": "source/cpu-v2",
+      "files": {
+        "experiments/constraint-editing/programs.js": "54347cc926286bda6a08f03f7fc2f9473123562ae7e3b1a6b0ec3f5796f07f83",
+        "experiments/constraint-editing/fixtures.mjs": "638f09b62e3f1b35877543e12f9195905f36de8a8aacef1e7fcc412795ea7e1f",
+        "experiments/constraint-editing/solver.mjs": "6fbeedd34e53cd73881722ed652ef92df2aea2e5dfe425a90b3579704420f4c1",
+        "experiments/constraint-editing/PROTOCOL.md": "734c72bcf96284d2f5cefdbb21a444e3da24a539f6027a1d421fcbb71d92d01a",
+        "experiments/constraint-editing/solver-constrained.mjs": "dbdd7249acbc453e40b3572651abb9db4a5576148ced9e13eba0e8f00a419024",
+        "experiments/constraint-editing/CONSTRAINED-PROTOCOL.md": "ae20cae47bc6363ce5d847a79038d5bb68c906dc62f6ae39e66ddc36bae9d7db",
+        "scripts/check-constrained-motion.mjs": "9af1b83718f33717b68f58fc692fc5c2bc191b0feec21f6a4e9d483177bbd737"
+      }
+    }
+  },
+  "updated": "2026-09-09T21:16:51.630Z"
+}

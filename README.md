@@ -4,7 +4,16 @@ Small, reproducible experiments toward better tools for editable Three.js scenes
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).
 
-- **Trainable native TSL graphs — new capability experiment.** A forward Three.js
+- **Constrained shader editing — new capability experiment.** Drag a target on an
+  animated shader object, fit its existing parameters, and preserve motion while
+  clearing an obstacle at sampled times. Two native TSL programs, eight passing
+  GPU lanes, exact agreement in 36 rendered comparisons, and parameter export.
+  [Run the editor](experiments/constraint-editing/README.md).
+- **Stock material derivatives — useful boundary, filtering candidate rejected.**
+  Native stock-shading expansion matches Three's rendered output; five strict
+  hardware derivative checks and both material-mip quality fixtures fail.
+  [Preserved results](experiments/material-mips/README.md).
+- **Trainable native TSL graphs — verified capability experiment.** A forward Three.js
   shader graph generates its own parameter gradients. Learn procedural or neural
   surfaces from editable examples and export the weights. Four GPU cases pass;
   no speed advantage is established. [Run the lab](experiments/trainable-tsl/README.md).
@@ -29,18 +38,19 @@ Start with the [experiment index](experiments/README.md) and
 
 ```sh
 npm ci
-npm run demo:trainable-tsl
+npm run demo:constraint-editing
 ```
 
-Open the printed localhost URL in a WebGPU-capable Chrome. The training demo starts
-idle and caps each requested fit at 160 steps. No model download is needed.
+Open the printed localhost URL in a WebGPU-capable Chrome. The editor starts idle
+and caps requested fits and playback at twelve seconds. No model download is needed.
+The height-field trainer is available with `npm run demo:trainable-tsl`.
 The triangle comparison is available separately with `npm run demo:triangle-query`.
 The tested setup is Windows, Chrome 152 and an RTX 5070 Ti; other setups need
 validation. These research prototypes have explicit limits, recorded comparisons
 and documented prior art.
 
-Selected compressed reports and CPU verifiers are included with the trainable-TSL
-and triangle-query experiments. Other raw local reports, model downloads,
+Selected compressed reports and CPU verifiers are included with constraint editing,
+material mips, trainable TSL and triangle queries. Other raw local reports, model downloads,
 generated bundles and Python environments stay outside Git. Some historical
 analyses refer to local source checkpoints unavailable in a fresh clone. Existing
 historical protocols and consumed attempt limits remain in force.

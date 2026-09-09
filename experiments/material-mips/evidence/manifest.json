@@ -1,0 +1,104 @@
+{
+  "format": "material-mips-portable-evidence-v1",
+  "createdAt": "2026-09-09T20:58:15.084Z",
+  "reports": [
+    {
+      "id": "load-failure",
+      "source": "results/development/material-mips/2026-09-09T20-39-57.618Z-parity/report.json",
+      "status": "failed",
+      "archive": "load-failure-report.json.gz",
+      "archiveBytes": 731,
+      "archiveSha256": "cb574773ef3c6fe7b102bd9826a5880ea0ca3b5651618b308978beb5c1be5232",
+      "rawBytes": 1511,
+      "rawSha256": "04ec2f793dd544cf78621f91a2b2d65415f0bfc0f5a9772df203143ea7870426",
+      "portableBytes": 1464,
+      "portableSha256": "31cc3ea3eb4b0f08f5815b574f2308d17a3b5d20e965fc180b36dd436470a22d",
+      "sanitization": {
+        "changes": [
+          {
+            "jsonPointer": "/failure",
+            "operation": "Replace absolute local workspace prefix with <workspace>/; preserve filename, line, and failure message",
+            "removedPrefixSha256": "ca980e787f235df25c06dfb0e178de8cd05910502c12f541b06e39612e94a9f6",
+            "replacement": "<workspace>/",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "forward-parity",
+      "source": "results/development/material-mips/2026-09-09T20-44-24.973Z-parity/report.json",
+      "status": "passed",
+      "archive": "forward-parity-report.json.gz",
+      "archiveBytes": 111381,
+      "archiveSha256": "484ce7a968f4596be7c9ef913dddb3b91ab017608765806f85077420bff205ef",
+      "rawBytes": 428297,
+      "rawSha256": "bfc341e58792f801a324b520ac3771a0ce319f8f83800a1646e12fbbf75ee24e",
+      "portableBytes": 428297,
+      "portableSha256": "bfc341e58792f801a324b520ac3771a0ce319f8f83800a1646e12fbbf75ee24e",
+      "sanitization": {
+        "changes": []
+      }
+    },
+    {
+      "id": "hardware-fd",
+      "source": "results/development/material-mips/2026-09-09T20-52-39.642Z-parity/report.json",
+      "status": "failed",
+      "archive": "hardware-fd-report.json.gz",
+      "archiveBytes": 889469,
+      "archiveSha256": "9f2700fb16f83addee5d3a57a8b5ed9576567430609e8217ae2618717ff93df2",
+      "rawBytes": 6299992,
+      "rawSha256": "d258a7e46b12c3ff14d6555c20c5aec1eb4a74f53c34517f7265ac2beca82902",
+      "portableBytes": 6299943,
+      "portableSha256": "4974e67775075ffb4a3aed596a4694e0bcb14e10b4832de2e4fc963faea62586",
+      "sanitization": {
+        "changes": [
+          {
+            "jsonPointer": "/failure",
+            "operation": "Replace absolute local workspace prefix with <workspace>/; preserve filename, line, and failure message",
+            "removedPrefixSha256": "93b41c2a03ecd543226f096b154471afe425d87be1b02a6075ebd7040e08378e",
+            "replacement": "<workspace>/",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "id": "cpu-utility",
+      "source": "results/development/material-mips-cpu/2026-09-09T20-38-10.401Z/report.json",
+      "status": "failed",
+      "archive": "cpu-utility-report.json.gz",
+      "archiveBytes": 392002,
+      "archiveSha256": "c96c6a9b451998ef1afb0f342ce734a47e0700b9b60ef9e32e3bce6eebe0416c",
+      "rawBytes": 1837068,
+      "rawSha256": "048d849e153d036c0f1dff59974d13415bf242a47e2689a322d9c9dc7b2fa72b",
+      "portableBytes": 1837068,
+      "portableSha256": "048d849e153d036c0f1dff59974d13415bf242a47e2689a322d9c9dc7b2fa72b",
+      "sanitization": {
+        "changes": []
+      }
+    }
+  ],
+  "notes": [
+    "Original local reports are untouched. Gzip preserves the complete portable JSON bytes.",
+    "Two failure stack traces have only their absolute workspace prefix replaced; raw and portable hashes distinguish them. No result arrays, source hashes, shader text, statuses, tolerances or metrics are removed.",
+    "The verifier checks hashes and retained numerical evidence; successful verification does not change a failed experimental gate."
+  ],
+  "files": [
+    {
+      "file": "README.md",
+      "bytes": 4034,
+      "sha256": "d1d0ab24ae640edee34079fd5baaa9164fb80bf3e2ebb51907f3cfb3c2e79f97"
+    },
+    {
+      "file": "analysis.json",
+      "bytes": 22603,
+      "sha256": "4c058759543c08042eca9a3a283cfe9869452dcbaab454e24c7bab1d35bc0067"
+    }
+  ],
+  "verifier": {
+    "file": "scripts/analyze-material-mips.mjs",
+    "bytes": 14734,
+    "sha256": "f265c96db712c28ccac6cfbfed6779bba7fba017520116f6294fc651b2db355a"
+  }
+}

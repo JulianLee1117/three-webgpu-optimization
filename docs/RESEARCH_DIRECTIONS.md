@@ -6,7 +6,32 @@ This document records research priorities and the evidence behind each decision.
 See the [experiment index](../experiments/README.md)
 for existing commands and the documents that govern each result.
 
-## Current capability: trainable native shader graphs
+## Current capability: constrained edits of native shader motion
+
+[The constrained editor](../experiments/constraint-editing/README.md) extends native
+graph differentiation with exact input rebinding, a shared constrained solver,
+pointer target edits and ordinary parameter export. The four fixed cases cover
+a wave ribbon and a nonlinear constant-curvature tentacle at two target phases.
+All eight AD/FD GPU lanes pass withheld-time quality and export checks; 36 actual
+rendered silhouettes match independent geometry exactly. This is a useful bounded
+integration, not a new motion-editing algorithm. The fixture reference oracles
+and constraints remain explicit; arbitrary generated programs are not evaluated.
+
+The first penalty solver failed motion retention on one program. Its report is
+preserved. A separately specified augmented-Lagrangian follow-up added explicit
+motion/shape constraints and two new targets before testing. It passed all four
+CPU cases and the GPU gate. The next meaningful generality test needs externally
+authored supported graphs and editing tasks, with the same adapter and declared
+constraints. More authored examples alone would not establish that generality.
+
+[Material mip fitting](../experiments/material-mips/README.md) was also investigated.
+Stock Three shading can be expanded without copying its forward BRDF equations,
+and rendered parity passes. However, ideal bilinear gradients do not satisfy all
+strict hardware-forward derivative checks, and both fitted mip fixtures regress
+on unseen lighting. Close that filtering claim at its negative gates. Retain the
+extended pure-graph math and evidence without promoting the failed application.
+
+## Foundation: trainable native shader graphs
 
 The [trainable TSL experiment](../experiments/trainable-tsl/README.md) generates
 reverse parameter gradients from a restricted native Three shader graph.

@@ -6,6 +6,29 @@ contribution with a clear demonstration; novelty and performance require evidenc
 The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
 decision and the criteria for continuing each direction.
 
+## Constrained shader editing — verified bounded capability experiment
+
+[Direct the motion](constraint-editing/README.md) rebinds one authored native TSL
+graph for rendering, batched evaluation and generated parameter derivatives.
+The demo edits tip targets on two animated programs, avoids a sphere at sampled
+times, retains motion and exports eight parameters. All eight final GPU lanes
+pass and all 36 rendered silhouette pairs match the independent numeric geometry
+exactly. This is a native integration, not new optimization mathematics or a
+general speedup. The failed first penalty solver is preserved alongside the
+successful separately declared constrained follow-up.
+
+Run `npm run demo:constraint-editing`. [Results and CPU verifiers](constraint-editing/RESULTS.md).
+
+## Material mip fitting — candidate rejected; shading parity retained
+
+[The stock-shading bridge](material-mips/README.md) expands actual Three 0.185.1
+metallic direct-light functions. Rendered forward parity passes, while five of
+1,521 smooth hardware-forward finite-difference checks fail fixed tolerances.
+Both mip-fitting fixtures also regress against the strongest roughness-only
+baseline on withheld lighting. Preserve these limits; no filtering improvement
+or exact hardware-gradient claim is justified. Compressed evidence and a CPU
+verifier are included.
+
 ## Trainable native TSL — verified bounded capability experiment
 
 [Train a forward shader graph](trainable-tsl/README.md) using automatically
