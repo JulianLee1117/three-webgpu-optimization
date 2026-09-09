@@ -1,0 +1,94 @@
+{
+  "kind": "footprint-filtering-evidence-v1",
+  "id": "2026-09-09T22-36-41.222Z-gpu",
+  "file": "report.json.gz",
+  "role": "primary",
+  "reason": "Complete prescribed matrix after API shutter guard and UI stale-open fix.",
+  "reportKind": "footprint-filtering-gpu-report-v1",
+  "status": "passed",
+  "originalRawSHA256": "e62195ffbaa53ad50fb5d70f0798e8e2f16e6cf178cbe302dbd4acb153188fe1",
+  "publicJSONSHA256": "e62195ffbaa53ad50fb5d70f0798e8e2f16e6cf178cbe302dbd4acb153188fe1",
+  "gzipSHA256": "6a22b03a1b61abf4e984e0c70f2829fa84584292e1999fc8219570f1b7a6f69b",
+  "rawBytes": 49376762,
+  "publicJSONBytes": 49376762,
+  "gzipBytes": 9376135,
+  "redactions": [],
+  "relatedReports": [
+    {
+      "id": "2026-09-09T22-32-26.078Z-gpu",
+      "file": "first-pass.json.gz",
+      "role": "earlier-success",
+      "reason": "First complete successful matrix, before the API guard and UI fix; preserved in full.",
+      "reportKind": "footprint-filtering-gpu-report-v1",
+      "status": "passed",
+      "originalRawSHA256": "b74545f180e5988232cb2a8c7b60fa36966b930ba71614659f95784a4475d727",
+      "publicJSONSHA256": "b74545f180e5988232cb2a8c7b60fa36966b930ba71614659f95784a4475d727",
+      "gzipSHA256": "c701434e107cd3451f448451d10d9b9eddc33d0de0cc9805f7157f3faa395947",
+      "rawBytes": 49375266,
+      "publicJSONBytes": 49375266,
+      "gzipBytes": 9375724,
+      "redactions": []
+    },
+    {
+      "id": "2026-09-09T22-31-26.064Z-gpu",
+      "file": "load-failure.json.gz",
+      "role": "excluded-load-failure",
+      "reason": "Relative module route returned 404 before runProbe could be invoked; no experiment GPU run.",
+      "reportKind": "footprint-filtering-gpu-report-v1",
+      "status": "failed",
+      "originalRawSHA256": "436895857eb265617d97f5a57aafd7a3c1a7489b563064cf2cf7de44199f70ff",
+      "publicJSONSHA256": "e96aa6105c9f81e491ab27a56c60d8dbcf1c33a5bb41ee18366b50583c687f28",
+      "gzipSHA256": "c54e61ede0ea7d62c905c3da4afa7070345e832534d07c4682bdb1467cafb6b3",
+      "rawBytes": 107711,
+      "publicJSONBytes": 107665,
+      "gzipBytes": 34830,
+      "redactions": [
+        {
+          "path": "/failure",
+          "kind": "workspace-prefix",
+          "replacement": "<workspace>",
+          "occurrences": 1
+        }
+      ]
+    },
+    {
+      "id": "2026-09-09T22-37-55.334Z-ui",
+      "file": "ui-report.json.gz",
+      "role": "ui-validation",
+      "reportKind": "footprint-ui-v1",
+      "status": "passed",
+      "originalRawSHA256": "60fb1197ad0bc788c177aaa8e026941e17ad2cce1f54191f5b8f5073140a99c4",
+      "publicJSONSHA256": "60fb1197ad0bc788c177aaa8e026941e17ad2cce1f54191f5b8f5073140a99c4",
+      "gzipSHA256": "8bc11132fddb04756294714e10e5121a62902c3bd19b62d70caaf14ad1eabe78",
+      "rawBytes": 4122,
+      "gzipBytes": 985,
+      "redactions": []
+    },
+    {
+      "id": "2026-09-09T22-43-35.082Z-ui",
+      "file": "portable-ui-report.json.gz",
+      "role": "portable-ui-validation",
+      "reportKind": "footprint-ui-v1",
+      "status": "passed",
+      "originalRawSHA256": "e25c0d728ade00c1807b7dd9ed70ffc843aaa12badb14addb10796015899186d",
+      "publicJSONSHA256": "e25c0d728ade00c1807b7dd9ed70ffc843aaa12badb14addb10796015899186d",
+      "gzipSHA256": "09f2f6d4c04733488600280b6cb1b9c7c8177b16c53747bd3f81e7f62ae0ed27",
+      "rawBytes": 4122,
+      "gzipBytes": 985,
+      "redactions": []
+    }
+  ],
+  "cohortEquality": {
+    "comparison": "Object.is for every retained number; JSON equality for each cell quality record",
+    "rgbaValues": 1204224,
+    "referenceValues": 442368,
+    "identical": true,
+    "changedSources": [
+      "experiments/footprint-filtering/app.js",
+      "experiments/footprint-filtering/compiler.js",
+      "experiments/footprint-filtering/compiler.test.mjs",
+      "experiments/footprint-filtering/README.md"
+    ]
+  },
+  "interpretation": "Complete raw records, including pixels, reference arrays, shader text, source snapshots, error/lifecycle records and telemetry. Checksums establish retained-byte consistency, not independent GPU execution attestation. The sole redaction is the disclosed workspace prefix in the excluded load failure."
+}

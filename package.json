@@ -16,6 +16,9 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "demo:footprint-filtering": "node scripts/run-footprint-filtering.mjs --serve",
+    "check:footprint-filtering": "node scripts/run-footprint-filtering.mjs",
+    "test:footprint-filtering": "node --test experiments/footprint-filtering/*.test.mjs",
     "demo:constraint-editing": "node scripts/run-constraint-editing.mjs --serve",
     "check:constraint-editing": "node scripts/run-constraint-editing.mjs",
     "analyze:constraint-editing": "node scripts/analyze-constraint-editing.mjs",

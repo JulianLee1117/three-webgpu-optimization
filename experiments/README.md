@@ -6,6 +6,27 @@ contribution with a clear demonstration; novelty and performance require evidenc
 The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
 decision and the criteria for continuing each direction.
 
+## Procedural footprint filtering — verified native material integration
+
+[Signal Loom](footprint-filtering/README.md) expands an existing native TSL color
+graph into joint Fourier terms and integrates each over a pixel and a material
+exposure interval. This retains correlations and low-frequency beats between
+fine patterns. Three programs and four fixed footprint/exposure conditions pass
+all twelve GPU correctness cases. All nine nonmagnified cases reduce RGB RMSE
+by over 99.99% versus point sampling and beat the matched 64-sample control.
+The manually filtered baseline also passes; no speed advantage is measured.
+
+The exact mathematical class is constant-amplitude trigonometric polynomials
+with affine phases. The folded, lit interactive illustration uses local
+footprint approximations. Filtering theory is established; this result concerns
+the automatic native TSL integration. Read its [scope and results](footprint-filtering/RESULTS.md).
+
+```sh
+npm run demo:footprint-filtering
+npm run test:footprint-filtering
+node scripts/analyze-footprint-filtering.mjs --self-test
+```
+
 ## Constrained shader editing — verified bounded capability experiment
 
 [Direct the motion](constraint-editing/README.md) rebinds one authored native TSL

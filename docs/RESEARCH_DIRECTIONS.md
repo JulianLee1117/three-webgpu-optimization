@@ -6,6 +6,29 @@ This document records research priorities and the evidence behind each decision.
 See the [experiment index](../experiments/README.md)
 for existing commands and the documents that govern each result.
 
+## Current material direction: automatic pixel and exposure integration
+
+[Signal Loom](../experiments/footprint-filtering/README.md) is a reusable transform
+of finite native TSL trigonometric color expressions. Expanding products before
+filtering preserves the interference between phases; individual-factor filtering
+does not. Native screen derivatives and generated time derivatives supply the
+pixel/exposure factors. An independent exact filter and numerical quadrature
+provide the reference, with point sampling and a matched 64-sample control.
+
+The final twelve-case GPU screen passes correctness and all nine nonmagnified
+utility gates. Error reductions exceed 99.99% relative to point sampling in those
+nine cases. The manual analytical shader has comparable accuracy, and supersampling
+is more accurate at magnification where errors are already tiny. There is no
+timing result or universal improvement claim. Full reports and CPU verifiers are
+portable; a close/reopen lifecycle race found in review was fixed separately.
+
+This is an actionable native material-tool improvement. Automatic procedural
+filtering and its Fourier mathematics have direct prior art; neither is claimed
+new. The next substantive extension would need independently sourced practical
+materials or a separately bounded nonlinear-phase/error study, not more repetitions
+of these affine fixtures. Geometry motion blur and general AI-shader support are
+not established. The older experiments below retain their own completed decisions.
+
 ## Current capability: constrained edits of native shader motion
 
 [The constrained editor](../experiments/constraint-editing/README.md) extends native

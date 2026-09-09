@@ -4,6 +4,12 @@ Small, reproducible experiments toward better tools for editable Three.js scenes
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).
 
+- **Procedural pixel and exposure filtering — new visible improvement.** Transform
+  an existing native TSL color graph into its pixel/shutter average, preserving
+  interference between fine patterns. Twelve GPU cases pass; nine minification
+  and exposure cases reduce error by over 99.99% versus point sampling. The method
+  has a restricted expression class and established filtering mathematics.
+  [Try Signal Loom](experiments/footprint-filtering/README.md).
 - **Constrained shader editing — new capability experiment.** Drag a target on an
   animated shader object, fit its existing parameters, and preserve motion while
   clearing an obstacle at sampled times. Two native TSL programs, eight passing
@@ -38,18 +44,19 @@ Start with the [experiment index](experiments/README.md) and
 
 ```sh
 npm ci
-npm run demo:constraint-editing
+npm run demo:footprint-filtering
 ```
 
-Open the printed localhost URL in a WebGPU-capable Chrome. The editor starts idle
-and caps requested fits and playback at twelve seconds. No model download is needed.
+Open the printed localhost URL in a WebGPU-capable Chrome. Signal Loom starts idle
+and caps requested playback at twelve seconds. No model download is needed.
+The motion editor is available with `npm run demo:constraint-editing`.
 The height-field trainer is available with `npm run demo:trainable-tsl`.
 The triangle comparison is available separately with `npm run demo:triangle-query`.
 The tested setup is Windows, Chrome 152 and an RTX 5070 Ti; other setups need
 validation. These research prototypes have explicit limits, recorded comparisons
 and documented prior art.
 
-Selected compressed reports and CPU verifiers are included with constraint editing,
+Selected compressed reports and CPU verifiers are included with footprint filtering, constraint editing,
 material mips, trainable TSL and triangle queries. Other raw local reports, model downloads,
 generated bundles and Python environments stay outside Git. Some historical
 analyses refer to local source checkpoints unavailable in a fresh clone. Existing
