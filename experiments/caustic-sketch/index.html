@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><base href="/experiments/caustic-sketch/"><title>Sunprint — draw with light</title>
+<link rel="stylesheet" href="./style.css">
+<script type="importmap">{"imports":{"three":"/node_modules/three-r186/build/three.webgpu.js","three/webgpu":"/node_modules/three-r186/build/three.webgpu.js","three/tsl":"/node_modules/three-r186/build/three.tsl.js","three/addons/":"/node_modules/three-r186/examples/jsm/"}}</script>
+</head><body>
+<header><a class="brand" href="./"><span class="sun">✳</span> SUNPRINT</a><span class="eyebrow">A SMALL EXPERIMENT IN LIGHT</span><button id="about-toggle" class="quiet">How does it work? <span>↗</span></button></header>
+<main>
+<section class="workbench">
+ <div class="intro"><div class="eyebrow">GLASS CAN REMEMBER A DRAWING.</div><h1>Draw with light.</h1><p>A blank piece of glass. Your mark. A little refraction.</p></div>
+ <div id="stage" aria-label="Interactive three-dimensional optics experiment"><div class="loading" id="loading">Warming the light…</div></div>
+ <div class="viewbar"><div class="segmented" aria-label="Camera view"><button class="active" data-view="light">The light</button><button data-view="glass">The glass</button><button data-view="studio">The experiment</button></div><button id="rays" class="quiet" aria-pressed="false">Show light paths</button></div>
+ <div class="stage-note"><span class="dot"></span><span id="status" role="status">Preparing glass</span><span id="orbit-note">Drag the scene to look around</span></div>
+ <div class="focus"><div><label for="distance">Move the screen</label><span id="distance-label">In focus</span></div><div class="focus-range"><span>NEAR</span><input id="distance" type="range" min="6" max="14" step=".1" value="10"><span>FAR</span></div><button id="refocus" class="quiet">Return to focus ↺</button></div>
+</section>
+<aside>
+ <div class="step"><span>01</span><h2>Leave a little light.</h2></div><p class="aside-copy">Draw a bold shape. The glass will bend light into your mark.</p>
+ <div class="pad-wrap"><canvas id="drawing" width="256" height="256" aria-label="Draw the image you want the light to make"></canvas><span class="pad-hint">DRAW HERE</span></div>
+ <div class="pad-tools"><label class="brush-label">Stroke <input id="brush" type="range" min="7" max="34" value="16" aria-label="Brush width"></label><button id="undo" class="quiet">Undo</button><button id="clear" class="quiet">Clear</button></div>
+ <div class="presets"><button data-preset="heart" class="active" title="Heart">♡ <span>Heart</span></button><button data-preset="star" title="Star">✦ <span>Star</span></button><button data-preset="ring" title="Ring">◯ <span>Ring</span></button></div>
+ <div class="type-row"><input id="word" maxlength="3" placeholder="Or type 1–3 letters" aria-label="Letters to draw"><button id="type" aria-label="Use these letters">↵</button></div>
+ <button class="primary" id="shape">Shape the glass <span>↗</span></button>
+ <div class="step second"><span>02</span><h2>Follow the change.</h2></div><p class="aside-copy">Move the screen out of focus. Inspect the curved glass. Flatten it and watch your image disappear.</p>
+ <button id="flatten" class="secondary" aria-pressed="false">Flatten the glass</button><button id="export" class="quiet download">Save this glass · STL ↓</button>
+ <p class="footnote">Made locally in your browser.<br>No image is projected onto the screen.</p>
+</aside>
+</main>
+<dialog id="about"><button id="about-close" class="quiet close">Close ×</button><div class="eyebrow">A DRAWING BECOMES GEOMETRY</div><h2>One piece of glass.<br>Thousands of tiny lenses.</h2><p>The drawing tells an optimizer where light should land. It changes the surface of a glass slab until refracted rays gather into that shape.</p><p>Three.js WebGPU then traces 16,384 light samples through that surface. The screen receives only those samples; it never receives your drawing as a texture.</p><p>Inverse caustic design is established research. This experiment combines it with a live browser drawing tool, a Three.js TSL light renderer, and a separate ray tracer for checking the result.</p><p class="small">The model uses an ideal parallel beam, a fixed refractive index of 1.49, and one transmitted path through a flat entry face and a curved exit face. It omits diffraction and internal reflections. The exported mesh approximates the optimized surface; it is an experiment, not a calibrated fabrication design.</p><a href="https://github.com/dylanmsu/fast_caustic_design" target="_blank" rel="noopener">Explore prior inverse-caustic research ↗</a></dialog>
+<script type="module" src="./main.mjs"></script></body></html>

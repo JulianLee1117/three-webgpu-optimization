@@ -6,7 +6,30 @@ This document records research priorities and the evidence behind each decision.
 See the [experiment index](../experiments/README.md)
 for existing commands and the documents that govern each result.
 
-## Current direction: physical material editing and construction
+## Current experiment: drawing with refractive glass
+
+[Sunprint](../experiments/caustic-sketch/README.md) puts inverse caustic design
+behind a drawing canvas: target mark → optimized surface → independent forward
+light simulation. Changing receiver distance and flattening the glass make the
+geometry's effect directly testable. The browser uses a bounded CPU worker for
+fitting and Three r186 TSL for photon propagation and accumulation.
+
+The mathematical family has substantial prior art, including Mitsuba's existing
+heightmap-caustic tutorial and fabricated freeform optical elements. The
+[source audit](../experiments/caustic-sketch/PRIOR_ART.md) includes recent 2026
+double-freeform work, which controls more than this single-surface experiment.
+The justified result here is an interactive implementation with independent
+verification, not a claim of a new optical principle or best solver.
+
+A parallel feasibility screen tested a vision-only browser observer with
+SmolVLM-256M, a fixed question, frozen rendered camera pixels, and a higher
+precision vision-encoder control. Both configurations produced inconsistent
+descriptions of clear objects. That particular model/export/runtime combination
+was rejected as the foundation for fair gameplay; this does not establish that
+vision-driven gameplay or the model family is generally infeasible. No model
+download or inference dependency is needed by Sunprint.
+
+## Retained direction: physical material editing and construction
 
 [MatterForge](../experiments/matter-forge/README.md) is the main new prototype:
 closed mesh → persistent particles → liquid through a grille → cast in a mold →

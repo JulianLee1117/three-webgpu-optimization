@@ -96,7 +96,10 @@
     "analyze:shader-bounds": "node scripts/analyze-tsl-bounds.mjs",
     "demo:local-elasticity": "node scripts/run-local-elasticity.mjs --serve",
     "test:local-elasticity": "node --test experiments/local-elasticity/*.test.mjs",
-    "check:local-elasticity": "node scripts/check-local-elasticity-cpu.mjs"
+    "check:local-elasticity": "node scripts/check-local-elasticity-cpu.mjs",
+    "demo:sunprint": "node scripts/run-sunprint.mjs --serve",
+    "check:sunprint": "node scripts/run-sunprint.mjs",
+    "test:sunprint": "node --test experiments/caustic-sketch/*.test.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0",

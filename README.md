@@ -4,6 +4,11 @@ Small, reproducible experiments toward better tools for editable Three.js scenes
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).
 
+- **Sunprint — draw an image into glass.** Draw a mark and fit a refracting
+  surface, then move the screen, inspect the glass, or flatten it to remove the
+  image. A native Three.js TSL photon pass receives only the fitted geometry.
+  This combines established inverse optics with an interactive browser tool.
+  [Try the light experiment](experiments/caustic-sketch/README.md).
 - **MatterForge — physical material editing and construction.** Pour a closed
   mesh's material through a grille, cast it, remove the mold, and load the result.
   The solid cast holds cargo; the same cast left liquid lets it fall. CPU and
@@ -68,11 +73,12 @@ Start with the [experiment index](experiments/README.md) and
 
 ```sh
 npm ci
-npm run demo:footprint-filtering
+npm run demo:sunprint
 ```
 
-Open the printed localhost URL in a WebGPU-capable Chrome. Signal Loom starts idle
-and caps requested playback at twelve seconds. No model download is needed.
+Open the printed localhost URL in a WebGPU-capable Chrome. Sunprint fits a first
+drawing on entry, then renders only when something changes. No model download is needed.
+Signal Loom is available with `npm run demo:footprint-filtering` and caps playback at twelve seconds.
 The motion editor is available with `npm run demo:constraint-editing`.
 The height-field trainer is available with `npm run demo:trainable-tsl`.
 The triangle comparison is available separately with `npm run demo:triangle-query`.

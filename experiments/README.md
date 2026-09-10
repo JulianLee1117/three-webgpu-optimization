@@ -6,6 +6,19 @@ contribution with a clear demonstration; novelty and performance require evidenc
 The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
 decision and the criteria for continuing each direction.
 
+## Sunprint — interactive inverse optics
+
+[Sunprint](caustic-sketch/README.md) turns a drawing into a shaped glass surface.
+An independent Three.js TSL pass refracts light through that surface to form the
+screen image. Move the screen, flatten the glass, draw a different mark, or save
+the approximate mesh. The CPU optimizer and GPU light renderer use established
+methods; the experiment demonstrates an accessible, reusable browser workflow.
+Its [prior-art notes](caustic-sketch/PRIOR_ART.md) identify close precedents.
+
+```sh
+npm run demo:sunprint
+```
+
 ## MatterForge — material editing and physical construction
 
 [MatterForge](matter-forge/README.md) casts liquid through a grille, solidifies

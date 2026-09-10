@@ -1,0 +1,19 @@
+# Prior art and scope
+
+Inverse caustic design means choosing reflective or refractive geometry so that transported light forms a desired pattern. The problem, physical demonstrations, and several stronger optimization methods predate this experiment. Sunprint's contribution here is an inspectable browser implementation and direct manipulation workflow, not a claim to have invented image-forming glass.
+
+## Closely related work
+
+- **Papas et al., Goal-Based Caustics (2011).** Designs optical elements for prescribed caustics and demonstrates fabricated results. This is an early direct precedent for the basic image-to-optical-geometry goal. [Authors' project page](https://rgl.epfl.ch/publications/Papas2011Goal).
+- **Yue et al., Poisson-Based Continuous Surface Generation for Goal-Based Caustics (2014).** Computes a mapping between incident and target illumination, then obtains a continuous refracting surface through Poisson-based construction. Its parallel illumination, flat entrance, shaped exit, and receiving plane closely match this experiment's optical setup. Sunprint does not implement that paper's Poisson algorithm. [Author-hosted paper](https://graphics.cmlab.csie.ntu.edu.tw/~robin/docs/tog13.pdf).
+- **Mitsuba 3, Caustics Optimization tutorial.** Already demonstrates optimizing a glass heightmap to form a target image, using differentiable particle tracing, Adam, and geometry export. This is a close practical precedent; inverse rendering and export themselves are established capabilities. Sunprint instead uses a small analytical CPU optimization model and a separate Three.js / TSL forward pass. [Official tutorial](https://mitsuba.readthedocs.io/en/stable/src/inverse_rendering/caustics_optimization.html).
+- **Sun, Deng, and Zhang, End-to-end Surface Optimization for Light Control (2025; preprint 2024).** Combines optimal transport with rendering-guided surface optimization and fabrication constraints, and evaluates physical prototypes. Sunprint neither reproduces those manufacturing constraints nor establishes comparable quality. [Author preprint](https://arxiv.org/abs/2408.13117), [university publication record](https://orca.cardiff.ac.uk/id/eprint/178125/).
+- **Sun, Deng, and Zhang, Double-Freeform Lens Design for Angular-Spatial Control of Light Fields (2026).** Co-optimizes two freeform surfaces using targets on two receiver planes to control spatial and angular light distributions. This establishes recent prior art beyond Sunprint's single shaped surface and single focus plane. [Author preprint](https://arxiv.org/abs/2604.00831).
+
+## Numerical and rendering ingredients
+
+Matching sorted projections of point distributions is an established sliced-Wasserstein approach. Sunprint uses a finite set of one-dimensional projections and analytical derivatives of its own restricted optical map; it is not a new optimal-transport theory or a reproduction of a specific cited solver. For the broader family, see [Wu et al., Sliced Wasserstein Generative Models, CVPR 2019](https://openaccess.thecvf.com/content_CVPR_2019/papers/Wu_Sliced_Wasserstein_Generative_Models_CVPR_2019_paper.pdf).
+
+The GPU portion uses Three.js node materials, texture loads, instanced geometry, storage buffers, and compute readback. These are existing engine facilities. The useful implementation boundary is that the forward photon module accepts an optical surface, has no access to the target artwork, and can expose its ray positions for independent checking. [Three.js TSL documentation](https://threejs.org/docs/pages/TSL.html).
+
+The citations establish relationships and limit claims; they do not imply the authors endorse this implementation. Current evidence supports a bounded, simplified local experiment. It does not establish first-in-browser status, algorithmic superiority, fabrication accuracy, or suitability as a general scene caustics renderer.
