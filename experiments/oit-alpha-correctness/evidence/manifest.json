@@ -1,0 +1,22 @@
+{
+  "kind": "oit-alpha-public-evidence-v1",
+  "file": "2026-09-10T01-21-56.696Z.json.gz",
+  "reportSHA256": "9e76d7618746129b2023e80a15bc57d874d9673f90649a31182a809c9194d7b7",
+  "gzipSHA256": "393d25a151677462a6fb7fa0c070da2a23db6f7b420cf98c95b268b3c17f1a32",
+  "rawBytes": 432732,
+  "gzipBytes": 52592,
+  "redactions": [],
+  "reportKind": "oit-alpha-correctness-report-v1",
+  "excludedHarnessAttempts": [
+    {
+      "id": "2026-09-10T01-20-43.612Z",
+      "reportSHA256": "65af8405e739c97c000421df23ab34ca4356ff234b052bd12deabfb6117b1a7d",
+      "reason": "Harness used renderer.device instead of r186 renderer.backend.device; zero renders."
+    },
+    {
+      "id": "2026-09-10T01-21-16.334Z",
+      "reportSHA256": "0a6e2770ab95f2febae44d56b2124c3c38ec03289e16ff861a2fd580225d3fd0",
+      "reason": "Harness assumed unpadded RGBA8 readback; one direct render, no OIT result."
+    }
+  ]
+}

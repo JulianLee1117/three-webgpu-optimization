@@ -6,6 +6,18 @@ contribution with a clear demonstration; novelty and performance require evidenc
 The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
 decision and the criteria for continuing each direction.
 
+## OIT alpha — confirmed Three r186 coverage defect
+
+[The isolated WebGPU reproduction](oit-alpha-correctness/README.md) compares
+ordinary blending, stock OIT, and an alpha-only correction in five controlled
+fixtures. Stock omits transparent foreground coverage; the correction matches
+all 15,360 retained RGBA pixels. A portable CPU verifier checks pixels, source
+identity, readback layout, controls, and four deliberate corruptions.
+
+```sh
+node scripts/analyze-oit-alpha.mjs --self-test
+```
+
 ## Gaussian picking — confirmed Three r186 CPU query defect
 
 [The isolated reproduction](splat-query-correctness/README.md) invokes the

@@ -4,6 +4,10 @@ Small, reproducible experiments toward better tools for editable Three.js scenes
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).
 
+- **OIT foreground alpha — confirmed r186 correctness finding.** Transparent
+  foreground coverage is missing from output alpha. A one-expression correction
+  matches ordinary blending across 15,360 retained pixels in five controlled
+  fixtures. [Evidence and portable verifier](experiments/oit-alpha-correctness/README.md).
 - **Gaussian-splat picking — confirmed r186 correctness finding.** Rotated,
   elongated splats can be missed by the actual CPU raycast. Six fixed cases,
   an independent oracle, and an isolated conservative-bound correction are
