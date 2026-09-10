@@ -86,7 +86,10 @@
     "check:triangle-query": "node scripts/run-gpu-deform-collider.mjs --triangle-probe",
     "check:triangle-query:fixed": "node scripts/run-gpu-deform-collider.mjs --triangle-probe --corrected",
     "demo:shader-bounds": "node scripts/run-gpu-deform-collider.mjs --serve --corrected",
-    "analyze:shader-bounds": "node scripts/analyze-tsl-bounds.mjs"
+    "analyze:shader-bounds": "node scripts/analyze-tsl-bounds.mjs",
+    "demo:local-elasticity": "node scripts/run-local-elasticity.mjs --serve",
+    "test:local-elasticity": "node --test experiments/local-elasticity/*.test.mjs",
+    "check:local-elasticity": "node scripts/check-local-elasticity-cpu.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0",
@@ -94,7 +97,8 @@
     "three": "0.185.1",
     "three-blocks-v10": "npm:three-blocks@0.10.0",
     "three-blocks-v11": "npm:three-blocks@0.11.0",
-    "three-mesh-bvh": "0.9.15"
+    "three-mesh-bvh": "0.9.15",
+    "three-r186": "npm:three@0.186.0"
   },
   "devDependencies": {
     "playwright-core": "1.55.0",

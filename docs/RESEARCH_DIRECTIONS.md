@@ -6,6 +6,29 @@ This document records research priorities and the evidence behind each decision.
 See the [experiment index](../experiments/README.md)
 for existing commands and the documents that govern each result.
 
+## Active direction: local mechanics for captured point-based objects
+
+The [local-elasticity experiment](../experiments/local-elasticity/README.md)
+investigates browser preparation and simulation of an imported Gaussian-splat
+object, with the original appearance following the mechanical field in Three
+r186. Its initial data comes from an independent phone capture and a separate
+mesh-derived splat asset, not bespoke deformation fixtures.
+
+The useful question is whether captured/AI-produced point representations can
+become interactive browser assets without mesh conversion or server preparation.
+This is a creative integration opportunity, not a new elasticity algorithm.
+FreeForm already establishes the underlying method; Kaolin already offers
+server-driven web interaction, and SoftGLB already provides local mesh upload
+and soft-body simulation. Those systems are the relevant prior art.
+
+This prototype uses a much smaller mechanical basis than FreeForm's main
+examples. Numerical parity is necessary but does not establish physical fidelity,
+high-quality contact, arbitrary capture support, or a performance advantage.
+The decisive continuation criteria are useful behavior on independently supplied
+assets, controlled refinement comparisons, and demonstrable improvements over
+existing authoring workflows. The complete methods and current limits are in the
+experiment documentation. There is no demonstrated industry breakthrough yet.
+
 ## Current material direction: automatic pixel and exposure integration
 
 [Signal Loom](../experiments/footprint-filtering/README.md) is a reusable transform

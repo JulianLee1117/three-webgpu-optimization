@@ -4,6 +4,11 @@ Small, reproducible experiments toward better tools for editable Three.js scenes
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).
 
+- **Local elasticity for captured splats — active feasibility experiment.**
+  Prepare a mechanical field from an imported splat file in the browser, then
+  grab and deform it through Three r186. Uses established FreeForm mechanics;
+  a phone capture and a mesh-derived asset are the initial external cases.
+  [Run the experiment and read its limits](experiments/local-elasticity/README.md).
 - **Procedural pixel and exposure filtering — new visible improvement.** Transform
   an existing native TSL color graph into its pixel/shutter average, preserving
   interference between fine patterns. Twelve GPU cases pass; nine minification

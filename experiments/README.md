@@ -6,6 +6,25 @@ contribution with a clear demonstration; novelty and performance require evidenc
 The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
 decision and the criteria for continuing each direction.
 
+## Local elasticity — captured-object feasibility experiment
+
+[Local elasticity](local-elasticity/README.md) combines browser RKPM preparation,
+an implicit elastic solver, and the native Three r186 Gaussian splat renderer.
+The initial assets are an external phone capture and mesh-derived splats. There
+is no supplied rig, remote simulation, trained model, or motion recording.
+Material and integration volume are assumptions; the sparse model does not
+establish physical accuracy or general support. FreeForm owns the underlying
+method, and existing browser GLB soft-body tools are explicit prior art.
+
+```sh
+npm run demo:local-elasticity
+npm run test:local-elasticity
+npm run check:local-elasticity
+```
+
+Read [the bounded evidence](local-elasticity/RESULTS.md), including quality and
+out-of-sample limitations, before making claims about this capability.
+
 ## Procedural footprint filtering — verified native material integration
 
 [Signal Loom](footprint-filtering/README.md) expands an existing native TSL color

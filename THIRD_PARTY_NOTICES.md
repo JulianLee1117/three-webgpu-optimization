@@ -11,6 +11,18 @@ notices are retained in [Three.js](licenses/three-MIT.txt) and
 applicable notices and bundle legal comments. No Three Blocks implementation is
 included in the trainable-TSL, constrained-editing or triangle-query portable demos.
 
+## Local elasticity and captured assets
+
+The local-elasticity experiment additionally pins Three.js 0.186.0 through the
+`three-r186` npm alias and uses its GaussianSplat addon. Three.js is MIT licensed.
+The numerical implementation independently implements the published FreeForm
+method (Xiang et al., CVPR 2026), with equation/source references in each module;
+it does not bundle Kaolin or NVIDIA model weights. Bundled splat assets retain
+their separate licenses: Houseplant by Marcel Padilla, CC BY 4.0; Spot by Keenan
+Crane, CC0, converted to splats by Marcel Padilla. Provenance, unmodified source
+hashes, and attribution are in `experiments/local-elasticity/assets/manifest.json`
+and that experiment's README.
+
 ## Three Blocks
 
 This research harness declares version-pinned npm dependencies on `three-blocks@0.10.0` and `three-blocks@0.11.0`. Three Blocks is licensed under the [PolyForm Noncommercial License 1.0.0](https://polyformproject.org/licenses/noncommercial/1.0.0). Use and redistribution remain subject to those terms.

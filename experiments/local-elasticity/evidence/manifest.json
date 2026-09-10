@@ -1,0 +1,148 @@
+{
+  "kind": "local-elasticity-complete-evidence-v1",
+  "note": "Complete original JSON bytes. Earlier interaction/UI nonconvergence remains retained; fixed-version reruns are separate. No redactions.",
+  "reports": [
+    {
+      "file": "cpu-report.json.gz",
+      "originalSource": "results/development/local-elasticity-cpu/2026-09-10T00-10-38.217Z/report.json",
+      "originalRawSHA256": "52d63e1c5ddfcdb01ccf96cc17ea486cfa6f80ddcbb7851f6bc589bd952c4364",
+      "publicJSONSHA256": "52d63e1c5ddfcdb01ccf96cc17ea486cfa6f80ddcbb7851f6bc589bd952c4364",
+      "gzipSHA256": "502b833cfe6ec972f1d67b12e7737515d1610d1515b9e1f7355ea1a30ebe5a74",
+      "bytes": 2911413,
+      "gzipBytes": 779026,
+      "status": "completed",
+      "interpretation": "passed-independent-audit"
+    },
+    {
+      "file": "cpu-reference-audit.json.gz",
+      "originalSource": "results/development/local-elasticity-cpu/2026-09-10T00-10-38.217Z/reference-audit.json",
+      "originalRawSHA256": "76e1da4eaea762c0c326b3fbb29296a5c5a8e52955d8018c23a502123cb60b37",
+      "publicJSONSHA256": "76e1da4eaea762c0c326b3fbb29296a5c5a8e52955d8018c23a502123cb60b37",
+      "gzipSHA256": "b3e6463784a261c4b41e1ec1d62d389a322b7b34a64193511ec74d6d2a360507",
+      "bytes": 20749,
+      "gzipBytes": 3535,
+      "status": true,
+      "interpretation": "passed"
+    },
+    {
+      "file": "interaction-report.json.gz",
+      "originalSource": "results/development/local-elasticity-interaction/2026-09-10T00-13-41.554Z/report.json",
+      "originalRawSHA256": "07a4a7c7589059f440bb7d6ed480732d14f7199efa91d578de288809f0581e99",
+      "publicJSONSHA256": "07a4a7c7589059f440bb7d6ed480732d14f7199efa91d578de288809f0581e99",
+      "gzipSHA256": "f12f1796a3e9f23fc57d69f633365050755fe1a5412466fae7eec13e002dd1f3",
+      "bytes": 11374529,
+      "gzipBytes": 3104378,
+      "status": "failed-gates",
+      "interpretation": "retain-exact-status"
+    },
+    {
+      "file": "cpu-fixed-report.json.gz",
+      "originalSource": "results/development/local-elasticity-cpu/2026-09-10T00-22-30.451Z/report.json",
+      "originalRawSHA256": "a7df607f4df79d6b03d81fcf91a8804be3f4c796bf1c63b1da1f00a64ef2b558",
+      "publicJSONSHA256": "a7df607f4df79d6b03d81fcf91a8804be3f4c796bf1c63b1da1f00a64ef2b558",
+      "gzipSHA256": "53d7eae01d26cb2ccbdaa1c115d33cdf00b50d57335da3e0e7892914a42e4d0e",
+      "bytes": 2921308,
+      "gzipBytes": 781725,
+      "status": "completed",
+      "interpretation": "passed-independent-audit-after-roundoff-fix"
+    },
+    {
+      "file": "cpu-fixed-reference-audit.json.gz",
+      "originalSource": "results/development/local-elasticity-cpu/2026-09-10T00-22-30.451Z/reference-audit.json",
+      "originalRawSHA256": "c1ae3a66d7f1b13513d7388e0bc03d3173b1c5ed8141deae6bc67caf56113783",
+      "publicJSONSHA256": "c1ae3a66d7f1b13513d7388e0bc03d3173b1c5ed8141deae6bc67caf56113783",
+      "gzipSHA256": "524487bf104994ad4d975b9fd5e008bc14d70e62c245050543902fa9aa16fa40",
+      "bytes": 20749,
+      "gzipBytes": 3530,
+      "status": true,
+      "interpretation": "passed"
+    },
+    {
+      "file": "interaction-fixed-report.json.gz",
+      "originalSource": "results/development/local-elasticity-interaction/2026-09-10T00-23-26.774Z/report.json",
+      "originalRawSHA256": "40160b3408120dde0a6b5723eab6d5c35426785993a9e53f27fe44ebcf5609b6",
+      "publicJSONSHA256": "40160b3408120dde0a6b5723eab6d5c35426785993a9e53f27fe44ebcf5609b6",
+      "gzipSHA256": "5f61a142eeb41edab1232c34332415e0eb5e0d423b08c6c59e77ab6a8e666602",
+      "bytes": 11440157,
+      "gzipBytes": 3106059,
+      "status": "passed",
+      "interpretation": "passed-124-of-124-after-roundoff-fix"
+    },
+    {
+      "file": "gpu-covariance-report.json.gz",
+      "originalSource": "results/development/local-elasticity-gpu/2026-09-10T00-15-03.624Z-covariance/report.json",
+      "originalRawSHA256": "9b570476cd69ca41bbfbb5b8f25f97df7bb129294338d567e9b063439ac05564",
+      "publicJSONSHA256": "9b570476cd69ca41bbfbb5b8f25f97df7bb129294338d567e9b063439ac05564",
+      "gzipSHA256": "1091dc326e0490888f5251ddf589e20fc294654fa0d348fa066f340f57facf04",
+      "bytes": 1948735,
+      "gzipBytes": 448967,
+      "status": "passed",
+      "interpretation": "passed-eight-retained-gpu-cases"
+    },
+    {
+      "file": "gpu-covariance-reference-audit.json.gz",
+      "originalSource": "results/development/local-elasticity-gpu/2026-09-10T00-15-03.624Z-covariance/reference-audit.json",
+      "originalRawSHA256": "558219b79f384787fc8e68ca0c6568841d4ab5727a80dfb06596c1d85951a43a",
+      "publicJSONSHA256": "558219b79f384787fc8e68ca0c6568841d4ab5727a80dfb06596c1d85951a43a",
+      "gzipSHA256": "538c7143b46078dd8eb10af65b1d9a0059668b69b6590a7a4e58a9ae743aed9a",
+      "bytes": 5109,
+      "gzipBytes": 801,
+      "status": true,
+      "interpretation": "passed-independent-numpy-audit-no-new-gpu"
+    },
+    {
+      "file": "ui-before-roundoff-fix.json.gz",
+      "originalSource": "results/development/local-elasticity/2026-09-10T00-17-34.677Z-plant-ui/report.json",
+      "originalRawSHA256": "b22eb5c3c972af8087c071f5fc0b509a925129f61e7a262e4ffcde2615b20b34",
+      "publicJSONSHA256": "b22eb5c3c972af8087c071f5fc0b509a925129f61e7a262e4ffcde2615b20b34",
+      "gzipSHA256": "6ec88c5390ed0a1e60b2ce5f6e98bf12709728582dfc66588ac04277d9af0178",
+      "bytes": 276835,
+      "gzipBytes": 55026,
+      "status": "passed",
+      "interpretation": "functional-ui-pass-with-nonconverged-solves-retained"
+    },
+    {
+      "file": "bundle-ui-before-reset-fix.json.gz",
+      "originalSource": "results/development/local-elasticity-bundle/2026-09-10T00-29-02.566Z/report.json",
+      "originalRawSHA256": "e37b7a31d4116c0184a28d38bbabe22e459017670daadec31b4469f0a64c2e82",
+      "publicJSONSHA256": "e37b7a31d4116c0184a28d38bbabe22e459017670daadec31b4469f0a64c2e82",
+      "gzipSHA256": "2959ef6d0add847eda0b5c14dfc0d1deba7448dcfb46692f02bd2a89bd77ebc9",
+      "bytes": 240726,
+      "gzipBytes": 22515,
+      "status": "passed",
+      "interpretation": "Passed earlier packaged grab/release/reset-after-idle cases; superseded by the later reset-in-flight and count-boundary checks",
+      "package": {
+        "directory": "deliverables/local-elasticity-2026-09-10T00-28-21.645Z",
+        "manifestSHA256": "66bdd483df58fbd6772ae2409092d845268a85606d845b4c39cfe5b6e1679ae3",
+        "archiveSHA256": "08180fedb74dcd23f95d6d8fd2d04d02de9413e5f75ed62ae2a24a54727ea060"
+      }
+    },
+    {
+      "file": "bundle-ui-final.json.gz",
+      "originalSource": "results/development/local-elasticity-bundle/2026-09-10T00-32-17.950Z/report.json",
+      "originalRawSHA256": "cc584f06e90adedaed60255ed03cb1baebcd76a5310b4e7a917224f3d692859a",
+      "publicJSONSHA256": "cc584f06e90adedaed60255ed03cb1baebcd76a5310b4e7a917224f3d692859a",
+      "gzipSHA256": "72e4f4503b7df99f523837a5291c4539a9ebe8c69214e2fb342c01dc4652b127",
+      "bytes": 370645,
+      "gzipBytes": 32232,
+      "status": "passed",
+      "interpretation": "Passed final packaged plant grab/release/reset-while-pending, Spot file upload, early count rejection;46/46 solves converged,60frames,no external requests",
+      "package": {
+        "directory": "deliverables/local-elasticity-2026-09-10T00-32-07.938Z",
+        "manifestSHA256": "d3b6c3a9c01f4d363c9e9d46e9ede94b0f4358b1053a8aa1c068e970d4d2c2da",
+        "archiveSHA256": "f33f7164b78b5fc770fd607e71b81e61bcbc94a2b3c747f3912cbee3bab20336"
+      }
+    },
+    {
+      "file": "lifecycle-final.json.gz",
+      "originalSource": "results/development/local-elasticity-lifecycle/2026-09-10T00-33-49.850Z/report.json",
+      "originalRawSHA256": "4865c3a02a4a6c217de39e9d97ce3811f4ca2447356d58760bf1f30eb65e6aae",
+      "publicJSONSHA256": "4865c3a02a4a6c217de39e9d97ce3811f4ca2447356d58760bf1f30eb65e6aae",
+      "gzipSHA256": "9f52975dba64bd7c909b229ff175f1dfbdab24f3e73d0143f1338bef8c19e5ae",
+      "bytes": 238256,
+      "gzipBytes": 71915,
+      "status": "passed",
+      "interpretation": "Passed4/4 revised-source cancellation/error-cleanup cases;3 sequential devices destroyed,1render,no unexpected errors"
+    }
+  ]
+}

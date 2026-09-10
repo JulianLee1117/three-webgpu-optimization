@@ -1,0 +1,24 @@
+{
+  "source": "https://github.com/marcelpadilla/splats",
+  "pin": "ac7f3850ceadbc0483d10c9f0b597c2ba5e89009",
+  "assets": [
+    {
+      "id": "spot",
+      "file": "spot/spot_10k.splat",
+      "bytes": 320000,
+      "sha256": "6eabe6708f0ca8734437340784d15b3da0a5c60640e711e74232babd0ae1c666",
+      "license": "CC0-1.0",
+      "attribution": "Spot by Keenan Crane; mesh-to-splat conversion by Marcel Padilla.",
+      "origin": "mesh2splat"
+    },
+    {
+      "id": "plant",
+      "file": "plant/plant.splat",
+      "bytes": 3636736,
+      "sha256": "ce9d490b18f16d6730d832227bf541431b8b1a5d167c5a3fe89af4f324c0d8fd",
+      "license": "CC-BY-4.0",
+      "attribution": "Gaussian splat by Marcel Padilla, from https://github.com/marcelpadilla/splats, licensed CC-BY-4.0.",
+      "origin": "capture"
+    }
+  ]
+}
