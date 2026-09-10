@@ -1,0 +1,55 @@
+{
+  "n": 256,
+  "pitch": 0.00001,
+  "wavelength": 5.32e-7,
+  "apertureRadius": 54,
+  "distances": [
+    0.012,
+    0.03
+  ],
+  "iterations": 80,
+  "seed": 731,
+  "kind": [
+    "heart",
+    "letterA"
+  ],
+  "source": "Original multi-plane alternating-projection solver; phase-only data, no rendered target images",
+  "history": [
+    {
+      "iteration": 0,
+      "loss": 1.2103434097750114
+    },
+    {
+      "iteration": 10,
+      "loss": 0.2830391820978845
+    },
+    {
+      "iteration": 20,
+      "loss": 0.2566820431518334
+    },
+    {
+      "iteration": 30,
+      "loss": 0.24619660512982108
+    },
+    {
+      "iteration": 40,
+      "loss": 0.23946202911500294
+    },
+    {
+      "iteration": 50,
+      "loss": 0.23433810051574352
+    },
+    {
+      "iteration": 60,
+      "loss": 0.2303880499823638
+    },
+    {
+      "iteration": 70,
+      "loss": 0.2274207573081174
+    },
+    {
+      "iteration": 79,
+      "loss": 0.22574668740889886
+    }
+  ]
+}

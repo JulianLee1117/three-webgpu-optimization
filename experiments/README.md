@@ -6,6 +6,22 @@ contribution with a clear demonstration; novelty and performance require evidenc
 The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
 decision and the criteria for continuing each direction.
 
+## The Light Vault — playable multi-plane holography
+
+[The Light Vault](light-vault/README.md) encodes two images into one phase pattern.
+Move a detector through its computed wave field, capture both clear images to
+open the vault, then draw and save a new seal. Three r186 TSL calculates an inverse
+FFT at every requested depth. Capture checks read actual GPU intensity; a saved
+seal imports only after its phase reproduces both reference images.
+
+This combines established holography with a browser puzzle and creation tool.
+The [physical contract and prior art](light-vault/PHYSICS.md) distinguish the
+verified implementation from claims that have not been established.
+
+```sh
+npm run demo:light-vault
+```
+
 ## Sunprint — interactive inverse optics
 
 [Sunprint](caustic-sketch/README.md) turns a drawing into a shaped glass surface.

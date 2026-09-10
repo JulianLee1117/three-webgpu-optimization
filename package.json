@@ -99,7 +99,10 @@
     "check:local-elasticity": "node scripts/check-local-elasticity-cpu.mjs",
     "demo:sunprint": "node scripts/run-sunprint.mjs --serve",
     "check:sunprint": "node scripts/run-sunprint.mjs",
-    "test:sunprint": "node --test experiments/caustic-sketch/*.test.mjs"
+    "test:sunprint": "node --test experiments/caustic-sketch/*.test.mjs",
+    "demo:light-vault": "node scripts/run-light-vault.mjs --serve",
+    "check:light-vault": "node scripts/run-light-vault.mjs",
+    "test:light-vault": "node --test experiments/light-vault/*.test.mjs"
   },
   "dependencies": {
     "onnxruntime-web": "1.29.0",

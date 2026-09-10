@@ -1,0 +1,34 @@
+✔ committed phase round-trips with byte references and retains two verified images (91.8026ms)
+✔ quantization uses normalized intensity and does not alter input phase or amplitude (24.3823ms)
+✔ malformed JSON, unsupported formats and oversized UTF-8 inputs are rejected (14.2446ms)
+✔ every optical constant and depth bound must exactly match the fixed physical model (88.4271ms)
+✔ phase dimensions, type, finiteness and radian range are checked before simulation (57.1611ms)
+✔ references require exactly two complete byte grids with enough ink (105.7637ms)
+✔ real propagation rejects a valid-sized replacement phase, duplicate and unrelated references (252.6504ms)
+▶ committed plate produces a bounded, physically sampled volume preview
+  ✔ output is finite, bounded and leaves the source phase unchanged (1.5398ms)
+  ✔ cumulative ends partition points into ordered depth slices for receiver clipping (0.9503ms)
+  ✔ first and last slices match independent full-field propagation and 4 by 4 means (35.516ms)
+  ✔ malformed phase input is rejected before volume computation (0.2893ms)
+✔ committed plate produces a bounded, physically sampled volume preview (317.0241ms)
+ℹ Preview: 9747 points in 273.0 ms; 820 endpoint points independently verified.
+✔ 8 by 8 FFT agrees with an independent direct complex DFT in both directions (2.3482ms)
+✔ FFT round trip and Parseval normalization preserve complex field energy (2.6383ms)
+✔ a sampled plane wave acquires the analytic angular-spectrum phase (0.9448ms)
+✔ forward and conjugate propagation are inverses when no spectral samples are discarded (2.026ms)
+✔ an evanescent-frequency mask is an adjoint projection, not an invertible propagator (0.4976ms)
+✔ grid and optical bounds reject invalid sizes and units before allocating propagation buffers (0.5652ms)
+✔ invalid complex fields fail before FFT mutation and invalid transfer functions cannot propagate (0.9202ms)
+✔ source arrays require a matching bounded grid, finite phase and nonnegative aperture (0.1553ms)
+✔ solver rejects malformed targets and unbounded work before fitting (0.4714ms)
+✔ bounded fitting preserves the fixed aperture and deterministic finite phase (0.8294ms)
+PADDING_REPORT {"source":"assets/initial-phase.bin","physicalPitch":0.00001,"originalN":256,"paddedN":512,"sourceEnergy":9176,"milliseconds":178.6461,"planes":[{"distance":0.012,"centralComplexRelativeL2":0.005879400703749519,"centralIntensityRelativeL2":0.002261757637087105,"originalOuter16EnergyFraction":0.000053861213509931826,"expandedOuter32EnergyFraction":0.000004031569834433222,"expandedEnergyOutsideOriginalWindowFraction":0.0000344726519812128,"expandedEnergyRelativeError":1.8196555373606316e-13},{"distance":0.03,"centralComplexRelativeL2":0.03167081125913247,"centralIntensityRelativeL2":0.0037898713184173426,"originalOuter16EnergyFraction":0.0038590676369258227,"expandedOuter32EnergyFraction":0.000030068765583321152,"expandedEnergyOutsideOriginalWindowFraction":0.0010010548005892558,"expandedEnergyRelativeError":2.042810365310288e-14}]}
+✔ committed phase plate remains stable when the empty padding doubles at fixed physical sampling (186.6991ms)
+ℹ tests 23
+ℹ suites 0
+ℹ pass 23
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 718.6694

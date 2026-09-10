@@ -1,0 +1,1369 @@
+{
+  "status": "passed",
+  "startedAt": "2026-09-10T05:12:25.853Z",
+  "viewport": {
+    "width": 1440,
+    "height": 1050
+  },
+  "errors": [],
+  "warnings": [
+    "The powerPreference option is currently ignored when calling requestAdapter() on Windows. See https://crbug.com/369219127",
+    "The powerPreference option is currently ignored when calling requestAdapter() on Windows. See https://crbug.com/369219127"
+  ],
+  "routes": [],
+  "servedHashes": {
+    "/experiments/light-vault/index.html": "d6022a832afee5fb1f7c47fc1c2f0c551c80872b2f48e833740a45709fc49d69",
+    "/experiments/light-vault/style.css": "3b7c0afa32e1fb119851d33708529871685707980ad162652c56a4d620ff6d0e",
+    "/experiments/light-vault/main.mjs": "4676e749a888133ac3b51edc48da696bf1b4a68bcb9fcf97fc9a091e74c4e30c",
+    "/node_modules/three-r186/build/three.tsl.js": "6e6b92d8ce467818944f73815a96abadc6392fb34de577d479a23810b6aeeed0",
+    "/node_modules/three-r186/examples/jsm/environments/RoomEnvironment.js": "55f466192cc84298755a424c5e040345006b2ee1455589b3b54126c2ea4123f4",
+    "/node_modules/three-r186/build/three.webgpu.js": "a78400fa1d359e81fcc12b84ed0a89a7fbecb4b8373e28ae8f9d2b11f6ea13bc",
+    "/experiments/light-vault/gpu.mjs": "f88dbdbbb37b20269cbd809c9acb0210609949c2509699977e2034c7a74065ca",
+    "/experiments/light-vault/scene.mjs": "f325fd4b8c24d619bad916dff7cba07eeceb1fc89c332dd81d2e0bcc4e41ae5f",
+    "/experiments/light-vault/wave.mjs": "6c3624ef6f30aa19fd8e503a3dc0b774cd9675f85f323145ed8f7123fad63d8b",
+    "/experiments/light-vault/targets.mjs": "d811379c25ed37558420ccd6909727e2f5d8e22d4690f127639b3cbd764953c6",
+    "/experiments/light-vault/seal.mjs": "deec1894b7afea799f928c945901cfac25fe57746e8ea7292d92431e169f1538",
+    "/node_modules/three-r186/examples/jsm/geometries/RoundedBoxGeometry.js": "c5feab96123858ed8823c889b238dc8734adab7e760e3cfd21e7f3f2f3e348e3",
+    "/experiments/caustic-sketch/solver.mjs": "34bbf644c53cf769dcc304724b5e12e36fe0c71f64a2666d4541d3e22d660730",
+    "/node_modules/three-r186/examples/jsm/lights/RectAreaLightTexturesLib.js": "6dd4043bb052594357a5eeff13dc0519f0a80b100b97ec80c12808f887897bc1",
+    "/node_modules/three-r186/build/three.core.js": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6",
+    "/experiments/light-vault/assets/material-atlas.png": "b0d0a7cca9a4568ea5ed1437d9044c88fed7fac3931566a89f0935c24f548d66",
+    "/experiments/light-vault/assets/initial-phase.bin": "6968bef1f2e34d9c558bbee71d5bf91b2bc91b9cfaf46aebf5b87aaad0715799",
+    "/experiments/light-vault/volume-worker.mjs": "46f9440c9bb5beb645019afae408208f753bbca8cbe9f759563ab248eac5996e",
+    "/experiments/light-vault/worker.mjs": "b17edd6bfc667c91746dffdd4a37f61f6d895cde1986bcbeddd41bd24974e6d6"
+  },
+  "checks": [
+    {
+      "name": "Initial experiment ready",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "initialVolume is current and bounded",
+      "passed": true,
+      "detail": {
+        "status": "ready",
+        "points": 9747,
+        "milliseconds": 270.79999999701977,
+        "slices": 32,
+        "sourceRevision": 1,
+        "sourceUpdates": 1
+      }
+    },
+    {
+      "name": "middle GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.000003720001046465568,
+        "maxError": 0.000011187552259706024,
+        "relativeTextureError": 0.00000129115601956627,
+        "gpuEnergy": 9175.993916286858,
+        "cpuEnergy": 9175.999999999978,
+        "match": {
+          "scores": [
+            0.6508405490455329,
+            0.6525800775189957
+          ],
+          "best": 1,
+          "margin": 0.0017395284734628147,
+          "clear": false
+        },
+        "distance": 0.021
+      }
+    },
+    {
+      "name": "middle actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.00000129115601956627
+    },
+    {
+      "name": "Defocused capture cannot unlock a memory",
+      "passed": true
+    },
+    {
+      "name": "Distance can change while capture is pending",
+      "passed": true,
+      "detail": {
+        "pendingWhenMoved": true,
+        "at": 0.012000001220703127,
+        "distance": 0.03,
+        "errorDelta": 0,
+        "captures": [
+          {
+            "distance": 0.012000001220703127,
+            "scores": [
+              0.9144678228705316,
+              0.5334508947181196
+            ],
+            "best": 0,
+            "margin": 0.38101692815241206,
+            "clear": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "afterCaptureMove GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.000005503456869746247,
+        "maxError": 0.000013964470711502752,
+        "relativeTextureError": 0.000001763299634843357,
+        "gpuEnergy": 9175.993666528051,
+        "cpuEnergy": 9176.000000000162,
+        "match": {
+          "scores": [
+            0.5597980267566564,
+            0.9555341791953386
+          ],
+          "best": 1,
+          "margin": 0.3957361524386822,
+          "clear": true
+        },
+        "distance": 0.03
+      }
+    },
+    {
+      "name": "afterCaptureMove actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.000001763299634843357
+    },
+    {
+      "name": "Queued depth reaches the actual GPU field",
+      "passed": true,
+      "detail": {
+        "scores": [
+          0.5597980267566564,
+          0.9555341791953386
+        ],
+        "best": 1,
+        "margin": 0.3957361524386822,
+        "clear": true
+      }
+    },
+    {
+      "name": "Reset invalidates a pending capture without restoring a memory",
+      "passed": true,
+      "detail": {
+        "pendingWhenReset": true,
+        "found": [],
+        "won": false,
+        "capturing": false,
+        "errorDelta": 0,
+        "newCaptures": 0
+      }
+    },
+    {
+      "name": "near GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.000002151954929885891,
+        "maxError": 0.000004512150938662529,
+        "relativeTextureError": 0.000001192083387462578,
+        "gpuEnergy": 9175.993596272821,
+        "cpuEnergy": 9176.000000000062,
+        "match": {
+          "scores": [
+            0.9144678228705316,
+            0.5334508947181196
+          ],
+          "best": 0,
+          "margin": 0.38101692815241206,
+          "clear": true
+        },
+        "distance": 0.012000001220703127
+      }
+    },
+    {
+      "name": "near actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.000001192083387462578
+    },
+    {
+      "name": "Near image is the heart",
+      "passed": true,
+      "detail": {
+        "scores": [
+          0.9144678228705316,
+          0.5334508947181196
+        ],
+        "best": 0,
+        "margin": 0.38101692815241206,
+        "clear": true
+      }
+    },
+    {
+      "name": "Actual clear capture discovers one memory",
+      "passed": true
+    },
+    {
+      "name": "far GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.000005454392347426047,
+        "maxError": 0.000009707421519455917,
+        "relativeTextureError": 0.000001500595183155068,
+        "gpuEnergy": 9175.993666528051,
+        "cpuEnergy": 9176.000000000056,
+        "match": {
+          "scores": [
+            0.5597980267566564,
+            0.9555341791953386
+          ],
+          "best": 1,
+          "margin": 0.3957361524386822,
+          "clear": true
+        },
+        "distance": 0.029999998779296877
+      }
+    },
+    {
+      "name": "far actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.000001500595183155068
+    },
+    {
+      "name": "Far image is the other memory",
+      "passed": true,
+      "detail": {
+        "scores": [
+          0.5597980267566564,
+          0.9555341791953386
+        ],
+        "best": 1,
+        "margin": 0.3957361524386822,
+        "clear": true
+      }
+    },
+    {
+      "name": "Phase plate is byte-for-byte unchanged while moving",
+      "passed": true
+    },
+    {
+      "name": "Two optical captures open the vault",
+      "passed": true
+    },
+    {
+      "name": "settledInitialVolume is current and bounded",
+      "passed": true,
+      "detail": {
+        "status": "ready",
+        "points": 9747,
+        "milliseconds": 270.79999999701977,
+        "slices": 32,
+        "sourceRevision": 1,
+        "sourceUpdates": 1
+      }
+    },
+    {
+      "name": "Idle vault does not keep rendering",
+      "passed": true
+    },
+    {
+      "name": "Reset clears the discovered memories",
+      "passed": true
+    },
+    {
+      "name": "Measurement pointer sweep stays in the viewport",
+      "passed": true,
+      "detail": {
+        "startX": 990.40625,
+        "y": 498.078125,
+        "travel": 314.2857142857143
+      }
+    },
+    {
+      "name": "Pointer interaction records finite latency samples",
+      "passed": true,
+      "detail": {
+        "inputs": 40,
+        "samples": 40,
+        "p50": 3.6000000089406967,
+        "p95": 5.100000008940697,
+        "elapsedMs": 2017.5,
+        "lastSubmitted": 40
+      }
+    },
+    {
+      "name": "Pointer measurement preserves the source exactly",
+      "passed": true,
+      "detail": {
+        "beforeUpdates": 1,
+        "afterUpdates": 1
+      }
+    },
+    {
+      "name": "Pointer measurement reaches the requested final depth",
+      "passed": true,
+      "detail": 0.032000001831054684
+    },
+    {
+      "name": "afterInteraction GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.000005618998104341401,
+        "maxError": 0.00001223461946797677,
+        "relativeTextureError": 0.0000015728599120220276,
+        "gpuEnergy": 9175.993757801225,
+        "cpuEnergy": 9176.000000000056,
+        "match": {
+          "scores": [
+            0.5763330011547195,
+            0.8781893813091379
+          ],
+          "best": 1,
+          "margin": 0.3018563801544184,
+          "clear": true
+        },
+        "distance": 0.032000001831054684
+      }
+    },
+    {
+      "name": "afterInteraction actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.0000015728599120220276
+    },
+    {
+      "name": "Two newly typed memories produce an accepted phase plate",
+      "passed": true,
+      "detail": {
+        "fits": [
+          {
+            "milliseconds": 4006.3999999910593,
+            "quality": [
+              {
+                "scores": [
+                  0.9595266424358676,
+                  0.5125811989681961
+                ],
+                "best": 0,
+                "margin": 0.4469454434676715,
+                "clear": true
+              },
+              {
+                "scores": [
+                  0.4728895034071722,
+                  0.9724273226613714
+                ],
+                "best": 1,
+                "margin": 0.49953781925419927,
+                "clear": true
+              }
+            ],
+            "history": [
+              {
+                "iteration": 0,
+                "loss": 1.3232163269202262
+              },
+              {
+                "iteration": 10,
+                "loss": 0.347885138136261
+              },
+              {
+                "iteration": 20,
+                "loss": 0.3098744841640643
+              },
+              {
+                "iteration": 30,
+                "loss": 0.2911564165812377
+              },
+              {
+                "iteration": 40,
+                "loss": 0.2800541235968968
+              },
+              {
+                "iteration": 50,
+                "loss": 0.27111931671651257
+              },
+              {
+                "iteration": 60,
+                "loss": 0.26511353359199885
+              },
+              {
+                "iteration": 70,
+                "loss": 0.26051333692583084
+              },
+              {
+                "iteration": 79,
+                "loss": 0.25785754941436045
+              }
+            ]
+          }
+        ],
+        "feedback": "Encoded in 4.0s.",
+        "modal": false
+      }
+    },
+    {
+      "name": "customVolume is current and bounded",
+      "passed": true,
+      "detail": {
+        "status": "ready",
+        "points": 9537,
+        "milliseconds": 307.40000000596046,
+        "slices": 32,
+        "sourceRevision": 2,
+        "sourceUpdates": 2
+      }
+    },
+    {
+      "name": "A new seal changes the phase pattern",
+      "passed": true
+    },
+    {
+      "name": "customNear GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.0000023686257163387227,
+        "maxError": 0.000006203468922771904,
+        "relativeTextureError": 0.0000010361670398096645,
+        "gpuEnergy": 9175.993866182793,
+        "cpuEnergy": 9175.999999999973,
+        "match": {
+          "scores": [
+            0.9595266848151477,
+            0.5125811970425713
+          ],
+          "best": 0,
+          "margin": 0.44694548777257637,
+          "clear": true
+        },
+        "distance": 0.012000001220703127
+      }
+    },
+    {
+      "name": "customNear actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.0000010361670398096645
+    },
+    {
+      "name": "customFar GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.000005882276377430701,
+        "maxError": 0.000008437273066319584,
+        "relativeTextureError": 0.0000017611134337932187,
+        "gpuEnergy": 9175.99354600717,
+        "cpuEnergy": 9176.000000000055,
+        "match": {
+          "scores": [
+            0.4728896087074043,
+            0.9724273573811485
+          ],
+          "best": 1,
+          "margin": 0.4995377486737442,
+          "clear": true
+        },
+        "distance": 0.029999998779296877
+      }
+    },
+    {
+      "name": "customFar actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.0000017611134337932187
+    },
+    {
+      "name": "Portable seal uses the expected download name",
+      "passed": true,
+      "detail": "light-vault-seal.json"
+    },
+    {
+      "name": "Export contains phase data, optical units and capture references",
+      "passed": true,
+      "detail": {
+        "format": "light-vault-seal-v1",
+        "n": 256,
+        "pitch": 0.00001,
+        "wavelength": 5.32e-7,
+        "referenceLengths": [
+          65536,
+          65536
+        ]
+      }
+    },
+    {
+      "name": "Reloaded experiment ready",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "reloadedVolume is current and bounded",
+      "passed": true,
+      "detail": {
+        "status": "ready",
+        "points": 9747,
+        "milliseconds": 310.70000000298023,
+        "slices": 32,
+        "sourceRevision": 1,
+        "sourceUpdates": 1
+      }
+    },
+    {
+      "name": "Reload restores the original phase before file import",
+      "passed": true
+    },
+    {
+      "name": "File input restores the exported Float32 phase exactly",
+      "passed": true
+    },
+    {
+      "name": "importedVolume is current and bounded",
+      "passed": true,
+      "detail": {
+        "status": "ready",
+        "points": 9537,
+        "milliseconds": 280.6000000089407,
+        "slices": 32,
+        "sourceRevision": 2,
+        "sourceUpdates": 2
+      }
+    },
+    {
+      "name": "importedNear GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.0000023678903457757397,
+        "maxError": 0.00000614537204501886,
+        "relativeTextureError": 0.0000010338798954009233,
+        "gpuEnergy": 9175.993877572684,
+        "cpuEnergy": 9175.999999999938,
+        "match": {
+          "scores": [
+            0.9603924573597558,
+            0.5141880637097092
+          ],
+          "best": 0,
+          "margin": 0.4462043936500466,
+          "clear": true
+        },
+        "distance": 0.012000001220703127
+      }
+    },
+    {
+      "name": "importedNear actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.0000010338798954009233
+    },
+    {
+      "name": "Imported near image remains capturable",
+      "passed": true,
+      "detail": {
+        "scores": [
+          0.9603924573597558,
+          0.5141880637097092
+        ],
+        "best": 0,
+        "margin": 0.4462043936500466,
+        "clear": true
+      }
+    },
+    {
+      "name": "importedFar GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.000005881950453389103,
+        "maxError": 0.000008471825099165553,
+        "relativeTextureError": 0.0000017565715353779482,
+        "gpuEnergy": 9175.993537844839,
+        "cpuEnergy": 9176.000000000202,
+        "match": {
+          "scores": [
+            0.475203816000076,
+            0.973135371337955
+          ],
+          "best": 1,
+          "margin": 0.49793155533787903,
+          "clear": true
+        },
+        "distance": 0.029999998779296877
+      }
+    },
+    {
+      "name": "importedFar actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.0000017565715353779482
+    },
+    {
+      "name": "Imported far image remains capturable",
+      "passed": true,
+      "detail": {
+        "scores": [
+          0.475203816000076,
+          0.973135371337955
+        ],
+        "best": 1,
+        "margin": 0.49793155533787903,
+        "clear": true
+      }
+    },
+    {
+      "name": "Two actual captures unlock the imported seal",
+      "passed": true
+    },
+    {
+      "name": "Imported phase stays fixed while discovering it",
+      "passed": true
+    },
+    {
+      "name": "Mobile does not overflow horizontally",
+      "passed": true
+    },
+    {
+      "name": "Mobile capture button is visible above the fold",
+      "passed": true,
+      "detail": {
+        "x": 50,
+        "y": 715,
+        "width": 290,
+        "height": 48
+      }
+    },
+    {
+      "name": "Mobile distance slider is visible above the fold",
+      "passed": true,
+      "detail": {
+        "x": 99.453125,
+        "y": 614,
+        "width": 198.421875,
+        "height": 16
+      }
+    },
+    {
+      "name": "Mobile slider accepts a real pointer interaction",
+      "passed": true,
+      "detail": {
+        "before": 0.021,
+        "after": 0.032100000000000004
+      }
+    },
+    {
+      "name": "mobilePointer GPU complex field agrees with CPU",
+      "passed": true,
+      "detail": {
+        "relativeComplexError": 0.000006452419814463059,
+        "maxError": 0.000018733375116930517,
+        "relativeTextureError": 0.0000021609595563315587,
+        "gpuEnergy": 9175.993466345039,
+        "cpuEnergy": 9176.000000000166,
+        "match": {
+          "scores": [
+            0.37072859366291194,
+            0.7914516314672947
+          ],
+          "best": 1,
+          "margin": 0.42072303780438275,
+          "clear": false
+        },
+        "distance": 0.032100000000000004
+      }
+    },
+    {
+      "name": "mobilePointer actual texture agrees with CPU",
+      "passed": true,
+      "detail": 0.0000021609595563315587
+    },
+    {
+      "name": "Disposal waits for pending capture and suppresses stale completion",
+      "passed": true,
+      "detail": {
+        "pendingWhenDisposed": true,
+        "disposed": true,
+        "capturing": false,
+        "errorDelta": 0,
+        "foundBefore": [],
+        "foundAfter": []
+      }
+    },
+    {
+      "name": "Fit and volume worker modules and dependencies were actually served",
+      "passed": true
+    },
+    {
+      "name": "No browser errors",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "No rejected routes",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "All recorded sources remain unchanged during the run",
+      "passed": true
+    }
+  ],
+  "screenshots": {
+    "start": {
+      "path": "start.png",
+      "sha256": "f35ab859dedaae8b14e625e54458094244504f7105065b07f3dbdc6872599ae6"
+    },
+    "near-heart": {
+      "path": "near-heart.png",
+      "sha256": "1c025cbd153c246136b5ca99f162440e8d8139c35005ac28fafd9660da0bec17"
+    },
+    "first-capture": {
+      "path": "first-capture.png",
+      "sha256": "88ffccbd9ef5940e74e09693248972480dd543fee64cfcca033b5c8fbee4bc40"
+    },
+    "far-a": {
+      "path": "far-a.png",
+      "sha256": "2520480ecc0ca5546ec2227b08779296cad679e995caeb242bd55dae15b078a0"
+    },
+    "open": {
+      "path": "open.png",
+      "sha256": "3643c0b7c22758e6333edeaa11ee7b3d6fa0bf49dfa0f06e0ea3e83ab59ffe8f"
+    },
+    "custom-hi": {
+      "path": "custom-hi.png",
+      "sha256": "4a58d9432cb61c581b8695c5466dc4ff218697ad06ab26c3c85d0f73846c764d"
+    },
+    "custom-by": {
+      "path": "custom-by.png",
+      "sha256": "21fba79797255f10475c22879e4e2822158c7c3f16397dd28a4f429ebf2a4f3f"
+    },
+    "imported-seal-open": {
+      "path": "imported-seal-open.png",
+      "sha256": "a77e960b9990b2675b3390ca8e807bbd412841b0ed5f335dd36014f724133f75"
+    },
+    "mobile": {
+      "path": "mobile.png",
+      "sha256": "1ecf387f9cb9cc8276c683c279097e8abde6ec066ba44bae2fff077807135f90"
+    }
+  },
+  "sourceHashesBefore": {
+    "scripts/run-light-vault.mjs": "55aa24495ca92427e9f83304dfac195e3dbb107d6b956d7844e90312290686a1",
+    "experiments/light-vault/index.html": "d6022a832afee5fb1f7c47fc1c2f0c551c80872b2f48e833740a45709fc49d69",
+    "experiments/light-vault/style.css": "3b7c0afa32e1fb119851d33708529871685707980ad162652c56a4d620ff6d0e",
+    "experiments/light-vault/main.mjs": "4676e749a888133ac3b51edc48da696bf1b4a68bcb9fcf97fc9a091e74c4e30c",
+    "experiments/light-vault/gpu.mjs": "f88dbdbbb37b20269cbd809c9acb0210609949c2509699977e2034c7a74065ca",
+    "experiments/light-vault/scene.mjs": "f325fd4b8c24d619bad916dff7cba07eeceb1fc89c332dd81d2e0bcc4e41ae5f",
+    "experiments/light-vault/wave.mjs": "6c3624ef6f30aa19fd8e503a3dc0b774cd9675f85f323145ed8f7123fad63d8b",
+    "experiments/light-vault/targets.mjs": "d811379c25ed37558420ccd6909727e2f5d8e22d4690f127639b3cbd764953c6",
+    "experiments/light-vault/seal.mjs": "deec1894b7afea799f928c945901cfac25fe57746e8ea7292d92431e169f1538",
+    "experiments/light-vault/worker.mjs": "b17edd6bfc667c91746dffdd4a37f61f6d895cde1986bcbeddd41bd24974e6d6",
+    "experiments/light-vault/volume-worker.mjs": "46f9440c9bb5beb645019afae408208f753bbca8cbe9f759563ab248eac5996e",
+    "experiments/light-vault/assets/initial-phase.bin": "6968bef1f2e34d9c558bbee71d5bf91b2bc91b9cfaf46aebf5b87aaad0715799",
+    "experiments/light-vault/assets/material-atlas.png": "b0d0a7cca9a4568ea5ed1437d9044c88fed7fac3931566a89f0935c24f548d66",
+    "experiments/caustic-sketch/solver.mjs": "34bbf644c53cf769dcc304724b5e12e36fe0c71f64a2666d4541d3e22d660730",
+    "node_modules/three-r186/build/three.webgpu.js": "a78400fa1d359e81fcc12b84ed0a89a7fbecb4b8373e28ae8f9d2b11f6ea13bc",
+    "node_modules/three-r186/build/three.core.js": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6",
+    "node_modules/three-r186/build/three.tsl.js": "6e6b92d8ce467818944f73815a96abadc6392fb34de577d479a23810b6aeeed0",
+    "node_modules/three-r186/examples/jsm/environments/RoomEnvironment.js": "55f466192cc84298755a424c5e040345006b2ee1455589b3b54126c2ea4123f4"
+  },
+  "browser": "152.0.7977.83",
+  "initialVolume": {
+    "status": "ready",
+    "points": 9747,
+    "milliseconds": 270.79999999701977,
+    "slices": 32,
+    "sourceRevision": 1,
+    "sourceUpdates": 1
+  },
+  "phaseHash": "c03c0fc0829b2e11e7e2ed3c7e7bb67692534ca97c414f43c9e876b3b1ffc8ec",
+  "middle": {
+    "relativeComplexError": 0.000003720001046465568,
+    "maxError": 0.000011187552259706024,
+    "relativeTextureError": 0.00000129115601956627,
+    "gpuEnergy": 9175.993916286858,
+    "cpuEnergy": 9175.999999999978,
+    "match": {
+      "scores": [
+        0.6508405490455329,
+        0.6525800775189957
+      ],
+      "best": 1,
+      "margin": 0.0017395284734628147,
+      "clear": false
+    },
+    "distance": 0.021
+  },
+  "captureMove": {
+    "pendingWhenMoved": true,
+    "at": 0.012000001220703127,
+    "distance": 0.03,
+    "errorDelta": 0,
+    "captures": [
+      {
+        "distance": 0.012000001220703127,
+        "scores": [
+          0.9144678228705316,
+          0.5334508947181196
+        ],
+        "best": 0,
+        "margin": 0.38101692815241206,
+        "clear": true
+      }
+    ]
+  },
+  "afterCaptureMove": {
+    "relativeComplexError": 0.000005503456869746247,
+    "maxError": 0.000013964470711502752,
+    "relativeTextureError": 0.000001763299634843357,
+    "gpuEnergy": 9175.993666528051,
+    "cpuEnergy": 9176.000000000162,
+    "match": {
+      "scores": [
+        0.5597980267566564,
+        0.9555341791953386
+      ],
+      "best": 1,
+      "margin": 0.3957361524386822,
+      "clear": true
+    },
+    "distance": 0.03
+  },
+  "captureReset": {
+    "pendingWhenReset": true,
+    "found": [],
+    "won": false,
+    "capturing": false,
+    "errorDelta": 0,
+    "newCaptures": 0
+  },
+  "near": {
+    "relativeComplexError": 0.000002151954929885891,
+    "maxError": 0.000004512150938662529,
+    "relativeTextureError": 0.000001192083387462578,
+    "gpuEnergy": 9175.993596272821,
+    "cpuEnergy": 9176.000000000062,
+    "match": {
+      "scores": [
+        0.9144678228705316,
+        0.5334508947181196
+      ],
+      "best": 0,
+      "margin": 0.38101692815241206,
+      "clear": true
+    },
+    "distance": 0.012000001220703127
+  },
+  "far": {
+    "relativeComplexError": 0.000005454392347426047,
+    "maxError": 0.000009707421519455917,
+    "relativeTextureError": 0.000001500595183155068,
+    "gpuEnergy": 9175.993666528051,
+    "cpuEnergy": 9176.000000000056,
+    "match": {
+      "scores": [
+        0.5597980267566564,
+        0.9555341791953386
+      ],
+      "best": 1,
+      "margin": 0.3957361524386822,
+      "clear": true
+    },
+    "distance": 0.029999998779296877
+  },
+  "settledInitialVolume": {
+    "status": "ready",
+    "points": 9747,
+    "milliseconds": 270.79999999701977,
+    "slices": 32,
+    "sourceRevision": 1,
+    "sourceUpdates": 1
+  },
+  "interaction": {
+    "started": 5897.0999999940395,
+    "inputs": 40,
+    "lastSubmitted": 40,
+    "samples": [
+      {
+        "id": 1,
+        "distance": 0.010549996337890628,
+        "inputToGpuCompletionMs": 4.4000000059604645
+      },
+      {
+        "id": 2,
+        "distance": 0.011099998779296879,
+        "inputToGpuCompletionMs": 2.0999999940395355
+      },
+      {
+        "id": 3,
+        "distance": 0.01164999694824219,
+        "inputToGpuCompletionMs": 2.0999999940395355
+      },
+      {
+        "id": 4,
+        "distance": 0.01219999938964844,
+        "inputToGpuCompletionMs": 4.5
+      },
+      {
+        "id": 5,
+        "distance": 0.01275000183105469,
+        "inputToGpuCompletionMs": 3.6000000089406967
+      },
+      {
+        "id": 6,
+        "distance": 0.013299995727539066,
+        "inputToGpuCompletionMs": 4.399999991059303
+      },
+      {
+        "id": 7,
+        "distance": 0.013849998168945315,
+        "inputToGpuCompletionMs": 3.6000000089406967
+      },
+      {
+        "id": 8,
+        "distance": 0.014400000610351564,
+        "inputToGpuCompletionMs": 3.5
+      },
+      {
+        "id": 9,
+        "distance": 0.014949994506835939,
+        "inputToGpuCompletionMs": 4.5
+      },
+      {
+        "id": 10,
+        "distance": 0.01549999694824219,
+        "inputToGpuCompletionMs": 3.7999999970197678
+      },
+      {
+        "id": 11,
+        "distance": 0.01604999938964844,
+        "inputToGpuCompletionMs": 1.7999999970197678
+      },
+      {
+        "id": 12,
+        "distance": 0.01660000183105469,
+        "inputToGpuCompletionMs": 1.7999999970197678
+      },
+      {
+        "id": 13,
+        "distance": 0.017149995727539065,
+        "inputToGpuCompletionMs": 2.0999999940395355
+      },
+      {
+        "id": 14,
+        "distance": 0.017699998168945314,
+        "inputToGpuCompletionMs": 1.8999999910593033
+      },
+      {
+        "id": 15,
+        "distance": 0.018250000610351563,
+        "inputToGpuCompletionMs": 5.200000002980232
+      },
+      {
+        "id": 16,
+        "distance": 0.01879999450683594,
+        "inputToGpuCompletionMs": 3.5
+      },
+      {
+        "id": 17,
+        "distance": 0.019349996948242187,
+        "inputToGpuCompletionMs": 4.700000002980232
+      },
+      {
+        "id": 18,
+        "distance": 0.01989999938964844,
+        "inputToGpuCompletionMs": 3.5999999940395355
+      },
+      {
+        "id": 19,
+        "distance": 0.02045000183105469,
+        "inputToGpuCompletionMs": 4.5
+      },
+      {
+        "id": 20,
+        "distance": 0.020999995727539064,
+        "inputToGpuCompletionMs": 5.100000008940697
+      },
+      {
+        "id": 21,
+        "distance": 0.021549998168945317,
+        "inputToGpuCompletionMs": 4.5999999940395355
+      },
+      {
+        "id": 22,
+        "distance": 0.022100000610351563,
+        "inputToGpuCompletionMs": 3.5
+      },
+      {
+        "id": 23,
+        "distance": 0.02264999450683594,
+        "inputToGpuCompletionMs": 3.5
+      },
+      {
+        "id": 24,
+        "distance": 0.02319999694824219,
+        "inputToGpuCompletionMs": 1.7000000029802322
+      },
+      {
+        "id": 25,
+        "distance": 0.02374999938964844,
+        "inputToGpuCompletionMs": 3.5
+      },
+      {
+        "id": 26,
+        "distance": 0.02430000183105469,
+        "inputToGpuCompletionMs": 3.7000000029802322
+      },
+      {
+        "id": 27,
+        "distance": 0.024849995727539063,
+        "inputToGpuCompletionMs": 1.8999999910593033
+      },
+      {
+        "id": 28,
+        "distance": 0.025399998168945316,
+        "inputToGpuCompletionMs": 1.5
+      },
+      {
+        "id": 29,
+        "distance": 0.025950000610351565,
+        "inputToGpuCompletionMs": 2.1000000089406967
+      },
+      {
+        "id": 30,
+        "distance": 0.02649999450683594,
+        "inputToGpuCompletionMs": 4.399999991059303
+      },
+      {
+        "id": 31,
+        "distance": 0.02704999694824219,
+        "inputToGpuCompletionMs": 4.4000000059604645
+      },
+      {
+        "id": 32,
+        "distance": 0.02759999938964844,
+        "inputToGpuCompletionMs": 4.4000000059604645
+      },
+      {
+        "id": 33,
+        "distance": 0.028150001831054688,
+        "inputToGpuCompletionMs": 3.7000000029802322
+      },
+      {
+        "id": 34,
+        "distance": 0.028699995727539063,
+        "inputToGpuCompletionMs": 1.7000000029802322
+      },
+      {
+        "id": 35,
+        "distance": 0.029249998168945315,
+        "inputToGpuCompletionMs": 4.4000000059604645
+      },
+      {
+        "id": 36,
+        "distance": 0.029800000610351565,
+        "inputToGpuCompletionMs": 1.800000011920929
+      },
+      {
+        "id": 37,
+        "distance": 0.03034999450683594,
+        "inputToGpuCompletionMs": 3.5999999940395355
+      },
+      {
+        "id": 38,
+        "distance": 0.03089999694824219,
+        "inputToGpuCompletionMs": 3.7000000029802322
+      },
+      {
+        "id": 39,
+        "distance": 0.03144999938964844,
+        "inputToGpuCompletionMs": 3.5
+      },
+      {
+        "id": 40,
+        "distance": 0.032000001831054684,
+        "inputToGpuCompletionMs": 4.4000000059604645
+      }
+    ],
+    "input": {
+      "id": 40,
+      "distance": 0.032000001831054684,
+      "time": 7905
+    },
+    "elapsedMs": 2017.5,
+    "p50": 3.6000000089406967,
+    "p95": 5.100000008940697,
+    "meaning": "Input event to matching render GPU submission completion; not display presentation time.",
+    "protocol": {
+      "scheduledDurationMs": 2000,
+      "steps": 40,
+      "fromMetres": 0.01,
+      "toMetres": 0.032,
+      "meaning": "Input to matching render GPU submission completion; neither presentation latency nor a frame-rate claim."
+    }
+  },
+  "afterInteraction": {
+    "relativeComplexError": 0.000005618998104341401,
+    "maxError": 0.00001223461946797677,
+    "relativeTextureError": 0.0000015728599120220276,
+    "gpuEnergy": 9175.993757801225,
+    "cpuEnergy": 9176.000000000056,
+    "match": {
+      "scores": [
+        0.5763330011547195,
+        0.8781893813091379
+      ],
+      "best": 1,
+      "margin": 0.3018563801544184,
+      "clear": true
+    },
+    "distance": 0.032000001831054684
+  },
+  "custom": {
+    "fits": [
+      {
+        "milliseconds": 4006.3999999910593,
+        "quality": [
+          {
+            "scores": [
+              0.9595266424358676,
+              0.5125811989681961
+            ],
+            "best": 0,
+            "margin": 0.4469454434676715,
+            "clear": true
+          },
+          {
+            "scores": [
+              0.4728895034071722,
+              0.9724273226613714
+            ],
+            "best": 1,
+            "margin": 0.49953781925419927,
+            "clear": true
+          }
+        ],
+        "history": [
+          {
+            "iteration": 0,
+            "loss": 1.3232163269202262
+          },
+          {
+            "iteration": 10,
+            "loss": 0.347885138136261
+          },
+          {
+            "iteration": 20,
+            "loss": 0.3098744841640643
+          },
+          {
+            "iteration": 30,
+            "loss": 0.2911564165812377
+          },
+          {
+            "iteration": 40,
+            "loss": 0.2800541235968968
+          },
+          {
+            "iteration": 50,
+            "loss": 0.27111931671651257
+          },
+          {
+            "iteration": 60,
+            "loss": 0.26511353359199885
+          },
+          {
+            "iteration": 70,
+            "loss": 0.26051333692583084
+          },
+          {
+            "iteration": 79,
+            "loss": 0.25785754941436045
+          }
+        ]
+      }
+    ],
+    "feedback": "Encoded in 4.0s.",
+    "modal": false
+  },
+  "customVolume": {
+    "status": "ready",
+    "points": 9537,
+    "milliseconds": 307.40000000596046,
+    "slices": 32,
+    "sourceRevision": 2,
+    "sourceUpdates": 2
+  },
+  "customNear": {
+    "relativeComplexError": 0.0000023686257163387227,
+    "maxError": 0.000006203468922771904,
+    "relativeTextureError": 0.0000010361670398096645,
+    "gpuEnergy": 9175.993866182793,
+    "cpuEnergy": 9175.999999999973,
+    "match": {
+      "scores": [
+        0.9595266848151477,
+        0.5125811970425713
+      ],
+      "best": 0,
+      "margin": 0.44694548777257637,
+      "clear": true
+    },
+    "distance": 0.012000001220703127
+  },
+  "customFar": {
+    "relativeComplexError": 0.000005882276377430701,
+    "maxError": 0.000008437273066319584,
+    "relativeTextureError": 0.0000017611134337932187,
+    "gpuEnergy": 9175.99354600717,
+    "cpuEnergy": 9176.000000000055,
+    "match": {
+      "scores": [
+        0.4728896087074043,
+        0.9724273573811485
+      ],
+      "best": 1,
+      "margin": 0.4995377486737442,
+      "clear": true
+    },
+    "distance": 0.029999998779296877
+  },
+  "export": {
+    "file": "light-vault-seal.json",
+    "sha256": "888bce7e8932c4d7bc35f75583fe5a37ac23de027ca430e5ae0a00f5946b9b9c",
+    "bytes": 1532215,
+    "savedPhaseHash": "de1e5e7fb72377cd20c1e99558fae2b20f61f94e1169155ceaf60623de1a5bc2"
+  },
+  "reloadedVolume": {
+    "status": "ready",
+    "points": 9747,
+    "milliseconds": 310.70000000298023,
+    "slices": 32,
+    "sourceRevision": 1,
+    "sourceUpdates": 1
+  },
+  "importedVolume": {
+    "status": "ready",
+    "points": 9537,
+    "milliseconds": 280.6000000089407,
+    "slices": 32,
+    "sourceRevision": 2,
+    "sourceUpdates": 2
+  },
+  "importedNear": {
+    "relativeComplexError": 0.0000023678903457757397,
+    "maxError": 0.00000614537204501886,
+    "relativeTextureError": 0.0000010338798954009233,
+    "gpuEnergy": 9175.993877572684,
+    "cpuEnergy": 9175.999999999938,
+    "match": {
+      "scores": [
+        0.9603924573597558,
+        0.5141880637097092
+      ],
+      "best": 0,
+      "margin": 0.4462043936500466,
+      "clear": true
+    },
+    "distance": 0.012000001220703127
+  },
+  "importedFar": {
+    "relativeComplexError": 0.000005881950453389103,
+    "maxError": 0.000008471825099165553,
+    "relativeTextureError": 0.0000017565715353779482,
+    "gpuEnergy": 9175.993537844839,
+    "cpuEnergy": 9176.000000000202,
+    "match": {
+      "scores": [
+        0.475203816000076,
+        0.973135371337955
+      ],
+      "best": 1,
+      "margin": 0.49793155533787903,
+      "clear": true
+    },
+    "distance": 0.029999998779296877
+  },
+  "mobilePointer": {
+    "relativeComplexError": 0.000006452419814463059,
+    "maxError": 0.000018733375116930517,
+    "relativeTextureError": 0.0000021609595563315587,
+    "gpuEnergy": 9175.993466345039,
+    "cpuEnergy": 9176.000000000166,
+    "match": {
+      "scores": [
+        0.37072859366291194,
+        0.7914516314672947
+      ],
+      "best": 1,
+      "margin": 0.42072303780438275,
+      "clear": false
+    },
+    "distance": 0.032100000000000004
+  },
+  "final": {
+    "state": {
+      "ready": true,
+      "distance": 0.032100000000000004,
+      "found": [],
+      "opening": 0,
+      "won": false,
+      "capturing": false,
+      "fitting": false,
+      "changing": false,
+      "disposed": false,
+      "id": 1,
+      "epoch": 4
+    },
+    "evidence": {
+      "frames": 437,
+      "propagations": 41,
+      "errors": [],
+      "captures": [
+        {
+          "distance": 0.012000001220703127,
+          "scores": [
+            0.9603924573597558,
+            0.5141880637097092
+          ],
+          "best": 0,
+          "margin": 0.4462043936500466,
+          "clear": true
+        },
+        {
+          "distance": 0.029999998779296877,
+          "scores": [
+            0.475203816000076,
+            0.973135371337955
+          ],
+          "best": 1,
+          "margin": 0.49793155533787903,
+          "clear": true
+        }
+      ],
+      "fits": [],
+      "sourceUpdates": 2,
+      "volume": {
+        "status": "ready",
+        "points": 9537,
+        "milliseconds": 280.6000000089407,
+        "slices": 32,
+        "sourceRevision": 2
+      },
+      "imports": 1
+    }
+  },
+  "pendingDisposal": {
+    "pendingWhenDisposed": true,
+    "disposed": true,
+    "capturing": false,
+    "errorDelta": 0,
+    "foundBefore": [],
+    "foundAfter": []
+  },
+  "sourceHashesAfter": {
+    "scripts/run-light-vault.mjs": "55aa24495ca92427e9f83304dfac195e3dbb107d6b956d7844e90312290686a1",
+    "experiments/light-vault/index.html": "d6022a832afee5fb1f7c47fc1c2f0c551c80872b2f48e833740a45709fc49d69",
+    "experiments/light-vault/style.css": "3b7c0afa32e1fb119851d33708529871685707980ad162652c56a4d620ff6d0e",
+    "experiments/light-vault/main.mjs": "4676e749a888133ac3b51edc48da696bf1b4a68bcb9fcf97fc9a091e74c4e30c",
+    "experiments/light-vault/gpu.mjs": "f88dbdbbb37b20269cbd809c9acb0210609949c2509699977e2034c7a74065ca",
+    "experiments/light-vault/scene.mjs": "f325fd4b8c24d619bad916dff7cba07eeceb1fc89c332dd81d2e0bcc4e41ae5f",
+    "experiments/light-vault/wave.mjs": "6c3624ef6f30aa19fd8e503a3dc0b774cd9675f85f323145ed8f7123fad63d8b",
+    "experiments/light-vault/targets.mjs": "d811379c25ed37558420ccd6909727e2f5d8e22d4690f127639b3cbd764953c6",
+    "experiments/light-vault/seal.mjs": "deec1894b7afea799f928c945901cfac25fe57746e8ea7292d92431e169f1538",
+    "experiments/light-vault/worker.mjs": "b17edd6bfc667c91746dffdd4a37f61f6d895cde1986bcbeddd41bd24974e6d6",
+    "experiments/light-vault/volume-worker.mjs": "46f9440c9bb5beb645019afae408208f753bbca8cbe9f759563ab248eac5996e",
+    "experiments/light-vault/assets/initial-phase.bin": "6968bef1f2e34d9c558bbee71d5bf91b2bc91b9cfaf46aebf5b87aaad0715799",
+    "experiments/light-vault/assets/material-atlas.png": "b0d0a7cca9a4568ea5ed1437d9044c88fed7fac3931566a89f0935c24f548d66",
+    "experiments/caustic-sketch/solver.mjs": "34bbf644c53cf769dcc304724b5e12e36fe0c71f64a2666d4541d3e22d660730",
+    "node_modules/three-r186/build/three.webgpu.js": "a78400fa1d359e81fcc12b84ed0a89a7fbecb4b8373e28ae8f9d2b11f6ea13bc",
+    "node_modules/three-r186/build/three.core.js": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6",
+    "node_modules/three-r186/build/three.tsl.js": "6e6b92d8ce467818944f73815a96abadc6392fb34de577d479a23810b6aeeed0",
+    "node_modules/three-r186/examples/jsm/environments/RoomEnvironment.js": "55f466192cc84298755a424c5e040345006b2ee1455589b3b54126c2ea4123f4"
+  },
+  "elapsedMs": 18199
+}

@@ -4,6 +4,11 @@ Small, reproducible experiments toward better tools for editable Three.js scenes
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).
 
+- **The Light Vault — two pictures in one wave.** Slide a screen through light
+  to discover two different images encoded by one fixed phase pattern. Capture
+  both to open the vault, draw your own pair, or exchange a saved seal. Native
+  Three.js TSL propagates the wave; actual computed intensity decides captures.
+  [Play and inspect the holography experiment](experiments/light-vault/README.md).
 - **Sunprint — draw an image into glass.** Draw a mark and fit a refracting
   surface, then move the screen, inspect the glass, or flatten it to remove the
   image. A native Three.js TSL photon pass receives only the fitted geometry.
@@ -73,11 +78,13 @@ Start with the [experiment index](experiments/README.md) and
 
 ```sh
 npm ci
-npm run demo:sunprint
+npm run demo:light-vault
 ```
 
-Open the printed localhost URL in a WebGPU-capable Chrome. Sunprint fits a first
-drawing on entry, then renders only when something changes. No model download is needed.
+Open the printed localhost URL in a WebGPU-capable Chrome. The Light Vault starts
+with a saved phase plate and renders only when something changes. New seals use
+a bounded CPU worker. No model download is needed. Sunprint remains available
+with `npm run demo:sunprint`.
 Signal Loom is available with `npm run demo:footprint-filtering` and caps playback at twelve seconds.
 The motion editor is available with `npm run demo:constraint-editing`.
 The height-field trainer is available with `npm run demo:trainable-tsl`.

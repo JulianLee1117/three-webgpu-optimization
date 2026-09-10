@@ -6,7 +6,28 @@ This document records research priorities and the evidence behind each decision.
 See the [experiment index](../experiments/README.md)
 for existing commands and the documents that govern each result.
 
-## Current experiment: drawing with refractive glass
+## Current experiment: authorable optical puzzles
+
+[The Light Vault](../experiments/light-vault/README.md) extends drawing with light
+to a fixed phase aperture that holds different images at different depths. The
+user moves a screen, captures the actual computed images to open a vault, then
+encodes and exchanges their own pair. The forward GPU component receives a source
+spectrum and distance; target images never enter its wave calculation.
+
+The supporting result is a working combination: native Three.js TSL wave
+propagation, independent CPU numerical checks, image-based capture validation,
+and portable phase files with physically checked reference metadata. Browser
+CGH and multi-plane fitting have direct prior art, including WebGPU work at
+Digital Holography 2026. This is an integration experiment, with no demonstrated
+new optical algorithm or industry-level advantage. See the
+[source audit and model limits](../experiments/light-vault/PHYSICS.md).
+
+The reusable component can support optical game props and interactive design
+tools. More image planes, arbitrary complex scenes, manufacturing and broad
+device performance remain unvalidated. The current prototype deliberately
+rejects custom marks it cannot make distinct enough to play.
+
+## Retained experiment: drawing with refractive glass
 
 [Sunprint](../experiments/caustic-sketch/README.md) puts inverse caustic design
 behind a drawing canvas: target mark → optimized surface → independent forward
