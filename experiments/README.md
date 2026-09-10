@@ -18,6 +18,20 @@ explicit. The live Three r186 scene accepts closed local GLB geometry.
 node scripts/run-matter-forge.mjs --serve
 ```
 
+## Carry the City — playable motion-transfer prototype
+
+[Carry the City](carry-the-city/README.md) applies authored swimming and flying
+motion to an inhabited town. The shared field drives street deformation, rigid
+attachments, a docking endpoint and released-prop motion. The rescue route,
+restart, collision release and cleanup pass a bounded browser check; 17 CPU tests
+pass. This is a creative combination of established techniques with approximate
+gameplay collision. General navigation, physics and a novel algorithm are not
+established.
+
+```sh
+npm run demo:carry-the-city
+```
+
 ## OIT alpha — confirmed Three r186 coverage defect
 
 [The isolated WebGPU reproduction](oit-alpha-correctness/README.md) compares

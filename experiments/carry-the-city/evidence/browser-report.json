@@ -1,0 +1,1854 @@
+{
+  "status": "passed",
+  "startedAt": "2026-09-10T02:50:31.078Z",
+  "url": "http://127.0.0.1:58542/",
+  "watchdogMs": 75000,
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "errors": [],
+  "requestFailures": [],
+  "routes": [],
+  "checks": [
+    {
+      "name": "World prepared",
+      "passed": true,
+      "detail": []
+    },
+    {
+      "name": "Intro is idle",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Begin control is available",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Real animation loop renders and advances",
+      "passed": true,
+      "detail": {
+        "method": "Independent requestAnimationFrame observer alongside the real game loop; no manual simulation stepping during sample.",
+        "warmupMs": 250,
+        "requestedMs": 2000,
+        "observedMs": 2010.7999999970198,
+        "observerCallbacks": 165,
+        "applicationFrames": 165,
+        "simulationSeconds": 2.0100999999999973,
+        "intervalsMs": [
+          10.699999999999818,
+          10.700000000000273,
+          14.199999999999818,
+          10.800000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          10.700000000000273,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          10.800000000000182,
+          14.199999999999818,
+          10.700000000000273,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          10.699999999999818,
+          14.200000000000273,
+          10.799999999999727,
+          10.700000000000273,
+          14.299999999999727,
+          10.700000000000273,
+          10.699999999999818,
+          10.800000000000182,
+          14.199999999999818,
+          10.700000000000273,
+          10.799999999999727,
+          14.200000000000273,
+          10.699999999999818,
+          10.800000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          10.599999999999909,
+          10.800000000000182,
+          14.299999999999727,
+          10.600000000000364,
+          14.299999999999727,
+          10.800000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          10.700000000000273,
+          14.199999999999818,
+          10.699999999999818,
+          14.400000000000091,
+          10.599999999999909,
+          10.800000000000182,
+          14.300000000000182,
+          10.599999999999909,
+          14.400000000000091,
+          10.599999999999909,
+          14.400000000000091,
+          10.699999999999818,
+          14.199999999999818,
+          10.700000000000273,
+          10.699999999999818,
+          14.400000000000091,
+          10.599999999999909,
+          14.300000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          14.299999999999727,
+          10.700000000000273,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          14.200000000000273,
+          10.799999999999727,
+          14.300000000000182,
+          10.699999999999818,
+          10.700000000000273,
+          14.299999999999727,
+          14.300000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          10.599999999999909,
+          10.800000000000182,
+          14.199999999999818,
+          10.800000000000182,
+          14.299999999999727,
+          14.200000000000273,
+          10.699999999999818,
+          10.800000000000182,
+          14.299999999999727,
+          10.700000000000273,
+          14.199999999999818,
+          10.699999999999818,
+          14.300000000000182,
+          14.300000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          10.699999999999818,
+          14.300000000000182,
+          14.300000000000182,
+          10.699999999999818,
+          14.199999999999818,
+          10.800000000000182,
+          10.699999999999818,
+          14.200000000000273,
+          14.299999999999727,
+          10.800000000000182,
+          14.300000000000182,
+          10.599999999999909,
+          10.699999999999818,
+          14.400000000000091,
+          10.599999999999909,
+          14.300000000000182,
+          10.699999999999818,
+          10.700000000000273,
+          14.399999999999636,
+          10.600000000000364,
+          10.799999999999727,
+          14.200000000000273,
+          10.699999999999818,
+          14.400000000000091,
+          10.699999999999818,
+          10.599999999999909,
+          14.400000000000091,
+          10.599999999999909,
+          10.700000000000273,
+          14.299999999999727,
+          10.700000000000273,
+          14.299999999999727,
+          14.300000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          10.699999999999818,
+          10.699999999999818,
+          14.300000000000182,
+          10.800000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          10.600000000000364,
+          14.299999999999272,
+          10.700000000000728,
+          14.299999999999272,
+          10.700000000000728,
+          10.699999999999818,
+          14.199999999999818,
+          10.800000000000182,
+          10.699999999999818,
+          14.199999999999818,
+          10.800000000000182,
+          14.199999999999818,
+          10.800000000000182,
+          10.699999999999818,
+          14.300000000000182,
+          14.300000000000182,
+          10.599999999999454,
+          14.400000000000546,
+          10.699999999999818,
+          10.600000000000364,
+          14.299999999999272,
+          10.800000000000182,
+          14.300000000000182,
+          10.699999999999818
+        ],
+        "meanIntervalMs": 12.16951219512195,
+        "medianIntervalMs": 10.800000000000182,
+        "p95IntervalMs": 14.399999999999636,
+        "maxIntervalMs": 14.400000000000546
+      }
+    },
+    {
+      "name": "Begin starts the voyage",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Water pointer target is onscreen",
+      "passed": true,
+      "detail": {
+        "x": 301.27620278809815,
+        "y": 395.2193745789946
+      }
+    },
+    {
+      "name": "Water pointer steers to its world point",
+      "passed": true,
+      "detail": {
+        "x": -9.000000251670361,
+        "z": 5.999999515804033
+      }
+    },
+    {
+      "name": "Finite movement: first lantern: 2s",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: first lantern: 4s",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Arrived: first lantern",
+      "passed": true,
+      "detail": {
+        "phase": "voyage",
+        "playing": true,
+        "paused": false,
+        "mode": "swim",
+        "x": -8.930405306166069,
+        "y": -0.3,
+        "z": 6.005838540010756,
+        "yaw": 3.0578885714032595,
+        "speed": 0.4199275406966889,
+        "time": 6.315200000001473,
+        "target": {
+          "x": -9.000000251670361,
+          "z": 5.999999515804033
+        },
+        "elapsed": 6.315200000001473,
+        "rescued": 0,
+        "lanterns": [
+          "first"
+        ],
+        "bumps": 0
+      }
+    },
+    {
+      "name": "Swimming caused travel",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Moth button changes mode and UI",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: second lantern: 2s",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: second lantern: 4s",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: second lantern: 6s",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Arrived: second lantern",
+      "passed": true,
+      "detail": {
+        "phase": "voyage",
+        "playing": true,
+        "paused": false,
+        "mode": "fly",
+        "x": 7.684920950306619,
+        "y": 5.499964363568344,
+        "z": -4.8106090996266095,
+        "yaw": 0.5412206656452128,
+        "speed": 1.3601709174256589,
+        "time": 12.315200000001681,
+        "target": {
+          "x": 8,
+          "z": -5
+        },
+        "elapsed": 12.315200000001681,
+        "rescued": 0,
+        "lanterns": [
+          "first",
+          "second"
+        ],
+        "bumps": 0
+      }
+    },
+    {
+      "name": "Flight clears the water",
+      "passed": true,
+      "detail": {
+        "y": 5.499964363568344,
+        "mode": "fly"
+      }
+    },
+    {
+      "name": "Finite movement: wingbeat screenshot phase",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: lighthouse approach: 2s",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: lighthouse approach: 4s",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Arrived: lighthouse approach",
+      "passed": true,
+      "detail": {
+        "phase": "voyage",
+        "playing": true,
+        "paused": false,
+        "mode": "fly",
+        "x": 0.47402688385148845,
+        "y": 5.499999991739175,
+        "z": -16.51845032496499,
+        "yaw": 2.178504751749358,
+        "speed": 2.1689757803024237,
+        "time": 16.50000000000014,
+        "target": {
+          "x": 0,
+          "z": -17.2
+        },
+        "elapsed": 16.50000000000014,
+        "rescued": 0,
+        "lanterns": [
+          "first",
+          "second",
+          "third"
+        ],
+        "bumps": 0
+      }
+    },
+    {
+      "name": "Koi button changes mode and UI",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: landing and rescue 1",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: landing and rescue 2",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: landing and rescue 3",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: landing and rescue 4",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: landing and rescue 5",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Reached the destination by movement",
+      "passed": true,
+      "detail": {
+        "phase": "done",
+        "playing": true,
+        "paused": false,
+        "mode": "swim",
+        "x": -1.9659659585195785e-9,
+        "y": -0.29999998804530903,
+        "z": -17.200000002826616,
+        "yaw": 1.570796390772886,
+        "speed": 0,
+        "time": 26.49999999999957,
+        "target": null,
+        "elapsed": 17.366666666666756,
+        "rescued": 8,
+        "lanterns": [
+          "first",
+          "second",
+          "third"
+        ],
+        "bumps": 0
+      }
+    },
+    {
+      "name": "All eight residents rescued",
+      "passed": true,
+      "detail": {
+        "phase": "done",
+        "playing": true,
+        "paused": false,
+        "mode": "swim",
+        "x": -1.9659659585195785e-9,
+        "y": -0.29999998804530903,
+        "z": -17.200000002826616,
+        "yaw": 1.570796390772886,
+        "speed": 0,
+        "time": 26.49999999999957,
+        "target": null,
+        "elapsed": 17.366666666666756,
+        "rescued": 8,
+        "lanterns": [
+          "first",
+          "second",
+          "third"
+        ],
+        "bumps": 0
+      }
+    },
+    {
+      "name": "Finish screen is visible",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Route collected all three lanterns",
+      "passed": true,
+      "detail": [
+        "first",
+        "second",
+        "third"
+      ]
+    },
+    {
+      "name": "Start, both modes, docking and win were observed",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "No game or browser errors",
+      "passed": true,
+      "detail": {
+        "game": [],
+        "browser": [],
+        "routes": []
+      }
+    },
+    {
+      "name": "Restart resets the voyage",
+      "passed": true,
+      "detail": {
+        "phase": "intro",
+        "playing": false,
+        "paused": false,
+        "mode": "swim",
+        "x": 0,
+        "y": -0.3,
+        "z": 7,
+        "yaw": 1.5707963267948966,
+        "speed": 0,
+        "time": 0,
+        "target": null,
+        "elapsed": 0,
+        "rescued": 0,
+        "lanterns": [],
+        "bumps": 0
+      }
+    },
+    {
+      "name": "Restart restores intro and hides the finish",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Restart restores all resident HUD markers",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "One actual restart event was recorded",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Finite movement: reef approach 1",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Movement into the reef triggers contact",
+      "passed": true,
+      "detail": {
+        "state": {
+          "phase": "voyage",
+          "playing": true,
+          "paused": false,
+          "mode": "swim",
+          "x": -0.8406900147034911,
+          "y": -0.3,
+          "z": 5.755942559904252,
+          "yaw": 2.1965371189890877,
+          "speed": 0.1833298040287829,
+          "time": 1.054700000000002,
+          "target": {
+            "x": -5,
+            "z": 0
+          },
+          "elapsed": 1.054700000000002,
+          "rescued": 0,
+          "lanterns": [],
+          "bumps": 1
+        },
+        "events": [
+          {
+            "type": "reef-impact",
+            "time": 0.8547000000000018
+          },
+          {
+            "type": "cargo-released",
+            "time": 0.8547000000000018,
+            "position": [
+              1.8990249112348274,
+              -0.2600427972972392,
+              5.999415088622132
+            ],
+            "velocity": [
+              -0.17731983583886668,
+              1.832028456528983,
+              -1.2579041961650321
+            ],
+            "inheritedVelocity": [
+              -0.17731983583886668,
+              0.03202845652898291,
+              -1.2579041961650321
+            ],
+            "hasVelocity": true,
+            "deltaTime": 0.01666666666666672,
+            "reason": "tracked"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Reef contact releases cargo",
+      "passed": true,
+      "detail": {
+        "type": "cargo-released",
+        "time": 0.8547000000000018,
+        "position": [
+          1.8990249112348274,
+          -0.2600427972972392,
+          5.999415088622132
+        ],
+        "velocity": [
+          -0.17731983583886668,
+          1.832028456528983,
+          -1.2579041961650321
+        ],
+        "inheritedVelocity": [
+          -0.17731983583886668,
+          0.03202845652898291,
+          -1.2579041961650321
+        ],
+        "hasVelocity": true,
+        "deltaTime": 0.01666666666666672,
+        "reason": "tracked"
+      }
+    },
+    {
+      "name": "Released cargo has finite position and velocity",
+      "passed": true,
+      "detail": {
+        "type": "cargo-released",
+        "time": 0.8547000000000018,
+        "position": [
+          1.8990249112348274,
+          -0.2600427972972392,
+          5.999415088622132
+        ],
+        "velocity": [
+          -0.17731983583886668,
+          1.832028456528983,
+          -1.2579041961650321
+        ],
+        "inheritedVelocity": [
+          -0.17731983583886668,
+          0.03202845652898291,
+          -1.2579041961650321
+        ],
+        "hasVelocity": true,
+        "deltaTime": 0.01666666666666672,
+        "reason": "tracked"
+      }
+    },
+    {
+      "name": "Cargo inherits a tracked simulation frame",
+      "passed": true,
+      "detail": {
+        "type": "cargo-released",
+        "time": 0.8547000000000018,
+        "position": [
+          1.8990249112348274,
+          -0.2600427972972392,
+          5.999415088622132
+        ],
+        "velocity": [
+          -0.17731983583886668,
+          1.832028456528983,
+          -1.2579041961650321
+        ],
+        "inheritedVelocity": [
+          -0.17731983583886668,
+          0.03202845652898291,
+          -1.2579041961650321
+        ],
+        "hasVelocity": true,
+        "deltaTime": 0.01666666666666672,
+        "reason": "tracked"
+      }
+    },
+    {
+      "name": "Cargo adds the explicit kick exactly once",
+      "passed": true,
+      "detail": {
+        "type": "cargo-released",
+        "time": 0.8547000000000018,
+        "position": [
+          1.8990249112348274,
+          -0.2600427972972392,
+          5.999415088622132
+        ],
+        "velocity": [
+          -0.17731983583886668,
+          1.832028456528983,
+          -1.2579041961650321
+        ],
+        "inheritedVelocity": [
+          -0.17731983583886668,
+          0.03202845652898291,
+          -1.2579041961650321
+        ],
+        "hasVelocity": true,
+        "deltaTime": 0.01666666666666672,
+        "reason": "tracked"
+      }
+    },
+    {
+      "name": "Restart and collision remain free of errors",
+      "passed": true,
+      "detail": {
+        "game": [],
+        "browser": [],
+        "routes": []
+      }
+    },
+    {
+      "name": "Explicit disposal completed",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Disposal is idempotent and stops rendering",
+      "passed": true,
+      "detail": null
+    },
+    {
+      "name": "Disposal did not produce game errors",
+      "passed": true,
+      "detail": {
+        "game": [],
+        "browser": []
+      }
+    },
+    {
+      "name": "Executed source hashes remained stable",
+      "passed": true,
+      "detail": null
+    }
+  ],
+  "route": [
+    {
+      "label": "intro",
+      "phase": "intro",
+      "playing": false,
+      "paused": false,
+      "mode": "swim",
+      "x": 0,
+      "y": -0.3,
+      "z": 7,
+      "yaw": 1.5707963267948966,
+      "speed": 0,
+      "time": 0,
+      "target": null,
+      "elapsed": 0,
+      "rescued": 0,
+      "lanterns": [],
+      "bumps": 0
+    },
+    {
+      "label": "after actual Begin",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": 0,
+      "y": -0.3,
+      "z": 7,
+      "yaw": 1.5707963267948966,
+      "speed": 0,
+      "time": 2.3152000000014876,
+      "target": null,
+      "elapsed": 2.3152000000014876,
+      "rescued": 0,
+      "lanterns": [],
+      "bumps": 0
+    },
+    {
+      "label": "after actual water pointer",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": 0,
+      "y": -0.3,
+      "z": 7,
+      "yaw": 1.5707963267948966,
+      "speed": 0,
+      "time": 2.3152000000014876,
+      "target": {
+        "x": -9.000000251670361,
+        "z": 5.999999515804033
+      },
+      "elapsed": 2.3152000000014876,
+      "rescued": 0,
+      "lanterns": [],
+      "bumps": 0
+    },
+    {
+      "label": "first lantern: target",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": 0,
+      "y": -0.3,
+      "z": 7,
+      "yaw": 1.5707963267948966,
+      "speed": 0,
+      "time": 2.3152000000014876,
+      "target": {
+        "x": -9.000000251670361,
+        "z": 5.999999515804033
+      },
+      "elapsed": 2.3152000000014876,
+      "rescued": 0,
+      "lanterns": [],
+      "bumps": 0
+    },
+    {
+      "label": "first lantern: 2s",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -4.448644614764804,
+      "y": -0.3,
+      "z": 6.381858795162979,
+      "yaw": 3.0578885714032564,
+      "speed": 3.0840836161420744,
+      "time": 4.3152000000014805,
+      "target": {
+        "x": -9.000000251670361,
+        "z": 5.999999515804033
+      },
+      "elapsed": 4.3152000000014805,
+      "rescued": 0,
+      "lanterns": [],
+      "bumps": 0
+    },
+    {
+      "label": "first lantern: 4s",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -8.930405306166069,
+      "y": -0.3,
+      "z": 6.005838540010756,
+      "yaw": 3.0578885714032595,
+      "speed": 0.4199275406966889,
+      "time": 6.315200000001473,
+      "target": {
+        "x": -9.000000251670361,
+        "z": 5.999999515804033
+      },
+      "elapsed": 6.315200000001473,
+      "rescued": 0,
+      "lanterns": [
+        "first"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "second lantern: target",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "fly",
+      "x": -8.930405306166069,
+      "y": -0.3,
+      "z": 6.005838540010756,
+      "yaw": 3.0578885714032595,
+      "speed": 0.4199275406966889,
+      "time": 6.315200000001473,
+      "target": {
+        "x": 8,
+        "z": -5
+      },
+      "elapsed": 6.315200000001473,
+      "rescued": 0,
+      "lanterns": [
+        "first"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "second lantern: 2s",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "fly",
+      "x": -5.578683231351052,
+      "y": 5.3937692944453355,
+      "z": 3.16201218574595,
+      "yaw": 0.5412206656452118,
+      "speed": 4.128002824917671,
+      "time": 8.315200000001482,
+      "target": {
+        "x": 8,
+        "z": -5
+      },
+      "elapsed": 8.315200000001482,
+      "rescued": 0,
+      "lanterns": [
+        "first"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "second lantern: 4s",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "fly",
+      "x": 1.6007831263268673,
+      "y": 5.49805431675816,
+      "z": -1.1534940308822281,
+      "yaw": 0.5412206656452118,
+      "speed": 4.199821536845547,
+      "time": 10.315200000001582,
+      "target": {
+        "x": 8,
+        "z": -5
+      },
+      "elapsed": 10.315200000001582,
+      "rescued": 0,
+      "lanterns": [
+        "first"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "second lantern: 6s",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "fly",
+      "x": 7.684920950306619,
+      "y": 5.499964363568344,
+      "z": -4.8106090996266095,
+      "yaw": 0.5412206656452128,
+      "speed": 1.3601709174256589,
+      "time": 12.315200000001681,
+      "target": {
+        "x": 8,
+        "z": -5
+      },
+      "elapsed": 12.315200000001681,
+      "rescued": 0,
+      "lanterns": [
+        "first",
+        "second"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "wingbeat screenshot phase",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "fly",
+      "x": 7.858839834879407,
+      "y": 5.499975374845138,
+      "z": -4.915150020938992,
+      "yaw": 0.541220665645215,
+      "speed": 0.8652550397591644,
+      "time": 12.499999999999993,
+      "target": {
+        "x": 8,
+        "z": -5
+      },
+      "elapsed": 12.499999999999993,
+      "rescued": 0,
+      "lanterns": [
+        "first",
+        "second"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "lighthouse approach: target",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "fly",
+      "x": 7.858839834879407,
+      "y": 5.499975374845138,
+      "z": -4.915150020938992,
+      "yaw": 0.541220665645215,
+      "speed": 0.8652550397591644,
+      "time": 12.499999999999993,
+      "target": {
+        "x": 0,
+        "z": -17.2
+      },
+      "elapsed": 12.499999999999993,
+      "rescued": 0,
+      "lanterns": [
+        "first",
+        "second"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "lighthouse approach: 2s",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "fly",
+      "x": 4.902108084508922,
+      "y": 5.499999548974549,
+      "z": -10.151812891206678,
+      "yaw": 2.178504751749359,
+      "speed": 4.176569311695885,
+      "time": 14.500000000000092,
+      "target": {
+        "x": 0,
+        "z": -17.2
+      },
+      "elapsed": 14.500000000000092,
+      "rescued": 0,
+      "lanterns": [
+        "first",
+        "second"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "lighthouse approach: 4s",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "fly",
+      "x": 0.47402688385148845,
+      "y": 5.499999991739175,
+      "z": -16.51845032496499,
+      "yaw": 2.178504751749358,
+      "speed": 2.1689757803024237,
+      "time": 16.50000000000014,
+      "target": {
+        "x": 0,
+        "z": -17.2
+      },
+      "elapsed": 16.50000000000014,
+      "rescued": 0,
+      "lanterns": [
+        "first",
+        "second",
+        "third"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "landing and rescue 1",
+      "phase": "docking",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -0.0018722479387161574,
+      "y": -0.1937692945966441,
+      "z": -17.20269189368299,
+      "yaw": 1.6317244708014396,
+      "speed": 0,
+      "time": 18.500000000000025,
+      "target": null,
+      "elapsed": 17.366666666666756,
+      "rescued": 0,
+      "lanterns": [
+        "first",
+        "second",
+        "third"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "landing and rescue 2",
+      "phase": "docking",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -0.00003429141715570207,
+      "y": -0.29805431676093663,
+      "z": -17.200049303752607,
+      "yaw": 1.5719122646786825,
+      "speed": 0,
+      "time": 20.49999999999991,
+      "target": null,
+      "elapsed": 17.366666666666756,
+      "rescued": 0,
+      "lanterns": [
+        "first",
+        "second",
+        "third"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "landing and rescue 3",
+      "phase": "docking",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -6.280692136067836e-7,
+      "y": -0.29996436356840145,
+      "z": -17.200000903029707,
+      "yaw": 1.5708167659101997,
+      "speed": 0,
+      "time": 22.499999999999797,
+      "target": null,
+      "elapsed": 17.366666666666756,
+      "rescued": 4,
+      "lanterns": [
+        "first",
+        "second",
+        "third"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "landing and rescue 4",
+      "phase": "docking",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -1.1503488913553104e-8,
+      "y": -0.29999934729598754,
+      "z": -17.200000016539537,
+      "yaw": 1.5707967011503527,
+      "speed": 0,
+      "time": 24.499999999999684,
+      "target": null,
+      "elapsed": 17.366666666666756,
+      "rescued": 8,
+      "lanterns": [
+        "first",
+        "second",
+        "third"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "landing and rescue 5",
+      "phase": "done",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -1.9659659585195785e-9,
+      "y": -0.29999998804530903,
+      "z": -17.200000002826616,
+      "yaw": 1.570796390772886,
+      "speed": 0,
+      "time": 26.49999999999957,
+      "target": null,
+      "elapsed": 17.366666666666756,
+      "rescued": 8,
+      "lanterns": [
+        "first",
+        "second",
+        "third"
+      ],
+      "bumps": 0
+    },
+    {
+      "label": "after actual restart",
+      "phase": "intro",
+      "playing": false,
+      "paused": false,
+      "mode": "swim",
+      "x": 0,
+      "y": -0.3,
+      "z": 7,
+      "yaw": 1.5707963267948966,
+      "speed": 0,
+      "time": 0,
+      "target": null,
+      "elapsed": 0,
+      "rescued": 0,
+      "lanterns": [],
+      "bumps": 0
+    },
+    {
+      "label": "reef approach 1",
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -0.8406900147034911,
+      "y": -0.3,
+      "z": 5.755942559904252,
+      "yaw": 2.1965371189890877,
+      "speed": 0.1833298040287829,
+      "time": 1.054700000000002,
+      "target": {
+        "x": -5,
+        "z": 0
+      },
+      "elapsed": 1.054700000000002,
+      "rescued": 0,
+      "lanterns": [],
+      "bumps": 1
+    }
+  ],
+  "actions": [
+    {
+      "type": "click",
+      "selector": "#begin"
+    },
+    {
+      "type": "observe-realtime-RAF",
+      "requestedMs": 2000,
+      "warmupMs": 250
+    },
+    {
+      "type": "pointer-drag",
+      "projectedWorldPoint": [
+        -9,
+        0,
+        6
+      ],
+      "client": {
+        "x": 301.27620278809815,
+        "y": 395.2193745789946
+      }
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "first lantern: 2s"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "first lantern: 4s"
+    },
+    {
+      "type": "click",
+      "selector": "#fly"
+    },
+    {
+      "type": "setTarget",
+      "x": 8,
+      "z": -5,
+      "label": "second lantern"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "second lantern: 2s"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "second lantern: 4s"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "second lantern: 6s"
+    },
+    {
+      "type": "advance",
+      "seconds": 0.18479999999831875,
+      "label": "wingbeat screenshot phase"
+    },
+    {
+      "type": "setTarget",
+      "x": 0,
+      "z": -17.2,
+      "label": "lighthouse approach"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "lighthouse approach: 2s"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "lighthouse approach: 4s"
+    },
+    {
+      "type": "click",
+      "selector": "#swim"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "landing and rescue 1"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "landing and rescue 2"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "landing and rescue 3"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "landing and rescue 4"
+    },
+    {
+      "type": "advance",
+      "seconds": 2,
+      "label": "landing and rescue 5"
+    },
+    {
+      "type": "click",
+      "selector": "#restart"
+    },
+    {
+      "type": "click",
+      "selector": "#begin",
+      "label": "collision voyage"
+    },
+    {
+      "type": "setTarget",
+      "x": -5,
+      "z": 0,
+      "label": "real reef contact"
+    },
+    {
+      "type": "advance",
+      "seconds": 1,
+      "label": "reef approach 1"
+    }
+  ],
+  "screenshots": {
+    "intro": {
+      "path": "intro.png",
+      "sha256": "d9483ec7362f832c40917c91a1377284eacec7e8fee43ce1a685993c0e09f97a"
+    },
+    "swim": {
+      "path": "swim.png",
+      "sha256": "2109d4e9bd5d35539de4c988a41d76e556ccf9ccb2ba1a3cdef381a4c35cae3e"
+    },
+    "fly": {
+      "path": "fly.png",
+      "sha256": "a28f7077b3ee9b91da02aac86f2b74dc1ab2015ba8666a1c15d81be83ad05c41"
+    },
+    "finish": {
+      "path": "finish.png",
+      "sha256": "97c1867dd270c47b99ce1adaba6d4d8949fc194b28862f9e3f5cda6fac7b5c05"
+    },
+    "collision": {
+      "path": "collision.png",
+      "sha256": "ee45ccc142296d27cfe8850a132e8091b5725c774c803546c924a678b6c43dbc"
+    }
+  },
+  "sourceHashes": {
+    "/experiments/carry-the-city/fins.mjs": "fa4a89e704a476634656fea8ac8d5281b05676e41f0006fa8b88b8d4b4a5c48d",
+    "/experiments/carry-the-city/index.html": "772c1c8cc5e98a4158ed981067602b62988ad43ba2f8aab4020a807c057e9322",
+    "/experiments/carry-the-city/main.mjs": "288e2e304d09d55fe7974951aaedcb9d1b80a7951c75b9504f3815bf6b124235",
+    "/experiments/carry-the-city/motion.mjs": "02f5bbe8d382ad1b00abd893e4341d43e1df53fbfacf2a7a7e7b26ce8cb84576",
+    "/experiments/carry-the-city/rig.mjs": "04d8a5989a4a32e4ad0a4583e681731e6d6dbbecb618dfcc089695ac2bf247b6",
+    "/experiments/carry-the-city/town.mjs": "0b89ddb4dc6da64b10ca7c1dbb7591c6f0bec9df52c8f2dd17909c1f142a8f62",
+    "/experiments/carry-the-city/world-motion.mjs": "f7d6a4a772fb884a667a736584d19194c5454a2e9e605938869dbb448dcddae4",
+    "/experiments/carry-the-city/world.mjs": "ec91966e0a9194faf2b2acce7a1e5321f5d8c9b1280afa68ac5b7297b7ad6ba1",
+    "/scripts/run-carry-the-city.mjs": "f75171ef0868c378831ab7ab84919fb7ff6e48652466ffa3d0be0fe2d9cd1a4d"
+  },
+  "sourceSnapshots": {
+    "/experiments/carry-the-city/fins.mjs": "import * as THREE from 'three';\n\n/** Add six silk fins to the town's existing deformable surface field. */\nexport function addFins(town) {\n  if (!town?.root || !Array.isArray(town.surfaces)) throw new TypeError('Expected a town with a root and deformable surfaces.');\n  const material = new THREE.MeshStandardMaterial({\n    vertexColors: true, side: THREE.DoubleSide, roughness: .72, metalness: 0,\n  });\n  const meshes = [], entries = [], cream = new THREE.Color(0xf4dcac), red = new THREE.Color(0xc67959), rib = new THREE.Color(0xd1b487);\n  const spans = 12, chords = 10;\n  for (const center of [-2.3, 0, 2.3]) for (const side of [-1, 1]) {\n    const positions = [], colors = [], indices = [];\n    for (let row = 0; row <= spans; row++) {\n      const u = row / spans;\n      const halfChord = .44 * Math.sqrt(1 - .975 * u);\n      for (let col = 0; col <= chords; col++) {\n        const v = col / chords * 2 - 1;\n        const sweep = -.88 * u * u;\n        const x = center + sweep + v * halfChord;\n        const y = -.155 - .33 * Math.sin(u * Math.PI * .77) + .09 * v * v * u;\n        const z = side * (1.55 + 1.30 * u + .065 * (1 - v * v) * u);\n        positions.push(x, y, z);\n        const band = row === 3 || row === 4 || row === 9;\n        const c = (band ? red : cream).clone();\n        // Chordwise shading makes the longitudinal sewn ribs visible without\n        // separate line draw calls or a texture dependency.\n        if (col % 3 === 0) c.lerp(rib, .26);\n        c.multiplyScalar(.94 + .06 * Math.cos(v * Math.PI));\n        colors.push(c.r, c.g, c.b);\n      }\n    }\n    for (let row = 0; row < spans; row++) for (let col = 0; col < chords; col++) {\n      const a = row * (chords + 1) + col, b = a + 1, c = a + chords + 1, d = c + 1;\n      if (side > 0) indices.push(a, c, b, b, c, d);\n      else indices.push(a, b, c, b, d, c);\n    }\n    const geometry = new THREE.BufferGeometry();\n    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));\n    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));\n    geometry.setIndex(indices); geometry.computeVertexNormals();\n    const mesh = new THREE.Mesh(geometry, material);\n    mesh.name = `Silk fin ${center} ${side > 0 ? 'starboard' : 'port'}`;\n    mesh.castShadow = mesh.receiveShadow = true; mesh.frustumCulled = false;\n    const entry = {mesh, restPositions: new Float32Array(positions)};\n    town.root.add(mesh); town.surfaces.push(entry); meshes.push(mesh); entries.push(entry);\n  }\n  let disposed = false;\n  const dispose = () => {\n    if (disposed) return;\n    disposed = true;\n    for (const mesh of meshes) { mesh.removeFromParent(); mesh.geometry.dispose(); }\n    for (const entry of entries) { const i = town.surfaces.indexOf(entry); if (i >= 0) town.surfaces.splice(i, 1); }\n    material.dispose();\n  };\n  // The town removes itself from the scene when disposed, so the later scene\n  // traversal cannot discover these added resources. Own their cleanup here.\n  const previousDispose = town.dispose?.bind(town);\n  town.dispose = () => { dispose(); previousDispose?.(); };\n  return {meshes, dispose};\n}\n",
+    "/experiments/carry-the-city/index.html": "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>Carry the City</title>\n<style>\n*{box-sizing:border-box}body{margin:0;background:#9bb4b3;color:#fff3dd;font-family:'DM Sans',system-ui,sans-serif;overflow:hidden}canvas{display:block;touch-action:none}button{font:inherit;cursor:pointer;border:1px solid #f8e2be55;color:#fff3dd;background:#183b3ee8;backdrop-filter:blur(16px);border-radius:100px;padding:12px 21px;transition:background .2s,transform .2s}button:hover{background:#316466;transform:translateY(-2px)}button:disabled{opacity:.45;cursor:default;transform:none}button.active,.primary{background:#ffe7ac;color:#234346;border-color:#ffe7ac}.top{position:absolute;top:24px;left:30px;pointer-events:none;text-shadow:0 2px 20px #12343688}.brand{font:30px 'DM Serif Display',Georgia,serif;letter-spacing:-.8px}.sub{font-size:10px;letter-spacing:3px;margin-top:6px;opacity:.85}.goal{position:absolute;top:26px;left:50%;transform:translateX(-50%);text-align:center;text-shadow:0 2px 15px #001c2288;pointer-events:none}.goal strong{font-size:14px}.people{letter-spacing:6px;font-size:17px;color:#ffdc8c;margin-top:8px}.utility{position:absolute;right:24px;top:24px;display:flex;gap:8px}.utility button{padding:10px 15px;background:#183b3e66}.bottom{position:absolute;bottom:24px;left:50%;transform:translateX(-50%);text-align:center;width:min(700px,94vw);pointer-events:none}.controls{display:flex;justify-content:center;gap:10px;pointer-events:auto}.controls button{min-width:145px}.controls small{display:block;font-size:10px;margin-top:3px;opacity:.65}.hint{font-size:12px;margin:13px 0 0;text-shadow:0 2px 10px #062d32;background:#173d424d;display:inline-block;padding:7px 16px;border-radius:40px}.toast{position:absolute;left:50%;top:23%;transform:translate(-50%,-15px);font:24px 'DM Serif Display',Georgia,serif;text-align:center;opacity:0;transition:opacity .3s,transform .3s;pointer-events:none;text-shadow:0 2px 18px #17383b}.toast.visible{opacity:1;transform:translate(-50%,0)}.intro,.finish{position:absolute;inset:0;display:grid;align-content:center;justify-items:start;padding:7vw;pointer-events:none;background:linear-gradient(90deg,#113b45db,#113b4550 40%,transparent 70%)}.intro h1,.finish h1{font:clamp(52px,6.5vw,100px)/.97 'DM Serif Display',Georgia,serif;font-weight:400;letter-spacing:-3px;margin:0 0 22px;max-width:530px}.intro h1 em{color:#ffd5a1;font-weight:400}.intro p,.finish p{max-width:340px;font-size:15px;line-height:1.7;color:#e6eeee;margin:0 0 25px}.intro .eyebrow,.finish .eyebrow{letter-spacing:4px;font-size:10px;margin-bottom:24px;color:#f7d7a6}.intro button,.finish button{pointer-events:auto;font-size:14px;padding:16px 27px}.caption{position:absolute;bottom:30px;right:28px;font-size:11px;color:#f2e7cf;letter-spacing:.5px;pointer-events:none;text-shadow:0 1px 8px #103e46}.hidden{display:none!important}.progress{position:absolute;bottom:32px;left:28px;font-size:11px;line-height:2;text-shadow:0 1px 8px #103e46}.progress span{color:#ffdfa1}.paused{position:absolute;inset:0;background:#123f4677;display:grid;place-content:center;text-align:center;backdrop-filter:blur(6px)}.paused h2{font:40px 'DM Serif Display',Georgia,serif}.error{position:absolute;left:20px;bottom:20px;max-width:600px;background:#592c30ee;padding:18px;border-radius:12px;z-index:10}#reticle{position:absolute;border:1px solid #ffe9b8;box-shadow:0 0 20px #ffdfae55;width:30px;height:30px;border-radius:50%;transform:translate(-50%,-50%);pointer-events:none;opacity:0;transition:opacity .2s}@media(max-width:750px){.goal{top:88px;width:95%}.brand{font-size:23px}.top{left:18px;top:18px}.utility{right:15px;top:18px}.intro,.finish{padding:8vw}.intro h1{font-size:60px}.caption{display:none}.progress{bottom:140px;left:18px}.bottom{bottom:15px}.controls button{min-width:125px;padding:10px 15px}.hint{font-size:10px}.toast{top:27%;width:90%}}\n</style>\n<style>.map{position:absolute;right:24px;top:82px;width:130px;padding:11px;background:#163c42d6;border:1px solid #f7dfb12e;border-radius:14px;backdrop-filter:blur(10px)}.map small{display:block;text-align:center;font-size:9px;letter-spacing:1.5px;color:#ffe3af;margin-bottom:5px}.map svg{width:100%;display:block;cursor:crosshair;touch-action:none}.map .land{fill:#8d9d86;opacity:.65}.map .lantern{fill:#ffe4a1}.map .collected{opacity:.25}.map .wall{stroke:#d4bb9b;stroke-width:1.1;stroke-dasharray:2 1}@media(max-width:750px){.map{top:150px;right:12px;width:90px;padding:7px}}</style>\n<script type=\"importmap\">{\"imports\":{\"three\":\"/node_modules/three-r186/build/three.module.js\",\"three/addons/\":\"/node_modules/three-r186/examples/jsm/\"}}</script></head><body>\n<div class=\"top\"><div class=\"brand\">Carry the City</div><div class=\"sub\">BORROW A LITTLE WONDER</div></div>\n<div class=\"goal hidden\" id=\"goal\"><strong id=\"objective\">Bring eight little lives to the lighthouse.</strong><div class=\"people\" id=\"people\">● ● ● ● ● ● ● ●</div></div>\n<div class=\"utility\"><button id=\"sound\" title=\"Toggle sound\">Sound off</button><button id=\"pause\" class=\"hidden\">Pause</button><button id=\"restart\" class=\"hidden\">↻</button></div>\n<div id=\"toast\" class=\"toast\"></div><div id=\"reticle\"></div>\n<div id=\"map\" class=\"map hidden\"><small>LIGHTHOUSE ↑</small><svg id=\"chart\" viewBox=\"-17 -26 34 42\" aria-label=\"Route map. Click to steer.\" role=\"img\"><path class=\"wall\" d=\"M-14 -10H14\"/><circle class=\"land\" cx=\"-5\" cy=\"0\" r=\"2.2\"/><circle class=\"land\" cx=\"4\" cy=\"-4\" r=\"2.4\"/><circle class=\"land\" cx=\"-5\" cy=\"-16\" r=\"2.8\"/><circle cx=\"0\" cy=\"-21\" r=\"1.7\" fill=\"none\" stroke=\"#ffdf95\" stroke-width=\".4\"/><path d=\"M0 -24v6M-3 -21h6\" stroke=\"#ffdf95\" stroke-width=\".3\"/><circle id=\"map-first\" class=\"lantern\" cx=\"-8\" cy=\"3\" r=\".8\"/><circle id=\"map-second\" class=\"lantern\" cx=\"8\" cy=\"-5\" r=\".8\"/><circle id=\"map-third\" class=\"lantern\" cx=\"0\" cy=\"-17\" r=\".8\"/><path id=\"map-ship\" d=\"M1.6 0L-1.1 -.85L-.65 0L-1.1 .85Z\" fill=\"#a5ffe1\"/></svg></div>\n<div class=\"bottom hidden\" id=\"bottom\"><div class=\"controls\"><button id=\"swim\" class=\"active\">Koi · swim<small>1</small></button><button id=\"fly\">Moth · fly<small>2 / Space</small></button></div><p class=\"hint\" id=\"hint\">Drag the water to steer · Follow the golden lanterns · Right-drag to look</p></div>\n<div class=\"progress hidden\" id=\"progress\"><span id=\"lanterns\">○ ○ ○</span><br><span id=\"elapsed\">0:00</span> at sea</div>\n<div class=\"caption\">A tiny town. An unlikely journey.</div>\n<div class=\"intro\" id=\"intro\"><div class=\"eyebrow\">A PLAYABLE LITTLE IMPOSSIBILITY</div><h1>Teach a city<br>to <em>swim.</em></h1><p>The tide is taking this little town. Borrow a koi’s movement, then a moth’s wings. Carry everyone to the lighthouse.</p><button id=\"begin\" class=\"primary\" disabled>Building your little world…</button></div>\n<div class=\"finish hidden\" id=\"finish\"><div class=\"eyebrow\">YOU BROUGHT THEM HOME</div><h1>Eight lives.<br><em>One strange city.</em></h1><p id=\"result\"></p><button id=\"again\" class=\"primary\">Take another little voyage</button></div>\n<div class=\"paused hidden\" id=\"paused\"><h2>A little breather.</h2><button id=\"resume\" class=\"primary\">Continue the voyage</button></div>\n<script type=\"module\" src=\"/experiments/carry-the-city/main.mjs\"></script></body></html>\n",
+    "/experiments/carry-the-city/main.mjs": "import * as THREE from 'three';\nimport {OrbitControls} from 'three/addons/controls/OrbitControls.js';\nimport {EffectComposer} from 'three/addons/postprocessing/EffectComposer.js';\nimport {RenderPass} from 'three/addons/postprocessing/RenderPass.js';\nimport {UnrealBloomPass} from 'three/addons/postprocessing/UnrealBloomPass.js';\nimport {OutputPass} from 'three/addons/postprocessing/OutputPass.js';\nimport {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';\nimport {captureClip,samplePoint} from './motion.mjs';\nimport {createTown} from './town.mjs';\nimport {createWorld} from './world.mjs';\nimport {createMotionRig} from './rig.mjs';\nimport {createWorldMotionHistory} from './world-motion.mjs';\nimport {addFins} from './fins.mjs';\n\nconst $=id=>document.getElementById(id),clamp=THREE.MathUtils.clamp,lerp=THREE.MathUtils.lerp;\nconst evidence={ready:false,errors:[],events:[],frames:0,maxFrameMs:0,disposed:false};\nconst SWIM_Y=-.3;\nconst state={playing:false,paused:false,phase:'intro',mode:'swim',blend:0,time:0,elapsed:0,x:0,z:7,y:SWIM_Y,yaw:Math.PI/2,speed:0,target:null,lanterns:new Set(),rescued:0,bumps:0};\nconst clips={swim:captureClip({kind:'swim'}),fly:captureClip({kind:'fly'})};\nconst motionHistory=createWorldMotionHistory(),cargoAnchor=[-1.5,0,1.6];let cargoPending=false;\nlet renderer,scene,camera,composer,controls,world,town,rig,environment,pmrem,fish,moth,routeMesh,ring,gangway;\nlet disposed=false,raf=0,last=0,pointerDown=false,toastUntil=0,manualCameraUntil=0,lastInteraction=performance.now(),impactUntil=0,flightHint=false,dockHint=false,dockStarted=0,sound=false,audio;\nconst keys=new Set(),ray=new THREE.Raycaster(),pointer=new THREE.Vector2(),seaPlane=new THREE.Plane(new THREE.Vector3(0,1,0),0),vec=new THREE.Vector3();\nconst destination={x:0,z:-17.2};\nconst sparks=[],loose=[],sourceParts=[];\nconst screenSamples=[];\nfunction event(type,data={}){evidence.events.push({type,time:state.time,...data});}\nfunction showToast(text,duration=3){$('toast').textContent=text;$('toast').classList.add('visible');toastUntil=state.time+duration;}\nfunction note(frequency=660,duration=.35){\n if(!sound)return;audio??=new AudioContext();if(audio.state==='suspended')audio.resume();const oscillator=audio.createOscillator(),gain=audio.createGain();oscillator.type='sine';oscillator.frequency.setValueAtTime(frequency,audio.currentTime);gain.gain.setValueAtTime(0,audio.currentTime);gain.gain.linearRampToValueAtTime(.065,audio.currentTime+.015);gain.gain.exponentialRampToValueAtTime(.0001,audio.currentTime+duration);oscillator.connect(gain).connect(audio.destination);oscillator.start();oscillator.stop(audio.currentTime+duration+.02);\n}\nfunction fail(error){evidence.errors.push(String(error.stack??error));pause();const box=document.createElement('div');box.className='error';box.textContent=error.message;document.body.append(box);}\nfunction mat(color,roughness=.6,metalness=0){return new THREE.MeshStandardMaterial({color,roughness,metalness});}\nfunction buildCreature(kind){\n const group=new THREE.Group();group.userData.kind=kind;\n const make=(geometry,material,position=[0,0,0],rotation=[0,0,0])=>{geometry.rotateX(rotation[0]);geometry.rotateY(rotation[1]);geometry.rotateZ(rotation[2]);geometry.translate(...position);const mesh=new THREE.Mesh(geometry,material);mesh.castShadow=true;group.add(mesh);sourceParts.push({mesh,kind,rest:geometry.attributes.position.array.slice()});return mesh;};\n if(kind==='swim'){\n  const orange=mat(0xed803f,.34),ivory=mat(0xfff0d1,.35),black=mat(0x162d35,.22);\n  const body=new THREE.SphereGeometry(1,24,12);body.scale(3,.52,.73);make(body,ivory);\n  for(const x of [-1.4,.15,1.5]){const patch=new THREE.SphereGeometry(1,12,8);patch.scale(.62,.14,.53);make(patch,orange,[x,.43,.03]);}\n  const tail=new THREE.ConeGeometry(1.12,1.35,3);tail.scale(1,.3,1);make(tail,orange,[-3.05,0,0],[0,0,Math.PI/2]);\n  for(const side of [-1,1]){const fin=new THREE.ConeGeometry(.58,.95,3);fin.scale(1,.15,1);make(fin,orange,[.3,-.05,side*.8],[0,side*.55,Math.PI/2]);make(new THREE.SphereGeometry(.13,8,6),black,[2.45,.2,side*.39]);}\n  group.scale.setScalar(.33);\n }else{\n  const wing=mat(0xffdcaa,.65),pink=mat(0xedbaa9,.7),body=mat(0x65535a,.6);\n  for(const side of [-1,1]){const shape=new THREE.SphereGeometry(1,18,10);shape.scale(1.35,.055,1.18);make(shape,wing,[.2,0,side*.95]);const lower=new THREE.SphereGeometry(1,12,8);lower.scale(.92,.05,.88);make(lower,pink,[-1,0,side*.72]);const eye=new THREE.SphereGeometry(.32,12,8);eye.scale(1,.15,1);make(eye,mat(0x855772),[.45,.07,side*1.25]);}\n  const b=new THREE.SphereGeometry(1,12,8);b.scale(1.8,.22,.2);make(b,body);\n  group.scale.setScalar(.47);\n }\n scene.add(group);return group;\n}\nfunction particleBurst(position,color=0xffdf8a,count=20){\n for(let i=0;i<count&&sparks.length<140;i++){\n  const mesh=new THREE.Mesh(new THREE.IcosahedronGeometry(.06,0),new THREE.MeshBasicMaterial({color,transparent:true}));mesh.position.copy(position);scene.add(mesh);\n  const a=i*2.39996;sparks.push({mesh,life:1.4,v:new THREE.Vector3(Math.cos(a)*1.7,.4+(i%7)*.25,Math.sin(a)*1.7)});\n }\n}\nfunction mode(kind){\n if(!state.playing||state.phase==='docking'||state.phase==='done')return;\n if(kind==='swim'&&Math.abs(state.z+10)<5){showToast('Stay airborne until the whole town clears the wall.');return;}\n state.mode=kind;$('swim').classList.toggle('active',kind==='swim');$('fly').classList.toggle('active',kind==='fly');\n showToast(kind==='fly'?'A moth’s wingbeat. A city takes flight.':'A koi’s rhythm. The streets begin to swim.');\n particleBurst(new THREE.Vector3(state.x,state.y+1,state.z),kind==='fly'?0xffd8af:0x98fff0,28);note(kind==='fly'?880:520);event('motion-borrowed',{kind,clip:clips[kind].id});\n}\nfunction start(){\n if(!evidence.ready||disposed)return;\n state.playing=true;state.paused=false;state.phase='voyage';lastInteraction=performance.now();\n $('intro').classList.add('hidden');for(const id of ['goal','bottom','progress','pause','restart','map'])$(id).classList.remove('hidden');\n showToast('The town is yours. Drag the water to lead it.',4);particleBurst(new THREE.Vector3(0,1,7),0xaaffdf,26);note(520);event('start');last=performance.now();schedule();\n}\nfunction pause(){if(disposed)return;state.paused=true;cancelAnimationFrame(raf);raf=0;if(state.playing)$('paused').classList.remove('hidden');}\nfunction resume(){if(disposed||!evidence.ready)return;state.paused=false;$('paused').classList.add('hidden');lastInteraction=performance.now();last=performance.now();schedule();}\nfunction clearEffects(){for(const p of [...sparks,...loose]){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();}sparks.length=loose.length=0;}\nfunction restart(){\n clearEffects();motionHistory.clear();cargoPending=false;for(const resident of town.residents){const a=resident.attachment??resident;if(a.detached){town.root.add(a.object);a.detached=false;}a.object.visible=true;}\n state.lanterns.clear();Object.assign(state,{playing:false,paused:false,phase:'intro',mode:'swim',blend:0,time:0,elapsed:0,x:0,z:7,y:SWIM_Y,yaw:Math.PI/2,speed:0,target:null,rescued:0,bumps:0});\n flightHint=dockHint=false;impactUntil=0;gangway.visible=false;for(const c of world.collectibles??[])(c.group??c.mesh).visible=true;\n for(const id of ['finish','goal','bottom','progress','paused','map'])$(id).classList.add('hidden');$('intro').classList.remove('hidden');$('swim').classList.add('active');$('fly').classList.remove('active');$('people').textContent='● ● ● ● ● ● ● ●';$('objective').textContent='Bring eight little lives to the lighthouse.';update(0);render();event('restart');\n}\nfunction setTarget(x,z){if(!state.playing||state.phase!=='voyage')return;lastInteraction=performance.now();state.target={x:clamp(x,-13,13),z:clamp(z,-22,14)};if(state.target.z<-18&&Math.abs(state.target.x)<5)state.target={...destination};}\nfunction aimedPoint(e){pointer.set(e.clientX/innerWidth*2-1,1-e.clientY/innerHeight*2);ray.setFromCamera(pointer,camera);return ray.ray.intersectPlane(seaPlane,new THREE.Vector3());}\nfunction steer(e){if(!pointerDown||e.target!==renderer.domElement)return;const point=aimedPoint(e);if(point)setTarget(point.x,point.z);}\nfunction updateResidents(dt){\n for(let i=0;i<town.residents.length;i++){\n  const resident=town.residents[i],a=resident.attachment??resident;if(a.detached)continue;\n  if(!a.homeAnchor)a.homeAnchor=[...a.anchor];\n  a.anchor[0]=a.homeAnchor[0]+Math.sin(state.time*.6+i*1.7)*.25;a.anchor[2]=a.homeAnchor[2];\n }\n}\nfunction addLooseCargo(){\n const mesh=new THREE.Mesh(new THREE.BoxGeometry(.27,.27,.27),mat(0xbc8a5d));const released=motionHistory.release('cargo',{kick:[0,1.8,0]});\n mesh.position.set(...released.position);scene.add(mesh);loose.push({mesh,v:new THREE.Vector3(...released.velocity),life:3});event('cargo-released',released);\n}\nfunction collision(previousX,previousZ,previousYaw){\n if(state.y<2.9){\n  // Approximate gameplay capsules follow the deformed street's centerline.\n  // The ocean cliffs and the town's ornamental fins are not triangle colliders.\n  const centers=[-3,-1,1,3].map(x=>rig.field([x,0,0],state.time,state.blend));\n  const clearance=(cx,cz,yaw,reef)=>{\n   const c=Math.cos(yaw),s=Math.sin(yaw),points=centers.map(p=>[cx+c*p[0]+s*p[2],cz-s*p[0]+c*p[2]]);let d=Infinity;\n   for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],dx=b[0]-a[0],dz=b[1]-a[1],u=clamp(((reef.x-a[0])*dx+(reef.z-a[1])*dz)/(dx*dx+dz*dz),0,1);d=Math.min(d,Math.hypot(reef.x-a[0]-u*dx,reef.z-a[1]-u*dz));}\n   return d-reef.r-2;\n  };\n  for(const reef of world.reefs??[]){const next=clearance(state.x,state.z,state.yaw,reef),before=clearance(previousX,previousZ,previousYaw,reef);if(next<0&&next<=before+1e-6){state.x=previousX;state.z=previousZ;state.yaw=previousYaw;state.speed*=.1;if(state.time>impactUntil){impactUntil=state.time+2;state.bumps++;showToast('A little scrape. Steer around the reefs—or fly.');cargoPending=true;note(170,.5);event('reef-impact');}return;}}\n }\n if(state.y<3.7&&Math.abs(state.z+10)<4.6&&Math.abs(state.x)<15){state.x=previousX;state.z=previousZ;state.speed=0;if(state.time>impactUntil){impactUntil=state.time+2;showToast('Borrow the moth’s motion to cross the sea wall.');note(250,.3);}}\n}\nfunction update(dt){\n state.time+=dt;if(state.playing&&state.phase==='voyage')state.elapsed+=dt;\n state.blend=THREE.MathUtils.damp(state.blend,state.mode==='fly'?1:0,2.6,dt);\n state.y=THREE.MathUtils.damp(state.y,state.mode==='fly'?5.5:SWIM_Y,2,dt);\n if(state.phase==='intro')state.y=SWIM_Y+Math.sin(state.time)*.06;\n if(state.playing&&state.phase==='voyage'){\n  const dir=new THREE.Vector3((keys.has('d')||keys.has('ArrowRight')?1:0)-(keys.has('a')||keys.has('ArrowLeft')?1:0),0,(keys.has('s')||keys.has('ArrowDown')?1:0)-(keys.has('w')||keys.has('ArrowUp')?1:0));\n  if(dir.lengthSq()){dir.normalize();state.target={x:state.x+dir.x*5,z:state.z+dir.z*5};lastInteraction=performance.now();}\n  let wantedSpeed=0;const previousYaw=state.yaw;\n  if(state.target){const dx=state.target.x-state.x,dz=state.target.z-state.z,distance=Math.hypot(dx,dz);if(distance>.25){const wanted=Math.atan2(-dz,dx),delta=Math.atan2(Math.sin(wanted-state.yaw),Math.cos(wanted-state.yaw));state.yaw+=clamp(delta,-dt*2.4,dt*2.4);wantedSpeed=Math.min(state.mode==='fly'?4.2:3.1,distance*1.25)*Math.max(.2,Math.cos(delta));}}\n  state.speed=THREE.MathUtils.damp(state.speed,wantedSpeed,3,dt);\n  const px=state.x,pz=state.z;state.x+=Math.cos(state.yaw)*state.speed*dt;state.z-=Math.sin(state.yaw)*state.speed*dt;collision(px,pz,previousYaw);\n  if(state.z<-2&&!flightHint){flightHint=true;$('objective').textContent='The sea wall is ahead. Borrow a moth’s wingbeat.';showToast('Try Moth · fly. Even houses can have wings.',4);}\n  if(state.z<-15&&!dockHint){dockHint=true;$('objective').textContent='Return to the water and dock at the lighthouse.';showToast('Swim again, then steer into the lighthouse’s golden ring.',4);}\n  for(const c of world.collectibles??[]){if(!state.lanterns.has(c.id)&&Math.hypot(state.x-c.x,state.z-c.z)<2.2){state.lanterns.add(c.id);(c.group??c.mesh).visible=false;particleBurst(new THREE.Vector3(c.x,state.y+1,c.z));note(660+state.lanterns.size*110);event('lantern',{id:c.id});}}\n  const dd=Math.hypot(state.x-destination.x,state.z-destination.z);\n  if(dd<2.15&&state.mode==='swim'&&state.y<.75){state.phase='docking';state.target=null;state.speed=0;dockStarted=state.time;$('objective').textContent='Home is a little closer.';showToast('You made it. Everyone ashore.',3);note(880,.8);event('docking');}\n }\n if(state.phase==='docking'){\n  state.x=THREE.MathUtils.damp(state.x,destination.x,2,dt);state.z=THREE.MathUtils.damp(state.z,destination.z,2,dt);state.yaw=THREE.MathUtils.damp(state.yaw,Math.PI/2,2,dt);\n }\n town.root.position.set(state.x,state.y,state.z);town.root.rotation.y=state.yaw;updateResidents(dt);rig.update(state.time,state.blend);\n motionHistory.record('cargo',rig.worldPoint(cargoAnchor,state.time,state.blend),state.time);if(cargoPending){cargoPending=false;addLooseCargo();}\n if(state.phase==='docking'||state.phase==='done'){\n  const from=rig.worldPoint([4.1,.15,0],state.time,state.blend),to=new THREE.Vector3(0,.3,-22.2),mid=from.clone().add(to).multiplyScalar(.5),direction=to.clone().sub(from);\n  gangway.visible=true;gangway.position.copy(mid);gangway.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),direction.clone().normalize());gangway.scale.set(.75,.09,direction.length());\n  const t=state.time-dockStarted;\n  for(let i=0;i<town.residents.length;i++){\n   const r=town.residents[i],a=r.attachment??r,progress=clamp((t-i*.5)/3.5,0,1);\n   if(progress>0&&!a.detached){scene.attach(a.object);a.detached=true;a.departure=a.object.position.clone();}\n   if(a.detached){const along=progress<.55?a.departure.clone().lerp(from,progress/.55):from.clone().lerp(to,(progress-.55)/.45);a.object.position.copy(along);a.object.position.y+=.025*Math.sin(state.time*14+i);a.object.quaternion.identity();if(progress===1)a.object.visible=false;}\n  }\n  state.rescued=Math.min(8,Math.max(0,Math.floor((t-3.5)/.5)+1));$('people').textContent=Array.from({length:8},(_,i)=>i<state.rescued?'✦':'●').join(' ');\n  if(t>8&&state.phase!=='done'){state.rescued=8;state.phase='done';$('finish').classList.remove('hidden');$('bottom').classList.add('hidden');$('result').textContent=`Everyone is safe. ${Math.floor(state.elapsed)} seconds, ${state.lanterns.size} lanterns, ${state.bumps} little scrapes. Try a different route or a different rhythm.`;particleBurst(to,0xffdf91,40);note(1100,.8);event('win',{elapsed:state.elapsed,lanterns:state.lanterns.size,bumps:state.bumps});}\n }\n world.update?.(state.time);\n fish.position.set(state.x+Math.cos(state.time*.4)*6,-.5,state.z+Math.sin(state.time*.4)*3);fish.rotation.y=state.time*.4+Math.PI/2;\n moth.position.set(state.x-5,4.8+Math.sin(state.time*1.5)*.4,state.z-3);moth.rotation.y=-state.time*.3;\n for(const part of sourceParts){const positions=part.mesh.geometry.attributes.position;for(let i=0;i<positions.count;i++)positions.setXYZ(i,...samplePoint(clips[part.kind],state.time,[part.rest[3*i],part.rest[3*i+1],part.rest[3*i+2]]));positions.needsUpdate=true;part.mesh.geometry.computeVertexNormals();part.mesh.frustumCulled=false;}\n for(let i=sparks.length-1;i>=0;i--){const p=sparks[i];p.life-=dt;p.v.y-=dt*.7;p.mesh.position.addScaledVector(p.v,dt);p.mesh.material.opacity=Math.max(0,p.life/1.4);if(p.life<=0){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();sparks.splice(i,1);}}\n for(let i=loose.length-1;i>=0;i--){const p=loose[i];p.life-=dt;p.v.y-=dt*5;p.mesh.position.addScaledVector(p.v,dt);p.mesh.rotation.x+=dt*2;p.mesh.rotation.z+=dt;if(p.mesh.position.y<-.6)p.mesh.position.y=-.6;if(p.life<=0){scene.remove(p.mesh);p.mesh.geometry.dispose();p.mesh.material.dispose();loose.splice(i,1);}}\n if(state.target){ring.visible=true;ring.position.set(state.target.x,-.3,state.target.z);ring.rotation.z=state.time*.25;}else ring.visible=false;\n if(state.time>toastUntil)$('toast').classList.remove('visible');\n $('lanterns').textContent=Array.from({length:3},(_,i)=>i<state.lanterns.size?'✦':'○').join('  ');$('elapsed').textContent=Math.floor(state.elapsed/60)+':'+String(Math.floor(state.elapsed%60)).padStart(2,'0');\n $('map-ship').setAttribute('transform',`translate(${state.x} ${state.z}) rotate(${-state.yaw*180/Math.PI})`);for(const c of world.collectibles){const mark=$('map-'+c.id);mark.setAttribute('cx',c.x);mark.setAttribute('cy',c.z);mark.classList.toggle('collected',state.lanterns.has(c.id));}\n const now=performance.now();if(now>manualCameraUntil){const intro=state.phase==='intro',focus=intro?new THREE.Vector3(state.x-2.7,state.y+1.1,state.z+.56):new THREE.Vector3(state.x,state.y+1.1,state.z-1.5),offset=intro?new THREE.Vector3(9,4.8,12):new THREE.Vector3(9,10.5,13);camera.position.lerp(focus.clone().add(offset),dt?1-Math.exp(-dt*2):1);controls.target.lerp(focus,dt?1-Math.exp(-dt*3):1);}\n controls.update();\n}\nfunction render(){if(disposed||!composer)return;const begin=performance.now();composer.render();evidence.frames++;evidence.maxFrameMs=Math.max(evidence.maxFrameMs,performance.now()-begin);}\nfunction loop(now){raf=0;if(disposed||state.paused||document.hidden)return;const dt=clamp((now-last)/1000,0,.035);last=now;try{update(dt);render();}catch(e){fail(e);return;}if(now-lastInteraction>90000){pause();return;}if(state.phase!=='intro')schedule();}\nfunction schedule(){if(!raf&&!disposed&&!state.paused&&!document.hidden)raf=requestAnimationFrame(loop);}\nasync function init(){\n try{\n  renderer=new THREE.WebGLRenderer({antialias:true,powerPreference:'default'});renderer.setPixelRatio(Math.min(devicePixelRatio,1.25));renderer.setSize(innerWidth,innerHeight);renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.95;renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;document.body.prepend(renderer.domElement);\n  renderer.domElement.addEventListener('webglcontextlost',e=>{e.preventDefault();if(!disposed)fail(Error('Graphics context was lost. Reload to continue.'));});\n  scene=new THREE.Scene();camera=new THREE.PerspectiveCamera(43,innerWidth/innerHeight,.1,250);world=createWorld(scene);town=createTown();addFins(town);scene.add(town.root);rig=createMotionRig(town,clips);\n  if(town.residents.length<8)throw Error('The town needs eight residents');\n  pmrem=new THREE.PMREMGenerator(renderer);const room=new RoomEnvironment();environment=pmrem.fromScene(room,.08);scene.environment=environment.texture;scene.environmentIntensity=.28;room.dispose();pmrem.dispose();\n  controls=new OrbitControls(camera,renderer.domElement);controls.enablePan=false;controls.enableDamping=false;controls.minDistance=9;controls.maxDistance=38;controls.maxPolarAngle=Math.PI*.46;controls.minPolarAngle=.25;controls.mouseButtons.LEFT=null;controls.mouseButtons.RIGHT=THREE.MOUSE.ROTATE;controls.addEventListener('start',()=>{manualCameraUntil=performance.now()+5000;lastInteraction=performance.now();});controls.addEventListener('change',()=>{if(state.phase==='intro')render();});\n  composer=new EffectComposer(renderer);composer.addPass(new RenderPass(scene,camera));composer.addPass(new UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight),.18,.5,1.4));composer.addPass(new OutputPass());\n  fish=buildCreature('swim');moth=buildCreature('fly');\n  ring=new THREE.Mesh(new THREE.RingGeometry(.48,.52,48),new THREE.MeshBasicMaterial({color:0xffdf9c,transparent:true,opacity:.8,side:THREE.DoubleSide,depthWrite:false}));ring.rotation.x=-Math.PI/2;scene.add(ring);\n  gangway=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),mat(0xc6b18b));gangway.visible=false;gangway.receiveShadow=true;scene.add(gangway);\n  update(0);render();evidence.ready=true;$('begin').disabled=false;$('begin').textContent='Borrow the koi’s motion';event('ready',{revision:THREE.REVISION,houses:town.attachments.length,roadVertices:town.surfaces.reduce((n,s)=>n+s.mesh.geometry.attributes.position.count,0),renderer:'WebGL2',source:'authored sampled motion clips'});\n }catch(e){fail(e);$('begin').textContent='Could not open the world';}\n}\n$('begin').onclick=start;$('swim').onclick=()=>mode('swim');$('fly').onclick=()=>mode('fly');$('pause').onclick=pause;$('resume').onclick=resume;$('restart').onclick=restart;$('again').onclick=()=>{restart();start();};$('sound').onclick=()=>{sound=!sound;$('sound').textContent=sound?'Sound on':'Sound off';if(sound)note(660);};\n$('chart').addEventListener('pointerdown',e=>{const rect=$('chart').getBoundingClientRect();setTarget(-17+(e.clientX-rect.left)/rect.width*34,-26+(e.clientY-rect.top)/rect.height*42);});\nwindow.addEventListener('pointerdown',e=>{if(e.button!==0||e.target!==renderer?.domElement)return;pointerDown=true;lastInteraction=performance.now();pointer.set(e.clientX/innerWidth*2-1,1-e.clientY/innerHeight*2);ray.setFromCamera(pointer,camera);if(ray.intersectObject(fish,true).length){if(state.phase==='intro')start();else mode('swim');return;}if(ray.intersectObject(moth,true).length){mode('fly');return;}steer(e);});window.addEventListener('pointermove',steer);window.addEventListener('pointerup',()=>pointerDown=false);\nwindow.addEventListener('keydown',e=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();keys.add(e.key);lastInteraction=performance.now();if(e.repeat)return;if(e.code==='Space')mode(state.mode==='swim'?'fly':'swim');if(e.key==='1')mode('swim');if(e.key==='2')mode('fly');if(e.key.toLowerCase()==='r')restart();if(e.key==='Escape')state.paused?resume():pause();});window.addEventListener('keyup',e=>keys.delete(e.key));\nwindow.addEventListener('resize',()=>{if(!renderer||disposed)return;camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight);composer.setSize(innerWidth,innerHeight);render();});document.addEventListener('visibilitychange',()=>{if(document.hidden){keys.clear();pause();}});\nfunction dispose(){if(disposed)return;disposed=true;cancelAnimationFrame(raf);controls?.dispose();world?.dispose();town?.dispose();environment?.dispose();clearEffects();scene?.traverse(o=>{o.geometry?.dispose();if(Array.isArray(o.material))o.material.forEach(m=>m.dispose());else o.material?.dispose();});composer?.dispose();renderer?.dispose();renderer?.forceContextLoss();audio?.close();evidence.disposed=true;}\nwindow.addEventListener('pagehide',dispose);\nwindow.carryCity={evidence,state,start,mode,setTarget,pause,resume,restart,dispose,advance(seconds,{renderEvery=10}={}){if(seconds<0||seconds>30)throw Error('Bounded test step');cancelAnimationFrame(raf);raf=0;const steps=Math.ceil(seconds*60);for(let i=0;i<steps;i++){update(seconds/steps);if(i%renderEvery===0)render();}render();return {phase:state.phase,x:state.x,y:state.y,z:state.z,mode:state.mode,rescued:state.rescued,elapsed:state.elapsed};},project(x,y,z){const p=new THREE.Vector3(x,y,z).project(camera);return{x:(p.x+1)*innerWidth/2,y:(1-p.y)*innerHeight/2};}};\ninit();\n",
+    "/experiments/carry-the-city/motion.mjs": "/**\n * Sampled motion for Carry the City. No renderer, physics engine or model call.\n *\n * Clips contain normalized source marker POSITIONS, not a target animation.\n * The generic evaluator sweeps a target cross-section along their sampled spine.\n * The two small authored sources below are deliberately explicit about provenance.\n */\n\nconst TAU = Math.PI * 2;\nconst UP = [0, 1, 0];\nconst clamp = (x, a, b) => Math.max(a, Math.min(b, x));\nconst add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];\nconst mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];\nconst dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];\nconst cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];\nconst normalize = (a) => {\n  const length = Math.hypot(...a);\n  if (!(length > 1e-10) || !Number.isFinite(length)) throw new RangeError('Degenerate sampled motion frame');\n  return mul(a, 1 / length);\n};\n\nfunction vector(value, label = 'point') {\n  const p = Array.isArray(value) || ArrayBuffer.isView(value) ? value : [value?.x, value?.y, value?.z];\n  if (p.length !== 3 || !p.every(Number.isFinite)) throw new TypeError(`${label} must have three finite coordinates`);\n  return p;\n}\n\nfunction validateClip(clip) {\n  if (!clip || !['x', 'z'].includes(clip.axis) || !(clip.duration > 0) || !Number.isFinite(clip.duration)\n    || !(clip.extent > 0) || !Number.isFinite(clip.extent)\n    || !Number.isInteger(clip.frames) || clip.frames < 4 || clip.frames > 512\n    || !Number.isInteger(clip.markers) || clip.markers < 4 || clip.markers > 513\n    || !(clip.data instanceof Float32Array) || clip.data.length !== clip.frames * clip.markers * 3\n    || !(clip.referencePositions instanceof Float32Array) || clip.referencePositions.length !== clip.markers * 3) {\n    throw new TypeError('Invalid bounded marker clip');\n  }\n  vector(clip.scale, 'clip.scale');\n  if (clip.scale.some((v) => v <= 0)) throw new RangeError('Clip scale must be positive');\n}\n\nfunction settings(time, strength) {\n  if (!Number.isFinite(time)) throw new TypeError('Time must be finite seconds');\n  if (!Number.isFinite(strength) || strength < 0 || strength > 1) throw new RangeError('Strength must be between zero and one');\n}\n\n/**\n * Capture a bounded loop from authored source markers. There is no duplicated\n * final frame: interpolation wraps the final sample back to the first sample.\n * Source u is evenly spaced in [-1, 1]; sample(u, time) returns local position.\n */\nexport function captureMarkerLoop({ id, duration, frames = 64, markers = 17, axis, extent, scale, sample }) {\n  if (typeof sample !== 'function') throw new TypeError('A source marker sampler is required');\n  if (!Number.isInteger(frames) || frames < 4 || frames > 512 || !Number.isInteger(markers) || markers < 4 || markers > 513) {\n    throw new RangeError('Capture is bounded to 4–512 frames and 4–513 markers');\n  }\n  const clip = {\n    id: String(id), duration, frames, markers, axis, extent,\n    scale: Array.from(vector(scale, 'scale')),\n    data: new Float32Array(frames * markers * 3),\n    referencePositions: new Float32Array(markers * 3),\n    sourceInfo: { type: 'authored-marker-samples', inferred: false, sampling: 'uniform-loop', coordinateRange: [-1, 1] },\n  };\n  validateClip(clip);\n  const component = axis === 'x' ? 0 : 2;\n  for (let marker = 0; marker < markers; marker++) {\n    const u = 2 * marker / (markers - 1) - 1;\n    clip.referencePositions[marker * 3 + component] = u;\n    for (let frame = 0; frame < frames; frame++) {\n      const position = vector(sample(u, frame * duration / frames), 'source marker');\n      const offset = (frame * markers + marker) * 3;\n      clip.data.set(position, offset);\n      if (!clip.data.subarray(offset, offset + 3).every(Number.isFinite)) throw new RangeError('Source position exceeds Float32 range');\n    }\n  }\n  return clip;\n}\n\n/** Make one of the two visible, authored donors used by the demonstration. */\nexport function captureClip({ kind = 'swim', frames = 64, markers = 17 } = {}) {\n  if (kind === 'swim') {\n    const duration = 2.4;\n    return captureMarkerLoop({\n      id: 'koi-swim', duration, frames, markers, axis: 'x', extent: 4, scale: [4, 2, 6.25],\n      sample: (u, time) => {\n        const phase = time / duration * TAU;\n        const gain = 0.3 + 0.7 * (u + 1) / 2;\n        // Longer spatial wavelength keeps the city's 3.6-unit-wide sweep\n        // from folding at the inside of a bend. Tail amplitude remains 1 unit.\n        return [u, 0.04 * Math.sin(phase + u * 2.5) * gain, 0.16 * Math.sin(phase + u * 2.5) * gain];\n      },\n    });\n  }\n  if (kind === 'fly') {\n    const duration = 2;\n    return captureMarkerLoop({\n      id: 'moth-flight', duration, frames, markers, axis: 'z', extent: 1.8, scale: [4, 1.8, 1.8],\n      sample: (u, time) => {\n        const core = 0.28;\n        const wing = Math.max(0, Math.abs(u) - core);\n        const angle = 0.85 * Math.sin(time / duration * TAU);\n        return [0, wing * Math.sin(angle), Math.sign(u) * (Math.min(Math.abs(u), core) + wing * Math.cos(angle))];\n      },\n    });\n  }\n  throw new RangeError(`Unknown authored motion source: ${kind}`);\n}\n\n// Cubic interpolation preserves a straight rest spine exactly. Quadratic\n// extrapolation of endpoint neighbors retains curvature without an artificial\n// spike in the last marker interval.\nfunction cubicAt(read, count, coordinate) {\n  const x = clamp(coordinate, 0, count - 1);\n  const i = Math.min(count - 2, Math.floor(x));\n  const t = x - i;\n  const p1 = read(i), p2 = read(i + 1);\n  const p0 = i > 0 ? read(i - 1) : 3 * p1 - 3 * p2 + read(i + 2);\n  const p3 = i + 2 < count ? read(i + 2) : 3 * p2 - 3 * p1 + read(i - 1);\n  return p1 + 0.5 * t * (p2 - p0 + t * (2 * p0 - 5 * p1 + 4 * p2 - p3 + t * (3 * (p1 - p2) + p3 - p0)));\n}\n\nfunction sampled(clip, time, u, reference, out) {\n  const coordinate = (clamp(u, -1, 1) + 1) * 0.5 * (clip.markers - 1);\n  const cycle = ((time % clip.duration) + clip.duration) % clip.duration / clip.duration * clip.frames;\n  const frame = Math.floor(cycle), next = (frame + 1) % clip.frames, blend = cycle - frame;\n  for (let c = 0; c < 3; c++) {\n    out[c] = cubicAt((marker) => {\n      if (reference) return clip.referencePositions[marker * 3 + c];\n      const a = clip.data[(frame * clip.markers + marker) * 3 + c];\n      const b = clip.data[(next * clip.markers + marker) * 3 + c];\n      return a + (b - a) * blend;\n    }, clip.markers, coordinate);\n  }\n  if (!out.every(Number.isFinite)) throw new RangeError('Sampled source contains non-finite coordinates');\n  return out;\n}\n\n/** Sample the SOURCE in normalized coordinates, independent of target scale. */\nexport function interpolateClipPoint(clip, time, u, out = [0, 0, 0]) {\n  validateClip(clip);\n  settings(time, 1);\n  if (!Number.isFinite(u)) throw new TypeError('Source coordinate must be finite');\n  return sampled(clip, time, u, false, out);\n}\n\nfunction center(clip, time, coordinate, strength) {\n  const u = coordinate / clip.extent;\n  const source = sampled(clip, time, u, false, [0, 0, 0]);\n  const rest = sampled(clip, time, u, true, [0, 0, 0]);\n  const p = source.map((x, c) => (x - rest[c]) * clip.scale[c] * strength);\n  p[clip.axis === 'x' ? 0 : 2] += coordinate;\n  return p;\n}\n\nfunction spineFrame(clip, time, coordinate, strength) {\n  const h = clip.extent * 1e-4;\n  // One-sided differences at the domain ends retain the sampled end tangent.\n  const a = clamp(coordinate - h, -clip.extent, clip.extent);\n  const b = clamp(coordinate + h, -clip.extent, clip.extent);\n  const ca = center(clip, time, a, strength), cb = center(clip, time, b, strength);\n  const tangent = normalize(cb.map((x, c) => x - ca[c]));\n  if (Math.abs(dot(tangent, UP)) > 0.98) throw new RangeError('Sampled spine is too vertical for the supported sweep frame');\n  if (clip.axis === 'x') {\n    const tangentZ = normalize(cross(tangent, UP));\n    return { tangentX: tangent, tangentZ, normal: normalize(cross(tangentZ, tangent)) };\n  }\n  const tangentX = normalize(cross(UP, tangent));\n  return { tangentX, tangentZ: tangent, normal: normalize(cross(tangent, tangentX)) };\n}\n\nfunction pointUnchecked(clip, time, p, strength, out) {\n  if (strength === 0) {\n    for (let c = 0; c < 3; c++) out[c] = p[c];\n    return out;\n  }\n  const axis = clip.axis === 'x' ? 0 : 2;\n  const coordinate = clamp(p[axis], -clip.extent, clip.extent);\n  const basis = spineFrame(clip, time, coordinate, strength);\n  const along = clip.axis === 'x' ? basis.tangentX : basis.tangentZ;\n  const across = clip.axis === 'x' ? basis.tangentZ : basis.tangentX;\n  const q = add(add(center(clip, time, coordinate, strength), mul(along, p[axis] - coordinate)),\n    add(mul(across, p[axis === 0 ? 2 : 0]), mul(basis.normal, p[1])));\n  for (let c = 0; c < 3; c++) out[c] = q[c];\n  return out;\n}\n\n/**\n * Deform a target-space point. Times are seconds; strength is [0,1]. Outside\n * the captured axis domain the endpoint's frame extends rigidly. y is height\n * above the local surface, so rendered meshes and attachments share a mapping.\n */\nexport function samplePoint(clip, time, point, { strength = 1, out = [0, 0, 0] } = {}) {\n  validateClip(clip);\n  settings(time, strength);\n  return pointUnchecked(clip, time, vector(point), strength, out);\n}\n\n/**\n * A local surface frame and material-point velocity from the SAME point map.\n * tangentX and tangentZ are orthonormal; normal points up for the supported\n * authored clips. This is kinematic deformation, not a force or thrust solver.\n */\nexport function sampleFrame(clip, time, point, { strength = 1, epsilon = 1e-3 } = {}) {\n  validateClip(clip);\n  settings(time, strength);\n  const p = Array.from(vector(point));\n  if (!Number.isFinite(epsilon) || epsilon < 1e-6 || epsilon > 0.02) throw new RangeError('Frame epsilon must be in [1e-6, .02]');\n  const derivative = (axis) => {\n    const a = p.slice(), b = p.slice();\n    a[axis] -= epsilon;\n    b[axis] += epsilon;\n    const pa = pointUnchecked(clip, time, a, strength, [0, 0, 0]);\n    const pb = pointUnchecked(clip, time, b, strength, [0, 0, 0]);\n    return pb.map((x, c) => (x - pa[c]) / (2 * epsilon));\n  };\n  const dx = derivative(0), dz = derivative(2);\n  const tangentX = normalize(dx);\n  const normal = normalize(cross(dz, dx));\n  const tangentZ = normalize(cross(tangentX, normal));\n  const before = pointUnchecked(clip, time - epsilon, p, strength, [0, 0, 0]);\n  const after = pointUnchecked(clip, time + epsilon, p, strength, [0, 0, 0]);\n  return {\n    position: pointUnchecked(clip, time, p, strength, [0, 0, 0]),\n    tangentX, tangentZ, normal,\n    velocity: after.map((x, c) => (x - before[c]) / (2 * epsilon)),\n  };\n}\n\nexport const evaluateFrame = sampleFrame;\n",
+    "/experiments/carry-the-city/rig.mjs": "import * as THREE from 'three';\nimport {samplePoint} from './motion.mjs';\n\n// One sampled field supplies rendered surfaces and the frames of their riders.\n// Translation/steering belongs to the game; this adapter does not simulate thrust.\nexport function createMotionRig(town,clips){\n const up=new THREE.Vector3(),x=new THREE.Vector3(),z=new THREE.Vector3(),matrix=new THREE.Matrix4(),q=new THREE.Quaternion(),yaw=new THREE.Quaternion(),axis=new THREE.Vector3(0,1,0);\n const field=(p,time,blend)=>{\n  const a=samplePoint(clips.swim,time,p),b=samplePoint(clips.fly,time,p);\n  return a.map((v,i)=>v*(1-blend)+b[i]*blend);\n };\n function frame(p,time,blend){\n  const e=.015,center=field(p,time,blend),px=field([p[0]+e,p[1],p[2]],time,blend),pz=field([p[0],p[1],p[2]+e],time,blend);\n  x.set(px[0]-center[0],px[1]-center[1],px[2]-center[2]).normalize();z.set(pz[0]-center[0],pz[1]-center[1],pz[2]-center[2]).normalize();up.crossVectors(z,x).normalize();z.crossVectors(x,up).normalize();matrix.makeBasis(x,up,z);q.setFromRotationMatrix(matrix);\n  return {position:center,quaternion:q.clone(),normal:up.clone()};\n }\n function update(time,blend){\n  for(const surface of town.surfaces){\n   const p=surface.mesh.geometry.attributes.position,r=surface.restPositions;\n   for(let i=0;i<p.count;i++){const v=field([r[i*3],r[i*3+1],r[i*3+2]],time,blend);p.setXYZ(i,...v);}\n   p.needsUpdate=true;surface.mesh.geometry.computeVertexNormals();surface.mesh.frustumCulled=false;\n  }\n  for(const a of town.attachments){if(a.detached)continue;const f=frame(a.anchor,time,blend);a.object.position.set(...f.position);yaw.setFromAxisAngle(axis,a.baseYaw??0);a.object.quaternion.copy(f.quaternion).multiply(yaw);}\n }\n function worldPoint(p,time,blend){town.root.updateMatrixWorld(true);return town.root.localToWorld(new THREE.Vector3(...field(p,time,blend)));}\n return {update,field,frame,worldPoint};\n}\n",
+    "/experiments/carry-the-city/town.mjs": "import * as THREE from 'three';\nimport { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';\n\n// Everything is either a deformable surface in town coordinates or a small,\n// rigid attachment in its own local frame. The simulation owns their motion.\nexport function createTown() {\n  const root = new THREE.Group();\n  root.name = 'Porto Piccolo';\n  const attachments = [], surfaces = [], residents = [];\n  const geometries = new Set(), materials = new Set(), textures = new Set();\n  const material = (color, options = {}) => {\n    const value = new THREE.MeshStandardMaterial({ color, roughness: .82, ...options });\n    materials.add(value);\n    return value;\n  };\n  const texture = (paint, size = 256) => {\n    if (typeof document === 'undefined') return null;\n    const canvas = document.createElement('canvas');\n    canvas.width = canvas.height = size;\n    paint(canvas.getContext('2d'), size);\n    const result = new THREE.CanvasTexture(canvas);\n    result.colorSpace = THREE.SRGBColorSpace;\n    result.wrapS = result.wrapT = THREE.RepeatWrapping;\n    result.anisotropy = 4;\n    textures.add(result);\n    return result;\n  };\n  const tileTexture = texture((ctx, n) => {\n    ctx.fillStyle = '#bd6647'; ctx.fillRect(0, 0, n, n);\n    for (let y = 0; y < 8; y++) for (let x = -1; x < 12; x++) {\n      const px = x * n / 11 + (y % 2) * n / 22, py = y * n / 8;\n      ctx.fillStyle = ['#c67450', '#b75a3d', '#d2825a', '#bd6246'][(x + y * 3 + 20) % 4];\n      ctx.fillRect(px + 1, py + 1, n / 11 - 2, n / 8 - 2);\n      ctx.strokeStyle = '#e69868'; ctx.lineWidth = 2;\n      ctx.beginPath(); ctx.moveTo(px + 3, py + 3); ctx.lineTo(px + 3, py + n / 8 - 2); ctx.stroke();\n      ctx.strokeStyle = '#783e32'; ctx.lineWidth = 2;\n      ctx.beginPath(); ctx.moveTo(px, py + n / 8 - 1); ctx.lineTo(px + n / 11, py + n / 8 - 1); ctx.stroke();\n    }\n  });\n  const pavingTexture = texture((ctx, n) => {\n    ctx.fillStyle = '#aa9f89'; ctx.fillRect(0, 0, n, n);\n    for (let y = 0; y < 12; y++) for (let x = -1; x < 8; x++) {\n      const px = x * n / 7 + (y % 2) * n / 14, py = y * n / 12;\n      ctx.fillStyle = ['#d2c4a9', '#c1b39a', '#d6c9af', '#bcae95'][(x + y + 20) % 4];\n      ctx.fillRect(px + 1, py + 1, n / 7 - 2, n / 12 - 2);\n    }\n  });\n  if (pavingTexture) pavingTexture.repeat.set(5, 2.5);\n  const plasterTexture = texture((ctx, n) => {\n    ctx.fillStyle = '#f8f3df'; ctx.fillRect(0, 0, n, n);\n    let seed = 19;\n    for (let i = 0; i < 900; i++) {\n      seed = (seed * 1664525 + 1013904223) >>> 0;\n      const x = seed % n; seed = (seed * 1664525 + 1013904223) >>> 0;\n      const y = seed % n;\n      ctx.fillStyle = i % 3 ? 'rgba(130,109,84,.045)' : 'rgba(255,255,255,.18)';\n      ctx.fillRect(x, y, 2 + i % 4, 1 + i % 3);\n    }\n  });\n  const M = {\n    walls: [0xefe3c5, 0xe5b783, 0xd9cfb0, 0xe8c9a2, 0xd7dccc].map(c => material(c, { map: plasterTexture })),\n    roof: material(0xffffff, { map: tileTexture }), roofEdge: material(0xab5038),\n    teal: material(0x387774), blue: material(0x4d7080), ivory: material(0xf4e4c1),\n    window: material(0xf7be69, { emissive: 0xeab766, emissiveIntensity: .34, roughness: .35 }),\n    glass: material(0x314f53, { roughness: .25, metalness: .16 }),\n    door: material(0x675241), wood: material(0x947752), darkWood: material(0x534f45),\n    metal: material(0x34494b, { roughness: .48, metalness: .5 }),\n    stone: material(0xc0b395), paving: material(0xffffff, { map: pavingTexture }),\n    foundation: material(0x938d7c), path: material(0xd5c5a4),\n    green: material(0x527451), darkGreen: material(0x315c50), lightGreen: material(0x78925f),\n    flower: material(0xd68568), lemon: material(0xe3b651), purple: material(0x9873a0),\n    redCloth: material(0xd58465), canvas: material(0xf5dfb5),\n    lantern: material(0xffd58b, { emissive: 0xffb752, emissiveIntensity: 1.15 }),\n    waterline: material(0x637a77), shirt: material(0x64839b), skin: material(0xe9bc8d),\n    trousers: material(0x3e5662), hair: material(0x4b433a), hat: material(0xe0c498),\n  };\n  const v = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), matrix = new THREE.Matrix4();\n  const coloredMaterials = new Map();\n  function batchMaterial(mat, chunks) {\n    if (mat.map || mat.emissive.getHex() !== 0) return mat;\n    const finish = mat.metalness >= .3 ? 'metal' : mat.roughness < .4 ? 'glass' : 'matte';\n    const key = `${finish}:${mat.side}`;\n    if (!coloredMaterials.has(key)) {\n      coloredMaterials.set(key, material(0xffffff, {\n        vertexColors: true, side: mat.side,\n        roughness: finish === 'glass' ? .25 : finish === 'metal' ? .48 : .82,\n        metalness: finish === 'metal' ? .5 : finish === 'glass' ? .16 : 0,\n      }));\n    }\n    for (const geometry of chunks) {\n      const count = geometry.attributes.position.count, values = new Float32Array(count * 3);\n      for (let i = 0; i < count; i++) mat.color.toArray(values, i * 3);\n      geometry.setAttribute('color', new THREE.BufferAttribute(values, 3));\n    }\n    return coloredMaterials.get(key);\n  }\n  function batch() {\n    const parts = new Map();\n    return {\n      add(geo, mat, pos = [0, 0, 0], rot = [0, 0, 0]) {\n        if (geo.index) { const source = geo; geo = source.toNonIndexed(); source.dispose(); }\n        q.setFromEuler(new THREE.Euler(...rot)); v.fromArray(pos); matrix.compose(v, q, s);\n        geo.applyMatrix4(matrix);\n        if (!parts.has(mat)) parts.set(mat, []);\n        parts.get(mat).push(geo);\n      },\n      box(w, h, d, mat, pos = [0, 0, 0], rot = [0, 0, 0]) { this.add(new THREE.BoxGeometry(w, h, d), mat, pos, rot); },\n      cylinder(top, bottom, h, mat, pos = [0, 0, 0], rot = [0, 0, 0], segments = 10) {\n        this.add(new THREE.CylinderGeometry(top, bottom, h, segments), mat, pos, rot);\n      },\n      sphere(radius, mat, pos = [0, 0, 0], scale = [1, 1, 1]) {\n        const geo = new THREE.SphereGeometry(radius, 8, 6); geo.scale(...scale); this.add(geo, mat, pos);\n      },\n      finish(name) {\n        const group = new THREE.Group(); group.name = name;\n        const grouped = new Map();\n        for (const [sourceMaterial, chunks] of parts) {\n          const mat = batchMaterial(sourceMaterial, chunks);\n          if (!grouped.has(mat)) grouped.set(mat, []);\n          grouped.get(mat).push(...chunks);\n        }\n        for (const [mat, chunks] of grouped) {\n          const geometry = mergeGeometries(chunks, false);\n          chunks.forEach(g => g.dispose());\n          if (!geometry) throw new Error(`Could not merge ${name}`);\n          geometries.add(geometry);\n          const mesh = new THREE.Mesh(geometry, mat);\n          mesh.castShadow = mesh.receiveShadow = true;\n          group.add(mesh);\n        }\n        return group;\n      },\n    };\n  }\n  function attach(object, anchor, baseYaw = 0, kind = 'prop', extra = {}) {\n    const entry = { object, anchor: [...anchor], baseYaw, kind, ...extra };\n    object.position.fromArray(anchor); object.rotation.y = baseYaw;\n    object.userData.kind = kind; object.userData.anchor = entry.anchor;\n    root.add(object); attachments.push(entry);\n    return entry;\n  }\n  function surface(geometry, mat, name) {\n    geometries.add(geometry);\n    const mesh = new THREE.Mesh(geometry, mat); mesh.name = name;\n    mesh.castShadow = mesh.receiveShadow = true;\n    root.add(mesh);\n    surfaces.push({ mesh, restPositions: new Float32Array(geometry.attributes.position.array) });\n    return mesh;\n  }\n  function groundPlane(width, depth, y, segmentsX = 48, segmentsZ = 20) {\n    const geometry = new THREE.PlaneGeometry(width, depth, segmentsX, segmentsZ);\n    geometry.rotateX(-Math.PI / 2); geometry.translate(0, y, 0);\n    return geometry;\n  }\n  // A gently pointed quay gives the whole town a boat-like silhouette without\n  // making the houses themselves look like toys stuck on a rectangular board.\n  const quay = groundPlane(8, 3.6, .035);\n  const quayPos = quay.attributes.position;\n  for (let i = 0; i < quayPos.count; i++) {\n    const x = quayPos.getX(i), z = quayPos.getZ(i);\n    const taper = 1 - .2 * Math.pow(Math.abs(x) / 4, 8);\n    quayPos.setZ(i, z * taper);\n  }\n  quay.computeVertexNormals(); surface(quay, M.paving, 'Paved quay');\n  const underside = new THREE.BoxGeometry(8, .25, 3.6, 48, 2, 20);\n  const underPos = underside.attributes.position;\n  for (let i = 0; i < underPos.count; i++) {\n    const x = underPos.getX(i), y = underPos.getY(i), z = underPos.getZ(i);\n    const taper = 1 - .2 * Math.pow(Math.abs(x) / 4, 8);\n    underPos.setXYZ(i, x, y - .11, z * taper * (y < 0 ? .97 : 1));\n  }\n  underside.computeVertexNormals(); surface(underside, M.foundation, 'Stone foundation');\n  surface(groundPlane(7.9, .62, .049, 48, 2), M.path, 'Central promenade');\n  for (const z of [-.35, .35]) {\n    const strip = groundPlane(7.9, .038, .052, 48, 1); strip.translate(0, 0, z);\n    surface(strip, M.ivory, 'Promenade border');\n  }\n  for (const z of [-1.67, 1.67]) {\n    const strip = groundPlane(7.3, .09, .059, 44, 1); strip.translate(0, 0, z);\n    surface(strip, M.stone, 'Quayside coping');\n  }\n\n  function roofGeometry(w, d, y, rise) {\n    const geometry = new THREE.BufferGeometry();\n    const positions = [], uv = [];\n    const tri = (a, b, c, ua, ub, uc) => { positions.push(...a, ...b, ...c); uv.push(...ua, ...ub, ...uc); };\n    const x = w / 2, z = d / 2;\n    tri([-x,y,z],[x,y,z],[x,y+rise,0],[0,0],[1,0],[1,1]);\n    tri([-x,y,z],[x,y+rise,0],[-x,y+rise,0],[0,0],[1,1],[0,1]);\n    tri([x,y,-z],[-x,y,-z],[-x,y+rise,0],[0,0],[1,0],[1,1]);\n    tri([x,y,-z],[-x,y+rise,0],[x,y+rise,0],[0,0],[1,1],[0,1]);\n    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));\n    geometry.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));\n    geometry.computeVertexNormals();\n    return geometry;\n  }\n  function signTexture(label, background) {\n    return texture((ctx, n) => {\n      ctx.fillStyle = background; ctx.fillRect(0, 0, n, n);\n      ctx.strokeStyle = '#e9d6aa'; ctx.lineWidth = 5; ctx.strokeRect(6, 58, n - 12, 140);\n      ctx.fillStyle = '#faeccd'; ctx.font = `600 ${label.length > 6 ? 28 : 36}px Georgia`;\n      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, n / 2, n / 2);\n    });\n  }\n  function house(index, w, d, h, shop = false) {\n    const b = batch(), wall = M.walls[index % M.walls.length], trim = index % 3 ? M.teal : M.blue;\n    const front = d / 2;\n    b.box(w, h, d, wall, [0, h / 2, 0]);\n    b.box(w + .025, .09, d + .03, M.stone, [0, .045, 0]);\n    b.box(w + .055, .035, d + .055, M.ivory, [0, h - .02, 0]);\n    b.box(w + .035, .035, d + .02, M.ivory, [0, h * .5, 0]);\n    // Small ivory quoins at the outside corners catch directional sunlight.\n    for (const x of [-w / 2, w / 2]) for (const z of [-d / 2, d / 2]) {\n      for (let row = 0; row < Math.floor(h / .115); row++) {\n        b.box(.055, .04, .055, M.ivory, [x, .08 + row * .115, z]);\n      }\n    }\n    const rise = .23 + .04 * (index % 3);\n    b.add(roofGeometry(w + .15, d + .17, h, rise), M.roof);\n    // The gable is solid plaster. Triangular ends retain proper silhouettes.\n    for (const side of [-1, 1]) {\n      const g = new THREE.BufferGeometry();\n      const vertices = side < 0\n        ? [-w/2,h,-d/2, -w/2,h,d/2, -w/2,h+rise,0]\n        : [w/2,h,d/2, w/2,h,-d/2, w/2,h+rise,0];\n      g.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));\n      g.setAttribute('uv', new THREE.Float32BufferAttribute([0,0,1,0,.5,1], 2)); g.computeVertexNormals(); b.add(g, wall);\n    }\n    b.cylinder(.027, .027, w + .16, M.roofEdge, [0, h + rise + .008, 0], [0, 0, Math.PI / 2], 8);\n    for (const z of [-front - .06, front + .06]) {\n      b.box(w + .13, .035, .035, M.roofEdge, [0, h + .003, z]);\n      b.box(w + .12, .023, .024, M.metal, [0, h - .035, z + Math.sign(z) * .008]);\n    }\n    const chimneyX = w * .29, chimneyZ = -d * .19;\n    b.box(.115, .25, .13, M.walls[(index + 1) % M.walls.length], [chimneyX, h + rise + .035, chimneyZ]);\n    b.box(.15, .035, .17, M.roofEdge, [chimneyX, h + rise + .17, chimneyZ]);\n    b.box(.08, .006, .095, M.darkWood, [chimneyX, h + rise + .19, chimneyZ]);\n    const window = (x, y, z, back = false, lit = true) => {\n      const sign = back ? -1 : 1, width = .16, height = .21;\n      b.box(width + .04, height + .04, .023, M.ivory, [x, y, z]);\n      b.box(width, height, .027, lit ? M.window : M.glass, [x, y, z + sign * .012]);\n      b.box(.012, height, .033, trim, [x, y, z + sign * .024]);\n      b.box(width, .012, .033, trim, [x, y, z + sign * .024]);\n      b.box(width + .07, .027, .065, M.ivory, [x, y - height / 2 - .025, z + sign * .013]);\n      for (const sx of [-1, 1]) {\n        b.box(.055, height + .02, .025, trim, [x + sx * .125, y, z + sign * .012], [0, sx * sign * -.16, 0]);\n        for (let slat = -2; slat <= 2; slat++) b.box(.042, .006, .028, M.darkGreen, [x + sx * .125, y + slat * .035, z + sign * .028]);\n      }\n    };\n    const upperY = Math.max(.44, h - .23);\n    for (const x of [-w * .24, w * .24]) {\n      window(x, upperY, front + .012, false, true);\n      window(x, upperY, -front - .012, true, index % 2 === 0);\n      if (h > .96) window(x, .32, -front - .012, true, index % 3 === 0);\n    }\n    // Side windows matter from the oblique camera, not only the street view.\n    for (const side of [-1, 1]) {\n      b.box(.026, .21, .18, M.ivory, [side * (w / 2 + .011), upperY, .02]);\n      b.box(.03, .17, .14, M.glass, [side * (w / 2 + .024), upperY, .02]);\n      b.box(.034, .012, .14, trim, [side * (w / 2 + .029), upperY, .02]);\n    }\n    const doorX = shop ? -w * .3 : 0;\n    b.box(.19, .32, .032, M.ivory, [doorX, .17, front + .012]);\n    b.box(.15, .285, .039, trim, [doorX, .158, front + .029]);\n    b.box(.09, .11, .043, M.glass, [doorX, .23, front + .033]);\n    b.sphere(.011, M.lemon, [doorX + .046, .14, front + .06]);\n    b.box(.26, .032, .12, M.stone, [doorX, .018, front + .056]);\n    if (shop) {\n      b.box(w * .43, .235, .035, M.ivory, [w * .14, .19, front + .018]);\n      b.box(w * .39, .195, .04, M.glass, [w * .14, .19, front + .036]);\n      for (const offset of [-.10, .02, .13]) b.box(.014, .20, .047, trim, [w * .14 + offset, .19, front + .045]);\n      const aw = w + .045;\n      for (let stripe = 0; stripe < 7; stripe++) {\n        const x = -aw / 2 + aw / 7 * (stripe + .5);\n        b.box(aw / 7, .024, .24, stripe % 2 ? M.canvas : M.redCloth, [x, .43, front + .13], [.18, 0, 0]);\n        b.box(aw / 7, .063, .015, stripe % 2 ? M.canvas : M.redCloth, [x, .37, front + .244]);\n      }\n      for (const x of [-aw / 2, aw / 2]) b.box(.014, .18, .014, M.metal, [x, .30, front + .23]);\n      b.box(.28, .085, .15, M.wood, [w * .19, .07, front + .21]);\n      for (let fruit = 0; fruit < 7; fruit++) b.sphere(.021, fruit % 2 ? M.lemon : M.flower, [w * .19 - .09 + fruit * .029, .123, front + .2]);\n    } else if (index % 3 !== 0) {\n      // A balcony with real thin uprights and plants, rather than a painted box.\n      b.box(w * .7, .035, .20, M.stone, [0, upperY - .14, front + .07]);\n      b.box(w * .7, .014, .014, M.metal, [0, upperY + .005, front + .17]);\n      for (let rail = 0; rail < 9; rail++) b.box(.008, .15, .008, M.metal, [-w * .34 + w * .68 * rail / 8, upperY - .07, front + .17]);\n      for (const x of [-w * .34, w * .34]) b.box(.009, .014, .18, M.metal, [x, upperY + .005, front + .08]);\n      b.box(w * .38, .045, .085, M.roofEdge, [0, upperY - .075, front + .16]);\n      for (let flower = 0; flower < 7; flower++) {\n        const x = (flower - 3) * .043;\n        b.sphere(.038, M.green, [x, upperY - .035, front + .16], [1, .6, 1]);\n        b.sphere(.015, flower % 2 ? M.flower : M.purple, [x, upperY - .005, front + .17]);\n      }\n    }\n    // Rain pipe, doorstep planter, and a few flowers give every house a scale.\n    b.cylinder(.011, .011, h - .06, M.metal, [w / 2 - .045, h / 2 - .015, front + .036], [0, 0, 0], 6);\n    b.cylinder(.055, .043, .09, M.roofEdge, [-w / 2 - .055, .05, front - .01], [0, 0, 0], 8);\n    b.sphere(.073, M.green, [-w / 2 - .055, .13, front - .01], [1, .9, 1]);\n    b.sphere(.026, M.flower, [-w / 2 - .035, .18, front + .012]);\n    const group = b.finish(shop ? 'Harbour shop' : 'Seaside home');\n    if (shop) {\n      const labels = ['PORTO', 'PANE', 'FIORE', 'CAFFE', 'MARE'];\n      const map = signTexture(labels[index % labels.length], index % 2 ? '#3a6e69' : '#785245');\n      if (map) {\n        const mat = material(0xffffff, { map, roughness: .9 });\n        const geo = new THREE.PlaneGeometry(w * .58, .14); geometries.add(geo);\n        const sign = new THREE.Mesh(geo, mat); sign.position.set(0, .535, front + .021); group.add(sign);\n      }\n    }\n    return group;\n  }\n\n  const blocks = [\n    [-3.05, -.95, .81, .80, .91], [-1.93, -.94, .92, .81, 1.06],\n    [-.70, -1.00, .87, .84, .78], [.46, -.97, .89, .80, 1.13],\n    [1.68, -1.02, .91, .79, .87], [2.86, -.92, .76, .73, .98],\n    [-3.03, .97, .79, .73, .73], [-1.91, 1.02, .89, .80, 1.02],\n    [-.68, .96, .90, .79, .88], [.55, 1.03, .91, .82, .76],\n    [1.79, .96, .90, .77, 1.08], [2.93, .97, .73, .72, .78],\n  ];\n  blocks.forEach(([x, z, w, d, h], index) => {\n    const yaw = z < 0 ? 0 : Math.PI;\n    attach(house(index, w, d, h, index % 3 === 1), [x, .07, z], yaw, 'building', { footprint: [w, d] });\n  });\n\n  function lamp() {\n    const b = batch();\n    b.cylinder(.035, .055, .055, M.metal, [0, .027, 0]);\n    b.cylinder(.012, .019, .50, M.metal, [0, .29, 0], [0, 0, 0], 8);\n    b.box(.014, .014, .115, M.metal, [0, .548, .046]);\n    b.cylinder(.049, .037, .02, M.metal, [0, .533, .095], [0, 0, 0], 8);\n    b.cylinder(.029, .024, .075, M.lantern, [0, .487, .095], [0, 0, 0], 6);\n    b.cylinder(.036, .025, .013, M.metal, [0, .446, .095], [0, 0, 0], 8);\n    for (const x of [-.028, .028]) b.box(.006, .079, .006, M.metal, [x, .488, .095]);\n    return b.finish('Warm harbour lantern');\n  }\n  for (const x of [-3.65, -2.52, -1.31, -.08, 1.15, 2.37, 3.57]) {\n    for (const z of [-.43, .43]) attach(lamp(), [x, .065, z], z < 0 ? 0 : Math.PI, 'lamp');\n  }\n  function tree(index) {\n    const b = batch();\n    b.cylinder(.085, .072, .12, M.stone, [0, .06, 0]);\n    b.cylinder(.018, .024, .26, M.wood, [0, .19, 0], [0, 0, -.1], 7);\n    b.sphere(.14, M.green, [0, .40, 0], [.84, 1.25, .85]);\n    b.sphere(.095, M.lightGreen, [-.045, .44, .025], [.8, 1.0, .8]);\n    for (let i = 0; i < 5; i++) b.sphere(.018, M.lemon, [Math.sin(i * 2.4) * .10, .37 + (i % 3) * .055, Math.cos(i * 2.4) * .09]);\n    return b.finish(index % 2 ? 'Potted lemon tree' : 'Quayside tree');\n  }\n  for (const [index, x] of [-2.50, -1.28, -.07, 1.16, 2.40].entries()) {\n    for (const z of [-1.48, 1.48]) attach(tree(index), [x, .067, z], 0, 'tree');\n  }\n  function bench() {\n    const b = batch();\n    for (let i = 0; i < 3; i++) b.box(.26, .018, .026, M.wood, [0, .13, (i - 1) * .031]);\n    for (let i = 0; i < 3; i++) b.box(.26, .024, .016, M.wood, [0, .17 + i * .03, -.055]);\n    for (const x of [-.09, .09]) {\n      b.box(.016, .13, .016, M.metal, [x, .065, -.036]);\n      b.box(.016, .13, .016, M.metal, [x, .065, .036]);\n      b.box(.013, .21, .013, M.metal, [x, .14, -.055], [-.1, 0, 0]);\n    }\n    return b.finish('Wooden promenade bench');\n  }\n  for (const x of [-2.52, -.06, 2.40]) for (const z of [-1.49, 1.49]) attach(bench(), [x + .14, .06, z], z < 0 ? Math.PI : 0, 'bench');\n\n  // Individual rail sections stay rigid as their supporting waterfront bends.\n  function quayRail() {\n    const b = batch();\n    for (const x of [-.18, .18]) {\n      b.cylinder(.016, .022, .24, M.metal, [x, .12, 0], [0, 0, 0], 6);\n      b.sphere(.024, M.metal, [x, .248, 0]);\n    }\n    b.box(.38, .015, .015, M.metal, [0, .21, 0]);\n    b.box(.38, .01, .01, M.metal, [0, .10, 0]);\n    return b.finish('Quayside iron railing');\n  }\n  for (let i = 0; i < 17; i++) for (const z of [-1.7, 1.7]) {\n    const x = -3.4 + i * .425;\n    attach(quayRail(), [x, .06, z * (1 - .2 * Math.pow(Math.abs(x) / 4, 8))], 0, 'railing');\n  }\n  function lighthouse() {\n    const b = batch();\n    b.cylinder(.19, .24, .08, M.stone, [0, .04, 0], [0, 0, 0], 12);\n    b.cylinder(.11, .17, .74, M.ivory, [0, .44, 0], [0, 0, 0], 12);\n    b.cylinder(.145, .155, .07, M.redCloth, [0, .29, 0], [0, 0, 0], 12);\n    b.cylinder(.12, .13, .07, M.redCloth, [0, .61, 0], [0, 0, 0], 12);\n    b.cylinder(.20, .18, .045, M.stone, [0, .83, 0], [0, 0, 0], 12);\n    b.cylinder(.10, .10, .20, M.window, [0, .95, 0], [0, 0, 0], 8);\n    for (let i = 0; i < 8; i++) {\n      const a = i * Math.PI / 4;\n      b.box(.012, .20, .012, M.metal, [Math.sin(a) * .105, .95, Math.cos(a) * .105]);\n      b.cylinder(.006, .006, .10, M.metal, [Math.sin(a) * .18, .895, Math.cos(a) * .18], [0, 0, 0], 5);\n    }\n    b.cylinder(0, .16, .15, M.teal, [0, 1.115, 0], [0, 0, 0], 8);\n    b.cylinder(.005, .005, .09, M.metal, [0, 1.21, 0], [0, 0, 0], 5);\n    b.box(.075, .16, .022, M.teal, [0, .14, .164]);\n    return b.finish('Little harbour lighthouse');\n  }\n  attach(lighthouse(), [3.67, .06, .0], 0, 'landmark');\n  function fountain() {\n    const b = batch();\n    b.cylinder(.20, .23, .06, M.stone, [0, .03, 0], [0, 0, 0], 16);\n    b.cylinder(.18, .18, .025, M.teal, [0, .073, 0], [0, 0, 0], 16);\n    b.cylinder(.035, .054, .24, M.stone, [0, .17, 0], [0, 0, 0], 10);\n    b.cylinder(.11, .045, .04, M.ivory, [0, .295, 0], [0, 0, 0], 12);\n    b.sphere(.035, M.ivory, [0, .335, 0]);\n    return b.finish('Town fountain');\n  }\n  attach(fountain(), [-3.67, .06, 0], 0, 'landmark');\n  function bunting() {\n    const b = batch();\n    for (const z of [-.36, .36]) {\n      b.cylinder(.009, .014, .62, M.wood, [0, .31, z], [0, 0, 0], 6);\n      b.sphere(.018, M.lemon, [0, .64, z]);\n    }\n    b.cylinder(.004, .004, .72, M.darkWood, [0, .58, 0], [Math.PI / 2, 0, 0], 5);\n    for (let i = 0; i < 7; i++) {\n      const z = -.30 + i * .10, sag = .04 * Math.sin(i / 6 * Math.PI);\n      const geo = new THREE.BufferGeometry();\n      geo.setAttribute('position', new THREE.Float32BufferAttribute([0,.585-sag,z-.035, 0,.585-sag,z+.035, .015,.49-sag,z], 3));\n      geo.setAttribute('uv', new THREE.Float32BufferAttribute([0,1,1,1,.5,0], 2)); geo.computeVertexNormals();\n      const mat = [M.redCloth, M.canvas, M.teal, M.lemon][i % 4]; mat.side = THREE.DoubleSide;\n      b.add(geo, mat);\n    }\n    return b.finish('Festival pennants');\n  }\n  for (const x of [-2.53, -.08, 2.40]) attach(bunting(), [x, .07, 0], 0, 'bunting');\n\n  function person(index) {\n    const b = batch(), shirt = [M.teal, M.redCloth, M.shirt, M.purple, M.lemon][index % 5];\n    b.add(new THREE.CapsuleGeometry(.035, .075, 3, 7), shirt, [0, .13, 0]);\n    for (const side of [-1, 1]) {\n      b.cylinder(.012, .015, .066, M.trousers, [side * .018, .040, 0], [0, 0, side * .045], 6);\n      b.sphere(.017, M.darkWood, [side * .018, .010, .010], [.8, .5, 1.3]);\n      b.cylinder(.012, .014, .071, shirt, [side * .041, .128, .003], [.10, 0, side * .17], 6);\n      b.sphere(.011, M.skin, [side * .048, .092, .007]);\n    }\n    b.sphere(.038, M.skin, [0, .212, 0], [.86, 1, .88]);\n    b.sphere(.036, M.hair, [0, .226, -.007], [.9, .66, .9]);\n    b.sphere(.007, M.skin, [0, .212, .034], [.75, 1, 1]);\n    if (index % 3 !== 1) {\n      b.cylinder(.047, .048, .009, M.hat, [0, .243, 0], [0, 0, -.10], 10);\n      b.cylinder(.028, .031, .029, M.hat, [0, .260, 0], [0, 0, -.10], 10);\n      b.cylinder(.030, .031, .007, M.darkWood, [0, .250, 0], [0, 0, -.10], 10);\n    }\n    if (index % 4 === 1) {\n      b.sphere(.024, M.darkWood, [0, .233, -.035], [1, 1, .8]);\n      b.box(.034, .041, .020, M.lemon, [-.057, .075, 0], [0, 0, -.12]);\n    }\n    return b.finish('Harbour resident');\n  }\n  for (let i = 0; i < 8; i++) {\n    const entry = attach(person(i), [-2.9 + i * .80, .074, i % 2 ? .14 : -.12], i % 2 ? Math.PI / 2 : -Math.PI / 2, 'resident', {\n      name: ['Luca', 'Mara', 'Nico', 'Alba', 'Pip', 'Rosa', 'Emi', 'Leo'][i],\n      phase: i * 1.73, walkSpeed: .07 + i % 3 * .01,\n    });\n    residents.push(entry);\n  }\n  root.updateMatrixWorld(true);\n  return {\n    root, attachments, surfaces, residents,\n    dispose() {\n      geometries.forEach(g => g.dispose());\n      materials.forEach(m => m.dispose());\n      textures.forEach(t => t.dispose());\n      root.removeFromParent();\n    },\n  };\n}\n",
+    "/experiments/carry-the-city/world-motion.mjs": "/**\n * Velocity inheritance from actual, composed world positions.\n *\n * Record a supported object's final world-space anchor once per simulation\n * frame, after the town transform and deformation/blend have been updated.\n * Retain the two positions themselves: reconstructing an old point through a\n * current matrix, current blend or modified source clip loses real movement.\n *\n * This is a finite-difference velocity of kinematic animation. It neither\n * models propulsion nor infers the force of a collision.\n */\n\nfunction vector(value, label) {\n  const p = Array.isArray(value) || ArrayBuffer.isView(value)\n    ? Array.from(value) : [value?.x, value?.y, value?.z];\n  if (p.length !== 3 || !p.every(Number.isFinite)) throw new TypeError(`${label} must contain three finite coordinates`);\n  return p;\n}\n\nfunction key(id) {\n  if (typeof id !== 'string' || id.length === 0 || id.length > 128) throw new TypeError('Anchor id must be a short nonempty string');\n}\n\n/**\n * A bounded history for a few potential release anchors. record() copies its\n * input; later scene graph mutations cannot rewrite the preceding frame.\n * maxDeltaTime rejects stale history rather than treating a pause as movement.\n */\nexport function createWorldMotionHistory({ maxPoints = 8, maxDeltaTime = 0.25 } = {}) {\n  if (!Number.isInteger(maxPoints) || maxPoints < 1 || maxPoints > 64) throw new RangeError('maxPoints must be an integer in [1, 64]');\n  if (!Number.isFinite(maxDeltaTime) || maxDeltaTime <= 0 || maxDeltaTime > 1) throw new RangeError('maxDeltaTime must be in (0, 1] seconds');\n  const points = new Map();\n\n  return Object.freeze({\n    get size() { return points.size; },\n\n    record(id, worldPosition, time, { discontinuous = false } = {}) {\n      key(id);\n      const position = vector(worldPosition, 'World position');\n      if (!Number.isFinite(time)) throw new TypeError('Time must be finite simulation seconds');\n      if (typeof discontinuous !== 'boolean') throw new TypeError('discontinuous must be a boolean');\n      const old = points.get(id);\n      if (!old && points.size >= maxPoints) throw new RangeError('World motion anchor limit reached');\n      const elapsed = old ? time - old.current.time : 0;\n      const reason = discontinuous ? 'discontinuous'\n        : !old ? 'first-sample'\n          : elapsed <= 0 ? 'non-increasing-time'\n            : elapsed > maxDeltaTime ? 'stale-history' : 'tracked';\n      const previous = reason === 'tracked' ? old.current : null;\n      points.set(id, { current: { position, time }, previous, reason });\n      return { hasVelocity: previous !== null, deltaTime: previous ? elapsed : 0, reason };\n    },\n\n    /**\n     * Velocity is the preceding frame interval's average in world units/second.\n     * An optional explicit WORLD-space kick is added once, independently of the\n     * inherited motion. Calling this does not consume or modify the history.\n     */\n    release(id, { kick = [0, 0, 0] } = {}) {\n      key(id);\n      const added = vector(kick, 'World-space kick');\n      const entry = points.get(id);\n      if (!entry) throw new RangeError(`World motion anchor has not been recorded: ${id}`);\n      const { current, previous, reason } = entry;\n      const deltaTime = previous ? current.time - previous.time : 0;\n      const inheritedVelocity = previous\n        ? current.position.map((v, c) => (v - previous.position[c]) / deltaTime)\n        : [0, 0, 0];\n      const velocity = inheritedVelocity.map((v, c) => v + added[c]);\n      if (![...inheritedVelocity, ...velocity].every(Number.isFinite)) throw new RangeError('World motion exceeds finite velocity range');\n      return {\n        position: current.position.slice(), velocity, inheritedVelocity,\n        hasVelocity: previous !== null, deltaTime, reason,\n      };\n    },\n\n    forget(id) { key(id); return points.delete(id); },\n    clear() { points.clear(); },\n  });\n}\n",
+    "/experiments/carry-the-city/world.mjs": "import * as THREE from 'three';\n\n// Art direction is procedural. These visual surfaces are not a fluid simulation.\nconst SEA_Y = -.6;\nconst TAU = Math.PI * 2;\nfunction random(seed = 8) { return () => { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 4294967296; }; }\n\nfunction roofGeometry() {\n  const g = new THREE.BufferGeometry();\n  const a = [-.5,0,-.5, .5,0,-.5, 0,.42,-.5, -.5,0,.5, 0,.42,.5, .5,0,.5,\n    -.5,0,-.5,0,.42,-.5,0,.42,.5, -.5,0,-.5,0,.42,.5,-.5,0,.5,\n    .5,0,-.5,.5,0,.5,0,.42,.5, .5,0,-.5,0,.42,.5,0,.42,-.5];\n  g.setAttribute('position',new THREE.Float32BufferAttribute(a,3)); g.computeVertexNormals(); return g;\n}\n\nfunction stratumGeometry(radius, height, seed, baseColor) {\n  const rng=random(seed), rings=14, segments=17, points=[], colors=[], indices=[];\n  const phases=Array.from({length:segments},()=>.82+rng()*.28);\n  const color=new THREE.Color(baseColor);\n  for(let j=0;j<=rings;j++) {\n    const y=height*j/rings, taper=(1-.77*Math.pow(j/rings,1.35))*(j%2?.94:1.025);\n    for(let i=0;i<segments;i++) {\n      const a=i/segments*TAU, r=radius*taper*phases[i]*(.94+.12*rng());\n      points.push(Math.cos(a)*r,y+(j===0?0:(rng()-.5)*height*.012),Math.sin(a)*r);\n      const c=color.clone().multiplyScalar(.65+.16*rng()+(j%2)*.24);\n      if (j>rings*.72 && i%4<2) c.lerp(new THREE.Color(0x5b7450),.45);\n      colors.push(c.r,c.g,c.b);\n    }\n  }\n  for(let j=0;j<rings;j++) for(let i=0;i<segments;i++) {\n    const a=j*segments+i,b=j*segments+(i+1)%segments,c=(j+1)*segments+i,d=(j+1)*segments+(i+1)%segments;\n    indices.push(a,c,b,b,c,d);\n  }\n  points.push(0,height,0); colors.push(color.r,color.g,color.b);\n  for(let i=0;i<segments;i++) indices.push(rings*segments+i,points.length/3-1,rings*segments+(i+1)%segments);\n  const geometry=new THREE.BufferGeometry();\n  geometry.setAttribute('position',new THREE.Float32BufferAttribute(points,3));\n  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));\n  geometry.setIndex(indices); geometry.computeVertexNormals(); return geometry;\n}\n\nconst oceanVertex = `\nuniform float uTime;\nvarying vec3 vWorld;\nvarying vec3 vNormalWorld;\nfloat heightAt(vec2 p) {\n  return .047*sin(p.x*1.15+p.y*.43+uTime*.8)+.027*sin(p.y*1.94-p.x*.65-uTime*.92)\n       +.017*sin(p.x*3.2+p.y*1.7+uTime*1.3);\n}\nvoid main(){\n  vec4 w=modelMatrix*vec4(position,1.0);\n  float h=heightAt(w.xz);\n  w.y+=h;\n  float d=.065;\n  vNormalWorld=normalize(vec3((h-heightAt(w.xz+vec2(d,0.0)))/d,1.0,(h-heightAt(w.xz+vec2(0.0,d)))/d));\n  vWorld=w.xyz;\n  gl_Position=projectionMatrix*viewMatrix*w;\n}`;\nconst oceanFragment = `\nuniform float uTime;\nuniform vec3 uSun;\nvarying vec3 vWorld;\nvarying vec3 vNormalWorld;\nfloat hash(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}\nfloat noise(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.0-2.0*f);return mix(mix(hash(i),hash(i+vec2(1,0)),f.x),mix(hash(i+vec2(0,1)),hash(i+vec2(1)),f.x),f.y);}\nvoid main(){\n  vec2 p=vWorld.xz;\n  vec3 eye=normalize(cameraPosition-vWorld);\n  float small=sin(p.x*9.3+p.y*4.2+uTime*1.5)*cos(p.y*12.0-uTime*1.6);\n  // Evaluate the normal per fragment. Interpolating a fine wave from the large\n  // ocean grid creates a visible triangular sparkle pattern at distance.\n  float a=cos(p.x*1.15+p.y*.43+uTime*.8), b=cos(p.y*1.94-p.x*.65-uTime*.92), c=cos(p.x*3.2+p.y*1.7+uTime*1.3);\n  float dx=.047*1.15*a-.027*.65*b+.017*3.2*c;\n  float dz=.047*.43*a+.027*1.94*b+.017*1.7*c;\n  vec3 n=normalize(vec3(-dx+small*.012,1.0,-dz+sin(p.x*12.3-p.y*7.1+uTime)*.01));\n  float fres=pow(1.0-max(0.0,dot(eye,n)),3.5);\n  float drift=noise(p*.35+vec2(uTime*.018,0.0));\n  vec3 water=mix(vec3(.008,.065,.08),vec3(.018,.16,.19),drift);\n  water=mix(water,vec3(.39,.25,.35),fres*.42);\n  vec3 halfway=normalize(eye+uSun);\n  float glint=pow(max(dot(n,halfway),0.0),180.0);\n  float silk=pow(max(0.0,sin(p.x*4.1+p.y*1.9+sin(p.y*.8-uTime*.3))),30.0);\n  water+=vec3(.12,.22,.18)*silk*.055;\n  water+=vec3(1.0,.57,.30)*glint*.34;\n  float fog=1.0-exp(-.003*length(cameraPosition-vWorld));\n  water=mix(water,vec3(.28,.27,.38),fog*.55);\n  gl_FragColor=vec4(water,1.0);\n  #include <tonemapping_fragment>\n  #include <colorspace_fragment>\n}`;\n\n/** A small navigable archipelago. Bounds are supplied separately for game logic. */\nexport function createWorld(scene) {\n  const root=new THREE.Group(); root.name='Sunset archipelago'; scene.add(root);\n  const geometries=new Set(),materials=new Set(), animated=[], rng=random(723);\n  const ownG=g=>(geometries.add(g),g), ownM=m=>(materials.add(m),m);\n  const mat=(color, extra={})=>ownM(new THREE.MeshStandardMaterial({color,roughness:.86,...extra}));\n  const rock=mat(0xadbeb6,{vertexColors:true,flatShading:true});\n  const stone=mat(0x828c85), stoneDark=mat(0x495e5b), trim=mat(0xb7ab91), terracotta=mat(0xb85337);\n  const plaster=mat(0xeee1c2), wood=mat(0x654c37), brass=mat(0xa68043,{metalness:.42,roughness:.46});\n  const leaf=mat(0x3d6e4e), leafDark=mat(0x254e45), bloom=mat(0xe091ad), glow=mat(0xffd696,{emissive:0xffa545,emissiveIntensity:1.15});\n  const teal=mat(0x2c8a93), flag=mat(0xb9473e,{side:THREE.DoubleSide});\n  const cube=ownG(new THREE.BoxGeometry(1,1,1)), sphere=ownG(new THREE.IcosahedronGeometry(1,1));\n  const cylinder=ownG(new THREE.CylinderGeometry(1,1,1,9)), cone=ownG(new THREE.ConeGeometry(1,1,9)), roof=ownG(roofGeometry());\n  const batches=new Map();\n  function prop(geometry,material,position,scale=[1,1,1],rotation=0) {\n    let byMaterial=batches.get(geometry); if(!byMaterial) batches.set(geometry,byMaterial=new Map());\n    let list=byMaterial.get(material); if(!list)byMaterial.set(material,list=[]);\n    const dummy=new THREE.Object3D(); dummy.position.set(...position); dummy.scale.set(...scale); dummy.rotation.y=rotation; dummy.updateMatrix();list.push(dummy.matrix.clone());\n  }\n  function mesh(geometry,material,position,scale=[1,1,1],parent=root) {\n    const m=new THREE.Mesh(geometry,material);m.position.set(...position);m.scale.set(...scale);m.castShadow=true;m.receiveShadow=true;parent.add(m);return m;\n  }\n  function lineBetween(a,b,material,r=.026) {\n    const av=new THREE.Vector3(...a),bv=new THREE.Vector3(...b),d=bv.clone().sub(av);\n    const m=mesh(cylinder,material,av.clone().add(bv).multiplyScalar(.5).toArray(),[r,d.length(),r]);\n    m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),d.normalize()); return m;\n  }\n  function tree(x,y,z,s=1) {\n    prop(cylinder,wood,[x,y+.55*s,z],[.085*s,1.1*s,.085*s]);\n    prop(cone,leafDark,[x,y+1.2*s,z],[.36*s,1.75*s,.36*s]);\n    prop(cone,leaf,[x+.06*s,y+1.68*s,z],[.23*s,1.2*s,.24*s]);\n  }\n  function shrub(x,y,z,s=.35) {\n    prop(sphere,leaf,[x,y+s*.5,z],[s,s*.7,s]);\n    for(let i=0;i<3;i++)prop(sphere,bloom,[x+(rng()-.5)*s,y+s*.75,z+(rng()-.5)*s],[s*.13,s*.16,s*.13]);\n  }\n  function cottage(x,y,z,s=1) {\n    prop(cube,plaster,[x,y+.55*s,z],[1.12*s,1.1*s,.9*s]);\n    prop(roof,terracotta,[x,y+1.1*s,z],[1.32*s,1.3*s,1.12*s]);\n    prop(cube,wood,[x,y+.31*s,z+.459*s],[.22*s,.62*s,.03*s]);\n    for(const side of [-1,1]) {\n      prop(cube,wood,[x+side*.32*s,y+.69*s,z+.46*s],[.19*s,.3*s,.04*s]);\n      prop(cube,glow,[x+side*.32*s,y+.69*s,z+.484*s],[.115*s,.23*s,.016*s]);\n    }\n    prop(cube,stone,[x+.32*s,y+1.43*s,z-.16*s],[.2*s,.61*s,.19*s]);\n    for(let i=0;i<6;i++) {\n      const dx=(i/5-.5)*1.32*s, yy=y+1.12*s+(.66*s-Math.abs(dx))*.82;\n      prop(cube,terracotta,[x+dx,yy,z],[.035*s,.035*s,1.14*s]);\n    }\n  }\n  const rippleMat=ownM(new THREE.MeshBasicMaterial({color:0x9bcebc,transparent:true,opacity:.14,depthWrite:false,side:THREE.DoubleSide}));\n  function island(x,z,r,h,seed,inhabited=false) {\n    const geometry=ownG(stratumGeometry(r,h,seed,0x87968a));\n    mesh(geometry,rock,[x,SEA_Y-.35,z]);\n    const ring=mesh(ownG(new THREE.RingGeometry(r*.96,r*1.05,48)),rippleMat,[x,SEA_Y+.055,z]);ring.rotation.x=-Math.PI/2;ring.castShadow=false;ring.receiveShadow=false;\n    for(let i=0;i<6;i++) {\n      const a=i/6*TAU+seed,r1=r*(.44+rng()*.24),yh=h*(1-r1/r)*.74;\n      prop(sphere,stoneDark,[x+Math.cos(a)*r1,SEA_Y+yh-.15,z+Math.sin(a)*r1],[r*.25,.16,r*.18]);\n      shrub(x+Math.cos(a)*r1,SEA_Y+yh+.06,z+Math.sin(a)*r1,r*.16);\n    }\n    tree(x-.13*r,SEA_Y+h*.82,z,.40+h*.09);\n    tree(x+.32*r,SEA_Y+h*.59,z-.13*r,.32+h*.075);\n    tree(x-.27*r,SEA_Y+h*.63,z+.17*r,.33+h*.065);\n    if(inhabited)cottage(x+r*.23,SEA_Y+h*.64,z+.12*r,.38+r*.13);\n  }\n\n  // The sky and wave pattern are inexpensive illustrative shaders, not a ray tracer.\n  const skyMat=ownM(new THREE.ShaderMaterial({side:THREE.BackSide,depthWrite:false,\n    vertexShader:'varying vec3 vP; void main(){vP=position;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}',\n    fragmentShader:`varying vec3 vP; void main(){vec3 d=normalize(vP);float h=smoothstep(-.1,.6,d.y);vec3 c=mix(vec3(.94,.62,.48),vec3(.31,.35,.58),h);float sun=pow(max(dot(d,normalize(vec3(-.33,.15,-1.0))),0.0),1700.0);float halo=pow(max(dot(d,normalize(vec3(-.33,.15,-1.0))),0.0),22.0);c+=vec3(.8,.45,.15)*halo*.22+vec3(1.5,1.2,.6)*sun;gl_FragColor=vec4(c,1.0);#include <tonemapping_fragment>\\n#include <colorspace_fragment>}`.replace(';#include',';\\n#include')\n  }));\n  const sky=mesh(ownG(new THREE.SphereGeometry(190,32,16)),skyMat,[0,0,0]);sky.castShadow=false;sky.receiveShadow=false;sky.renderOrder=-5;\n  const seaMat=ownM(new THREE.ShaderMaterial({uniforms:{uTime:{value:0},uSun:{value:new THREE.Vector3(-.35,.48,-.75).normalize()}},vertexShader:oceanVertex,fragmentShader:oceanFragment}));\n  const sea=mesh(ownG(new THREE.PlaneGeometry(240,240,170,170)),seaMat,[0,SEA_Y,0]);sea.rotation.x=-Math.PI/2;sea.castShadow=false;sea.receiveShadow=false;sea.name='Illustrated animated sea';\n  scene.fog=new THREE.FogExp2(0x9b94ac,.006);\n  const hemisphere=new THREE.HemisphereLight(0xaabbd6,0x28483d,.8);root.add(hemisphere);\n  const sun=new THREE.DirectionalLight(0xffc895,2.2);sun.position.set(-18,27,-25);sun.castShadow=true;\n  sun.shadow.mapSize.set(2048,2048);sun.shadow.camera.left=-24;sun.shadow.camera.right=24;sun.shadow.camera.top=28;sun.shadow.camera.bottom=-28;\n  sun.shadow.camera.near=1;sun.shadow.camera.far=85;sun.shadow.bias=-.0003;sun.shadow.normalBias=.035;sun.target.position.set(0,0,-5);root.add(sun,sun.target);\n  const reefs=[{x:-5,z:0,r:2.2},{x:4,z:-4,r:2.4},{x:-5,z:-16,r:2.8}];\n  reefs.forEach((r,i)=>island(r.x,r.z,r.r,3.8+i*.7,19+i*53,i===2));\n  // Scenery outside the playable channel.\n  for(const [x,z,r,h,seed] of [[-18,6,4,5.8,102],[19,-5,4.5,6.2,192],[-20,-21,5,7.8,212],[19,-26,4,6.7,83],[-28,-38,7,11,481],[29,-40,7,9,391],[-3,-49,5,8.5,31],[10,-59,6,10,97],[-35,-65,10,12,135],[39,-71,12,13,69]])island(x,z,r,h,seed,true);\n\n  const wall={z:-10,minX:-14,maxX:14,height:2.8,thickness:.65};\n  // Closed iron grilles under the arches make the gameplay barrier visible.\n  for(let i=0;i<8;i++) {\n    const x=-12.25+i*3.5;\n    prop(cube,stone,[x,2.35,-10],[3.5,.65,.72]);\n    prop(cube,trim,[x,2.72,-10],[3.5,.16,.9]);\n    for(const dx of [-1.7,1.7]) {\n      prop(cube,stone,[x+dx,1,-10],[.45,2.65,.88]);\n      prop(cube,trim,[x+dx,2.82,-10],[.59,.14,.99]);\n    }\n    for(let j=0;j<6;j++)prop(cylinder,brass,[x-1.35+j*.54,.73,-10],[.025,2.56,.025]);\n    for(let j=0;j<5;j++) {\n      const a=Math.PI*(j/4),p=[x+Math.cos(a)*1.35,1.1+Math.sin(a)*.9,-9.96];\n      prop(cube,trim,p,[.44,.42,.83],-.6+a*.38);\n    }\n    prop(cube,stoneDark,[x,1.94,-9.624],[1.1,.08,.03]);\n  }\n  island(-14.5,-10,2.8,4.9,471,true);island(14.5,-10,2.7,5.2,481,true);\n\n  const beacon={x:0,z:-21};\n  island(3,-23,3.25,2.7,832,false);\n  const lighthouse=new THREE.Group();lighthouse.position.set(3,1.45,-23);root.add(lighthouse);\n  mesh(ownG(new THREE.CylinderGeometry(.43,.65,4.5,14)),plaster,[0,2.25,0],[1,1,1],lighthouse);\n  mesh(cylinder,stone,[0,.17,0],[.8,.34,.8],lighthouse);\n  mesh(cylinder,trim,[0,4.31,0],[.74,.17,.74],lighthouse);\n  mesh(cylinder,brass,[0,4.78,0],[.43,.77,.43],lighthouse);\n  mesh(cylinder,glow,[0,4.81,0],[.38,.58,.38],lighthouse);\n  mesh(cone,terracotta,[0,5.3,0],[.75,.64,.75],lighthouse);\n  for(let i=0;i<8;i++){\n    const a=i/8*TAU;\n    mesh(cylinder,stoneDark,[Math.cos(a)*.42,4.8,Math.sin(a)*.42],[.025,.79,.025],lighthouse);\n    mesh(cylinder,stoneDark,[Math.cos(a)*.72,4.63,Math.sin(a)*.72],[.02,.54,.02],lighthouse);\n  }\n  for(const yy of [.9,2,3.1])mesh(cube,teal,[0,yy,.56],[.23,.4,.05],lighthouse);\n  // Goal dock fits the town's full width and has two clear beacon posts.\n  for(let i=0;i<25;i++)prop(cube,wood,[-5+i*.32,-.09,-23.5],[.26,.15,2.4]);\n  for(const x of [-5,-3,-1,1,3]) {\n    prop(cylinder,wood,[x,-.55,-22.3],[.075,1.45,.075]);\n    prop(cylinder,wood,[x,-.55,-24.6],[.075,1.45,.075]);\n    prop(cylinder,brass,[x,.49,-24.6],[.025,1,.025]);\n    prop(sphere,glow,[x,1.08,-24.6],[.12,.18,.12]);\n  }\n  for(const x of [-3,3]) {\n    prop(cylinder,wood,[x,1.1,-21.7],[.09,2.55,.09]);\n    prop(cone,terracotta,[x,2.48,-21.7],[.19,.24,.19]);\n    prop(sphere,glow,[x,2.16,-21.7],[.17,.24,.17]);\n  }\n  const banner=mesh(ownG(new THREE.PlaneGeometry(4.9,.55,12,1)),flag,[0,2.05,-21.71]);animated.push({kind:'banner',mesh:banner,base:new Float32Array(banner.geometry.attributes.position.array)});\n  cottage(5.1,1.55,-23.9,1);cottage(3.3,1.9,-25,.72);\n  lineBetween([-5,.38,-24.6],[3,.38,-24.6],wood,.027);\n\n  const collectibles=[{id:'first',x:-9,z:6},{id:'second',x:8,z:-5},{id:'third',x:0,z:-17}];\n  for(const [i,c] of collectibles.entries()) {\n    const group=new THREE.Group();group.position.set(c.x,.55,c.z);root.add(group);\n    const outer=ownG(new THREE.TorusGeometry(.34,.02,6,24));\n    mesh(outer,brass,[0,.3,0],[1,1,1],group);\n    mesh(sphere,glow,[0,.3,0],[.16,.25,.16],group);\n    mesh(cone,terracotta,[0,.64,0],[.2,.12,.2],group);\n    mesh(cube,teal,[0,-.045,0],[.09,.2,.025],group);\n    const halo=mesh(ownG(new THREE.RingGeometry(.45,.51,40)),rippleMat,[0,-1.02,0],[1,1,1],group);halo.rotation.x=-Math.PI/2;\n    group.name=`Rescue lantern ${i+1}`;c.group=group;c.mesh=group;c.object=group;\n    animated.push({kind:'lantern',mesh:group,x:c.x,y:.55,z:c.z,phase:i*1.3});\n  }\n  // Small gulls make the scale legible without high object counts.\n  for(let i=0;i<9;i++) {\n    const g=new THREE.Group();\n    const wingL=mesh(cube,plaster,[-.13,0,0],[.3,.025,.065],g);\n    const wingR=mesh(cube,plaster,[.13,0,0],[.3,.025,.065],g);\n    root.add(g);animated.push({kind:'gull',mesh:g,wingL,wingR,phase:i*1.7,r:8+rng()*7,y:5+rng()*4});\n  }\n  for(const [geometry,byMaterial] of batches)for(const [material,transforms] of byMaterial) {\n    const batch=new THREE.InstancedMesh(geometry,material,transforms.length);transforms.forEach((m,i)=>batch.setMatrixAt(i,m));batch.castShadow=true;batch.receiveShadow=true;batch.instanceMatrix.needsUpdate=true;root.add(batch);\n  }\n  let disposed=false;\n  return {root,reefs,wall,beacon,collectibles,seaY:SEA_Y,\n    update(t){\n      if(disposed)return;seaMat.uniforms.uTime.value=t;\n      for(const a of animated) {\n        if(a.kind==='lantern'){a.mesh.position.y=a.y+Math.sin(t*1.6+a.phase)*.11;a.mesh.rotation.y=t*.45+a.phase;}\n        else if(a.kind==='gull'){\n          const angle=t*.07+a.phase;a.mesh.position.set(Math.cos(angle)*a.r,a.y+Math.sin(t*.4+a.phase)*.35,-13+Math.sin(angle)*a.r*.65);\n          a.mesh.rotation.y=-angle;a.wingL.rotation.z=Math.sin(t*4+a.phase)*.32;a.wingR.rotation.z=-a.wingL.rotation.z;\n        }else if(a.kind==='banner'){\n          const p=a.mesh.geometry.attributes.position;for(let i=0;i<p.count;i++)p.setZ(i,a.base[i*3+2]+Math.sin(a.base[i*3]*2.6+t*2.1)*.055);p.needsUpdate=true;\n        }\n      }\n    },\n    dispose(){if(disposed)return;disposed=true;scene.remove(root);for(const g of geometries)g.dispose();for(const m of materials)m.dispose();sun.shadow.dispose();}\n  };\n}\n",
+    "/scripts/run-carry-the-city.mjs": "import { createServer } from 'node:http';\nimport { readFile, realpath, mkdir, writeFile, readdir } from 'node:fs/promises';\nimport path from 'node:path';\nimport { fileURLToPath } from 'node:url';\nimport { createHash } from 'node:crypto';\nimport { chromium } from 'playwright-core';\n\nconst root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');\nconst serve = process.argv.includes('--serve');\nif (process.argv.slice(2).some(value => value !== '--serve')) throw Error('Only option: --serve');\nconst prefix = '/experiments/carry-the-city/';\nconst allowed = [prefix, '/node_modules/three-r186/'];\nconst routes = [], servedHashes = {};\nconst sha = value => createHash('sha256').update(value).digest('hex');\nconst mimeTypes = { '.html': 'text/html', '.mjs': 'text/javascript', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.json': 'application/json' };\nconst server = createServer(async (req, res) => {\n  try {\n    if (!['GET', 'HEAD'].includes(req.method)) { res.writeHead(405).end(); return; }\n    let name = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname);\n    if (name === '/') name = prefix + 'index.html';\n    if (name === '/favicon.ico') { res.writeHead(204).end(); return; }\n    const match = allowed.find(candidate => name.startsWith(candidate));\n    if (!match || name.includes('\\\\') || name.includes('\\0') || name.split('/').includes('..')) throw Error('Invalid route');\n    const base = await realpath(path.join(root, match));\n    const file = await realpath(path.join(root, name));\n    const relative = path.relative(base, file);\n    if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw Error('Outside source allowlist');\n    const raw = await readFile(file), digest = sha(raw);\n    if (!serve && servedHashes[name] && servedHashes[name] !== digest) throw Error('Served source changed');\n    servedHashes[name] = digest;\n    res.writeHead(200, {\n      'Content-Type': mimeTypes[path.extname(name)] ?? 'application/octet-stream',\n      'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',\n    });\n    res.end(req.method === 'HEAD' ? undefined : raw);\n  } catch (error) {\n    routes.push({ url: req.url, error: error.message });\n    res.writeHead(404).end();\n  }\n});\nawait new Promise((resolve, reject) => {\n  server.once('error', reject);\n  server.listen(serve ? 5202 : 0, '127.0.0.1', resolve);\n});\nconst url = `http://127.0.0.1:${server.address().port}/`;\n\nif (serve) {\n  console.log(JSON.stringify({ url, state: 'Intro remains idle until the player begins the voyage.' }));\n} else {\n  const began = Date.now();\n  const out = path.join(root, 'results/development/carry-the-city', new Date().toISOString().replaceAll(':', '-'));\n  await mkdir(out, { recursive: true });\n  const report = {\n    status: 'failed', startedAt: new Date(began).toISOString(), url,\n    watchdogMs: 75000, viewport: { width: 1440, height: 1000 },\n    errors: [], requestFailures: [], routes, checks: [], route: [], actions: [], screenshots: {},\n    sourceHashes: {}, sourceSnapshots: {}, servedHashes,\n    testMethod: 'Real Begin, pointer steering, mode/restart controls, a bounded real-time RAF sample, collision and rescue routes; public advance/setTarget methods. No writes to game state.',\n  };\n  let browser, page, timedOut = false;\n  const watchdog = setTimeout(() => {\n    timedOut = true;\n    browser?.close().catch(() => {});\n  }, 75000);\n  function check(name, passed, detail = null) {\n    report.checks.push({ name, passed: Boolean(passed), detail });\n    if (!passed) throw Error(`Check failed: ${name}${detail ? ' ' + JSON.stringify(detail) : ''}`);\n  }\n  async function snapshot(label) {\n    const value = await page.evaluate(() => {\n      const s = window.carryCity.state;\n      return {\n        phase: s.phase, playing: s.playing, paused: s.paused, mode: s.mode,\n        x: s.x, y: s.y, z: s.z, yaw: s.yaw, speed: s.speed, time: s.time,\n        target: s.target ? { ...s.target } : null, elapsed: s.elapsed,\n        rescued: s.rescued, lanterns: Array.from(s.lanterns), bumps: s.bumps,\n      };\n    });\n    report.route.push({ label, ...value });\n    return value;\n  }\n  async function screenshot(name) {\n    const file = path.join(out, name + '.png');\n    await page.screenshot({ path: file, animations: 'disabled' });\n    report.screenshots[name] = { path: name + '.png', sha256: sha(await readFile(file)) };\n  }\n  async function advance(seconds, label) {\n    report.actions.push({ type: 'advance', seconds, label });\n    await page.evaluate(value => window.carryCity.advance(value, { renderEvery: 120 }), seconds);\n    const value = await snapshot(label);\n    check(`Finite movement: ${label}`, [value.x, value.y, value.z, value.time, value.elapsed].every(Number.isFinite));\n    return value;\n  }\n  async function travel(x, z, label, { seconds = 18, threshold = .9, setTarget = true } = {}) {\n    if (setTarget) {\n      report.actions.push({ type: 'setTarget', x, z, label });\n      await page.evaluate(([a, b]) => window.carryCity.setTarget(a, b), [x, z]);\n    }\n    let latest = await snapshot(label + ': target');\n    for (let elapsed = 0; elapsed < seconds && Math.hypot(latest.x - x, latest.z - z) > threshold; elapsed += 2) {\n      latest = await advance(2, `${label}: ${elapsed + 2}s`);\n    }\n    check(`Arrived: ${label}`, Math.hypot(latest.x - x, latest.z - z) <= threshold, latest);\n    return latest;\n  }\n  try {\n    for (const name of await readdir(path.join(root, prefix))) {\n      if (!/\\.(?:html|mjs|css)$/.test(name) || name.endsWith('.test.mjs')) continue;\n      const key = prefix + name, source = await readFile(path.join(root, key), 'utf8');\n      report.sourceSnapshots[key] = source; report.sourceHashes[key] = sha(source);\n    }\n    const runner = '/scripts/run-carry-the-city.mjs';\n    report.sourceSnapshots[runner] = await readFile(fileURLToPath(import.meta.url), 'utf8');\n    report.sourceHashes[runner] = sha(report.sourceSnapshots[runner]);\n    browser = await chromium.launch({ channel: 'chrome', headless: true });\n    report.browser = browser.version();\n    page = await browser.newPage({ viewport: report.viewport });\n    page.setDefaultTimeout(10000);\n    page.on('pageerror', error => report.errors.push({ type: 'pageerror', message: error.message }));\n    page.on('console', message => {\n      if (message.type() === 'error') report.errors.push({ type: 'console', message: message.text() });\n    });\n    page.on('requestfailed', request => report.requestFailures.push({ url: request.url(), error: request.failure()?.errorText }));\n    await page.goto(url, { waitUntil: 'load', timeout: 30000 });\n    await page.waitForFunction(() => window.carryCity?.evidence.ready || window.carryCity?.evidence.errors.length, null, { timeout: 30000 });\n    const initialEvidence = await page.evaluate(() => window.carryCity.evidence);\n    check('World prepared', initialEvidence.ready && initialEvidence.errors.length === 0, initialEvidence.errors);\n    const intro = await snapshot('intro');\n    check('Intro is idle', intro.phase === 'intro' && !intro.playing && intro.rescued === 0);\n    check('Begin control is available', await page.locator('#begin').isEnabled());\n    await screenshot('intro');\n\n    await page.click('#begin'); report.actions.push({ type: 'click', selector: '#begin' });\n    // Observe the real animation loop after a short warmup. These are browser\n    // RAF intervals and application render counts, not GPU timings or a claim\n    // about a target framerate. A timer also bounds the sample if RAF stalls.\n    report.realtime = await page.evaluate(async () => {\n      await new Promise(resolve => setTimeout(resolve, 250));\n      return new Promise(resolve => {\n        const begin = performance.now(), framesBefore = window.carryCity.evidence.frames;\n        const simulationBefore = window.carryCity.state.time, intervals = [];\n        let previous = null, request = 0, ended = false;\n        const finish = () => {\n          if (ended) return;\n          ended = true; cancelAnimationFrame(request); clearTimeout(deadline);\n          const sorted = intervals.slice().sort((a, b) => a - b);\n          const percentile = p => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(p * sorted.length))] : null;\n          resolve({\n            method: 'Independent requestAnimationFrame observer alongside the real game loop; no manual simulation stepping during sample.',\n            warmupMs: 250, requestedMs: 2000, observedMs: performance.now() - begin,\n            observerCallbacks: intervals.length + (previous === null ? 0 : 1),\n            applicationFrames: window.carryCity.evidence.frames - framesBefore,\n            simulationSeconds: window.carryCity.state.time - simulationBefore,\n            intervalsMs: intervals,\n            meanIntervalMs: intervals.length ? intervals.reduce((a, b) => a + b, 0) / intervals.length : null,\n            medianIntervalMs: percentile(.5), p95IntervalMs: percentile(.95), maxIntervalMs: percentile(1),\n          });\n        };\n        const sample = now => {\n          if (previous !== null) intervals.push(now - previous);\n          previous = now;\n          if (performance.now() - begin >= 2000) finish();\n          else request = requestAnimationFrame(sample);\n        };\n        const deadline = setTimeout(finish, 2250);\n        request = requestAnimationFrame(sample);\n      });\n    });\n    report.actions.push({ type: 'observe-realtime-RAF', requestedMs: 2000, warmupMs: 250 });\n    check('Real animation loop renders and advances', report.realtime.applicationFrames >= 2 && report.realtime.simulationSeconds > 0\n      && report.realtime.intervalsMs.length > 0 && report.realtime.intervalsMs.every(value => Number.isFinite(value) && value > 0), report.realtime);\n    await page.evaluate(() => window.carryCity.advance(0));\n    const started = await snapshot('after actual Begin');\n    check('Begin starts the voyage', started.playing && started.phase === 'voyage' && started.mode === 'swim');\n    const pointer = await page.evaluate(() => window.carryCity.project(-9, 0, 6));\n    check('Water pointer target is onscreen', pointer.x > 0 && pointer.x < 1440 && pointer.y > 0 && pointer.y < 1000, pointer);\n    await page.mouse.move(pointer.x - 8, pointer.y + 5);\n    await page.mouse.down();\n    await page.mouse.move(pointer.x, pointer.y, { steps: 3 });\n    await page.mouse.up();\n    report.actions.push({ type: 'pointer-drag', projectedWorldPoint: [-9, 0, 6], client: pointer });\n    const steered = await snapshot('after actual water pointer');\n    check('Water pointer steers to its world point', steered.target && Math.hypot(steered.target.x + 9, steered.target.z - 6) < .1, steered.target);\n    const first = await travel(-9, 6, 'first lantern', { setTarget: false });\n    check('Swimming caused travel', Math.hypot(first.x - started.x, first.z - started.z) > 5);\n    await screenshot('swim');\n\n    await page.click('#fly'); report.actions.push({ type: 'click', selector: '#fly' });\n    check('Moth button changes mode and UI', await page.evaluate(() => window.carryCity.state.mode === 'fly' && document.getElementById('fly').classList.contains('active')));\n    const second = await travel(8, -5, 'second lantern');\n    check('Flight clears the water', second.y > 4 && second.mode === 'fly', { y: second.y, mode: second.mode });\n    // Select a visible wingbeat phase by allowing the simulation to advance.\n    const wingTime = await page.evaluate(() => ((.5 - window.carryCity.state.time % 2) + 2) % 2);\n    if (wingTime > .001) await advance(wingTime, 'wingbeat screenshot phase');\n    await screenshot('fly');\n    await travel(0, -17.2, 'lighthouse approach');\n    await page.click('#swim'); report.actions.push({ type: 'click', selector: '#swim' });\n    check('Koi button changes mode and UI', await page.evaluate(() => window.carryCity.state.mode === 'swim' && document.getElementById('swim').classList.contains('active')));\n    let finished;\n    for (let i = 0; i < 9; i++) {\n      finished = await advance(2, `landing and rescue ${i + 1}`);\n      if (finished.phase === 'done') break;\n    }\n    check('Reached the destination by movement', finished.z < -15 && Math.abs(finished.x) < 2.2, finished);\n    check('All eight residents rescued', finished.phase === 'done' && finished.rescued === 8, finished);\n    check('Finish screen is visible', await page.locator('#finish').isVisible());\n    check('Route collected all three lanterns', finished.lanterns.length === 3, finished.lanterns);\n    await screenshot('finish');\n    report.evidence = await page.evaluate(() => window.carryCity.evidence);\n    check('Start, both modes, docking and win were observed', ['start', 'docking', 'win'].every(type => report.evidence.events.some(e => e.type === type))\n      && ['swim', 'fly'].every(kind => report.evidence.events.some(e => e.type === 'motion-borrowed' && e.kind === kind)));\n    check('No game or browser errors', report.evidence.errors.length === 0 && report.errors.length === 0 && routes.length === 0,\n      { game: report.evidence.errors, browser: report.errors, routes });\n\n    // Restart after the completed rescue, then take a deliberately different\n    // route into a reef. The event must arise from movement and contact.\n    const priorRestarts = report.evidence.events.filter(e => e.type === 'restart').length;\n    await page.click('#restart'); report.actions.push({ type: 'click', selector: '#restart' });\n    const restarted = await snapshot('after actual restart');\n    check('Restart resets the voyage', restarted.phase === 'intro' && !restarted.playing && restarted.mode === 'swim'\n      && restarted.rescued === 0 && restarted.bumps === 0 && restarted.lanterns.length === 0 && restarted.target === null\n      && restarted.time === 0 && restarted.elapsed === 0 && Math.hypot(restarted.x, restarted.z - 7) < 1e-9, restarted);\n    check('Restart restores intro and hides the finish', await page.locator('#intro').isVisible() && !await page.locator('#finish').isVisible());\n    check('Restart restores all resident HUD markers', await page.locator('#people').textContent() === '● ● ● ● ● ● ● ●');\n    check('One actual restart event was recorded', await page.evaluate(count => window.carryCity.evidence.events.filter(e => e.type === 'restart').length === count + 1, priorRestarts));\n    await page.click('#begin'); report.actions.push({ type: 'click', selector: '#begin', label: 'collision voyage' });\n    await page.evaluate(() => window.carryCity.advance(0));\n    const collisionEventStart = await page.evaluate(() => window.carryCity.evidence.events.length);\n    await page.evaluate(() => window.carryCity.setTarget(-5, 0));\n    report.actions.push({ type: 'setTarget', x: -5, z: 0, label: 'real reef contact' });\n    let collisionState;\n    for (let i = 0; i < 5; i++) {\n      collisionState = await advance(1, `reef approach ${i + 1}`);\n      if (collisionState.bumps > 0) break;\n    }\n    report.collision = {\n      state: collisionState,\n      events: await page.evaluate(start => window.carryCity.evidence.events.slice(start), collisionEventStart),\n    };\n    const impact = report.collision.events.find(e => e.type === 'reef-impact');\n    const release = report.collision.events.find(e => e.type === 'cargo-released');\n    check('Movement into the reef triggers contact', collisionState.mode === 'swim' && collisionState.bumps > 0 && Boolean(impact), report.collision);\n    check('Reef contact releases cargo', Boolean(release) && release.time >= impact.time, release ?? null);\n    const finiteVector = value => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);\n    check('Released cargo has finite position and velocity', finiteVector(release.position) && finiteVector(release.velocity)\n      && finiteVector(release.inheritedVelocity), release);\n    check('Cargo inherits a tracked simulation frame', release.hasVelocity === true && release.reason === 'tracked'\n      && release.deltaTime > 0 && release.deltaTime <= .25, release);\n    check('Cargo adds the explicit kick exactly once', release.velocity.every((value, i) => Math.abs(value - release.inheritedVelocity[i] - (i === 1 ? 1.8 : 0)) < 1e-9), release);\n    await screenshot('collision');\n    report.secondaryEvidence = await page.evaluate(() => window.carryCity.evidence);\n    check('Restart and collision remain free of errors', report.secondaryEvidence.errors.length === 0 && report.errors.length === 0 && routes.length === 0,\n      { game: report.secondaryEvidence.errors, browser: report.errors, routes });\n\n    await page.evaluate(() => window.carryCity.dispose());\n    report.disposal = await page.evaluate(async () => {\n      const framesBefore = window.carryCity.evidence.frames;\n      // The second call must be harmless. Wait one event-loop interval for an\n      // intentional context-loss notification or stray animation callbacks.\n      window.carryCity.dispose();\n      await new Promise(resolve => setTimeout(resolve, 150));\n      return { ...window.carryCity.evidence, framesAfterDisposal: window.carryCity.evidence.frames - framesBefore };\n    });\n    check('Explicit disposal completed', report.disposal.disposed);\n    check('Disposal is idempotent and stops rendering', report.disposal.framesAfterDisposal === 0);\n    check('Disposal did not produce game errors', report.disposal.errors.length === 0 && report.errors.length === 0,\n      { game: report.disposal.errors, browser: report.errors });\n    for (const [name, digest] of Object.entries(servedHashes)) {\n      if (report.sourceHashes[name] && report.sourceHashes[name] !== digest) throw Error('Served source differs from snapshot: ' + name);\n    }\n    for (const group of [report.sourceHashes, servedHashes]) for (const [name, digest] of Object.entries(group)) {\n      if (sha(await readFile(path.join(root, name))) !== digest) throw Error('Executed source changed: ' + name);\n    }\n    check('Executed source hashes remained stable', true);\n    report.status = 'passed';\n  } catch (error) {\n    report.failure = String(error.stack ?? error);\n    process.exitCode = 1;\n  } finally {\n    if (page && !page.isClosed()) {\n      try { await page.evaluate(() => window.carryCity?.dispose()); } catch (error) { report.cleanupError = error.message; }\n    }\n    await browser?.close().catch(error => { report.closeError = error.message; });\n    clearTimeout(watchdog);\n    report.timedOut = timedOut;\n    report.wallMs = Date.now() - began;\n    if (timedOut) { report.status = 'failed'; report.failure = '75-second browser watchdog expired. ' + (report.failure ?? ''); process.exitCode = 1; }\n    await new Promise(resolve => server.close(resolve));\n    const raw = JSON.stringify(report, null, 2) + '\\n';\n    await writeFile(path.join(out, 'report.json'), raw);\n    await writeFile(path.join(out, 'report.sha256'), sha(raw) + '\\n');\n    console.log(JSON.stringify({ out, status: report.status, failure: report.failure, wallMs: report.wallMs, checks: report.checks, errors: report.errors }, null, 2));\n  }\n}\n"
+  },
+  "servedHashes": {
+    "/experiments/carry-the-city/index.html": "772c1c8cc5e98a4158ed981067602b62988ad43ba2f8aab4020a807c057e9322",
+    "/experiments/carry-the-city/main.mjs": "288e2e304d09d55fe7974951aaedcb9d1b80a7951c75b9504f3815bf6b124235",
+    "/node_modules/three-r186/examples/jsm/postprocessing/EffectComposer.js": "4e079a5886152d7e529a59aef644e968ab4d32c6a33ce016b36bf29b2eac26f7",
+    "/node_modules/three-r186/examples/jsm/postprocessing/RenderPass.js": "817f6c3cdcd0fd41515d112359ea0532568eefb5aabd3b33903957ebca1b8a6a",
+    "/node_modules/three-r186/build/three.module.js": "9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea",
+    "/node_modules/three-r186/examples/jsm/controls/OrbitControls.js": "3d79d07ecb686b4e5d93232eedab255331c1beef711e13164eaa1f68655a5f2b",
+    "/node_modules/three-r186/examples/jsm/postprocessing/OutputPass.js": "02e4a261af34de71338185e9e87f0cbe5cba9115608d984363e1269dec1d2272",
+    "/node_modules/three-r186/examples/jsm/postprocessing/UnrealBloomPass.js": "ba8f2fcadfa6588384c9473498f974d81d120f02f0e63a0e59c265202a006b5a",
+    "/experiments/carry-the-city/motion.mjs": "02f5bbe8d382ad1b00abd893e4341d43e1df53fbfacf2a7a7e7b26ce8cb84576",
+    "/node_modules/three-r186/examples/jsm/environments/RoomEnvironment.js": "55f466192cc84298755a424c5e040345006b2ee1455589b3b54126c2ea4123f4",
+    "/experiments/carry-the-city/town.mjs": "0b89ddb4dc6da64b10ca7c1dbb7591c6f0bec9df52c8f2dd17909c1f142a8f62",
+    "/experiments/carry-the-city/world.mjs": "ec91966e0a9194faf2b2acce7a1e5321f5d8c9b1280afa68ac5b7297b7ad6ba1",
+    "/experiments/carry-the-city/rig.mjs": "04d8a5989a4a32e4ad0a4583e681731e6d6dbbecb618dfcc089695ac2bf247b6",
+    "/experiments/carry-the-city/world-motion.mjs": "f7d6a4a772fb884a667a736584d19194c5454a2e9e605938869dbb448dcddae4",
+    "/node_modules/three-r186/examples/jsm/shaders/CopyShader.js": "a33057d5ac91c43304c186ac0e8816e62bb2ed471d3a00ff3018dfd5c0389718",
+    "/experiments/carry-the-city/fins.mjs": "fa4a89e704a476634656fea8ac8d5281b05676e41f0006fa8b88b8d4b4a5c48d",
+    "/node_modules/three-r186/examples/jsm/postprocessing/Pass.js": "444b409c235ead986893c472e720da1b779a56985c7d10b279c7944b52bd61c5",
+    "/node_modules/three-r186/examples/jsm/postprocessing/ShaderPass.js": "e2500a5913b26bbf5148ceaae644c6edcff06a18b01494ee37bf856353d2ab9d",
+    "/node_modules/three-r186/examples/jsm/postprocessing/MaskPass.js": "7cd08eee9d5d6f5578beaddbdcbe9c384f6873810af27f22ab7db3ceeb127aa3",
+    "/node_modules/three-r186/examples/jsm/shaders/OutputShader.js": "353479f77a8d7e2629d49ccac9fc2f5dbfdda5442e0adf867b00377a2fcb0cb2",
+    "/node_modules/three-r186/examples/jsm/shaders/LuminosityHighPassShader.js": "5044f780b6e6cf863947f64c36fe1587132f7fbe395ada863cd1e5f0388dcf1e",
+    "/node_modules/three-r186/examples/jsm/utils/BufferGeometryUtils.js": "9fb63427ce6641fa14fd0baff9cc4d1b5f9c3d85fd084bf2e90e803c44ec1797",
+    "/node_modules/three-r186/build/three.core.js": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6"
+  },
+  "testMethod": "Real Begin, pointer steering, mode/restart controls, a bounded real-time RAF sample, collision and rescue routes; public advance/setTarget methods. No writes to game state.",
+  "browser": "152.0.7977.83",
+  "realtime": {
+    "method": "Independent requestAnimationFrame observer alongside the real game loop; no manual simulation stepping during sample.",
+    "warmupMs": 250,
+    "requestedMs": 2000,
+    "observedMs": 2010.7999999970198,
+    "observerCallbacks": 165,
+    "applicationFrames": 165,
+    "simulationSeconds": 2.0100999999999973,
+    "intervalsMs": [
+      10.699999999999818,
+      10.700000000000273,
+      14.199999999999818,
+      10.800000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      10.700000000000273,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      10.800000000000182,
+      14.199999999999818,
+      10.700000000000273,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      10.699999999999818,
+      14.200000000000273,
+      10.799999999999727,
+      10.700000000000273,
+      14.299999999999727,
+      10.700000000000273,
+      10.699999999999818,
+      10.800000000000182,
+      14.199999999999818,
+      10.700000000000273,
+      10.799999999999727,
+      14.200000000000273,
+      10.699999999999818,
+      10.800000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      10.599999999999909,
+      10.800000000000182,
+      14.299999999999727,
+      10.600000000000364,
+      14.299999999999727,
+      10.800000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      10.700000000000273,
+      14.199999999999818,
+      10.699999999999818,
+      14.400000000000091,
+      10.599999999999909,
+      10.800000000000182,
+      14.300000000000182,
+      10.599999999999909,
+      14.400000000000091,
+      10.599999999999909,
+      14.400000000000091,
+      10.699999999999818,
+      14.199999999999818,
+      10.700000000000273,
+      10.699999999999818,
+      14.400000000000091,
+      10.599999999999909,
+      14.300000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      14.299999999999727,
+      10.700000000000273,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      14.200000000000273,
+      10.799999999999727,
+      14.300000000000182,
+      10.699999999999818,
+      10.700000000000273,
+      14.299999999999727,
+      14.300000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      10.599999999999909,
+      10.800000000000182,
+      14.199999999999818,
+      10.800000000000182,
+      14.299999999999727,
+      14.200000000000273,
+      10.699999999999818,
+      10.800000000000182,
+      14.299999999999727,
+      10.700000000000273,
+      14.199999999999818,
+      10.699999999999818,
+      14.300000000000182,
+      14.300000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      10.699999999999818,
+      14.300000000000182,
+      14.300000000000182,
+      10.699999999999818,
+      14.199999999999818,
+      10.800000000000182,
+      10.699999999999818,
+      14.200000000000273,
+      14.299999999999727,
+      10.800000000000182,
+      14.300000000000182,
+      10.599999999999909,
+      10.699999999999818,
+      14.400000000000091,
+      10.599999999999909,
+      14.300000000000182,
+      10.699999999999818,
+      10.700000000000273,
+      14.399999999999636,
+      10.600000000000364,
+      10.799999999999727,
+      14.200000000000273,
+      10.699999999999818,
+      14.400000000000091,
+      10.699999999999818,
+      10.599999999999909,
+      14.400000000000091,
+      10.599999999999909,
+      10.700000000000273,
+      14.299999999999727,
+      10.700000000000273,
+      14.299999999999727,
+      14.300000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      10.699999999999818,
+      10.699999999999818,
+      14.300000000000182,
+      10.800000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      10.600000000000364,
+      14.299999999999272,
+      10.700000000000728,
+      14.299999999999272,
+      10.700000000000728,
+      10.699999999999818,
+      14.199999999999818,
+      10.800000000000182,
+      10.699999999999818,
+      14.199999999999818,
+      10.800000000000182,
+      14.199999999999818,
+      10.800000000000182,
+      10.699999999999818,
+      14.300000000000182,
+      14.300000000000182,
+      10.599999999999454,
+      14.400000000000546,
+      10.699999999999818,
+      10.600000000000364,
+      14.299999999999272,
+      10.800000000000182,
+      14.300000000000182,
+      10.699999999999818
+    ],
+    "meanIntervalMs": 12.16951219512195,
+    "medianIntervalMs": 10.800000000000182,
+    "p95IntervalMs": 14.399999999999636,
+    "maxIntervalMs": 14.400000000000546
+  },
+  "evidence": {
+    "ready": true,
+    "errors": [],
+    "events": [
+      {
+        "type": "ready",
+        "time": 0,
+        "revision": "186",
+        "houses": 89,
+        "roadVertices": 4888,
+        "renderer": "WebGL2",
+        "source": "authored sampled motion clips"
+      },
+      {
+        "type": "start",
+        "time": 0
+      },
+      {
+        "type": "lantern",
+        "time": 5.0818666666681445,
+        "id": "first"
+      },
+      {
+        "type": "motion-borrowed",
+        "time": 6.315200000001473,
+        "kind": "fly",
+        "clip": "moth-flight"
+      },
+      {
+        "type": "lantern",
+        "time": 11.581866666668311,
+        "id": "second"
+      },
+      {
+        "type": "lantern",
+        "time": 16.000000000000167,
+        "id": "third"
+      },
+      {
+        "type": "motion-borrowed",
+        "time": 16.50000000000014,
+        "kind": "swim",
+        "clip": "koi-swim"
+      },
+      {
+        "type": "docking",
+        "time": 17.366666666666756
+      },
+      {
+        "type": "win",
+        "time": 25.383333333332967,
+        "elapsed": 17.366666666666756,
+        "lanterns": 3,
+        "bumps": 0
+      }
+    ],
+    "frames": 214,
+    "maxFrameMs": 474.1000000014901,
+    "disposed": false
+  },
+  "collision": {
+    "state": {
+      "phase": "voyage",
+      "playing": true,
+      "paused": false,
+      "mode": "swim",
+      "x": -0.8406900147034911,
+      "y": -0.3,
+      "z": 5.755942559904252,
+      "yaw": 2.1965371189890877,
+      "speed": 0.1833298040287829,
+      "time": 1.054700000000002,
+      "target": {
+        "x": -5,
+        "z": 0
+      },
+      "elapsed": 1.054700000000002,
+      "rescued": 0,
+      "lanterns": [],
+      "bumps": 1
+    },
+    "events": [
+      {
+        "type": "reef-impact",
+        "time": 0.8547000000000018
+      },
+      {
+        "type": "cargo-released",
+        "time": 0.8547000000000018,
+        "position": [
+          1.8990249112348274,
+          -0.2600427972972392,
+          5.999415088622132
+        ],
+        "velocity": [
+          -0.17731983583886668,
+          1.832028456528983,
+          -1.2579041961650321
+        ],
+        "inheritedVelocity": [
+          -0.17731983583886668,
+          0.03202845652898291,
+          -1.2579041961650321
+        ],
+        "hasVelocity": true,
+        "deltaTime": 0.01666666666666672,
+        "reason": "tracked"
+      }
+    ]
+  },
+  "secondaryEvidence": {
+    "ready": true,
+    "errors": [],
+    "events": [
+      {
+        "type": "ready",
+        "time": 0,
+        "revision": "186",
+        "houses": 89,
+        "roadVertices": 4888,
+        "renderer": "WebGL2",
+        "source": "authored sampled motion clips"
+      },
+      {
+        "type": "start",
+        "time": 0
+      },
+      {
+        "type": "lantern",
+        "time": 5.0818666666681445,
+        "id": "first"
+      },
+      {
+        "type": "motion-borrowed",
+        "time": 6.315200000001473,
+        "kind": "fly",
+        "clip": "moth-flight"
+      },
+      {
+        "type": "lantern",
+        "time": 11.581866666668311,
+        "id": "second"
+      },
+      {
+        "type": "lantern",
+        "time": 16.000000000000167,
+        "id": "third"
+      },
+      {
+        "type": "motion-borrowed",
+        "time": 16.50000000000014,
+        "kind": "swim",
+        "clip": "koi-swim"
+      },
+      {
+        "type": "docking",
+        "time": 17.366666666666756
+      },
+      {
+        "type": "win",
+        "time": 25.383333333332967,
+        "elapsed": 17.366666666666756,
+        "lanterns": 3,
+        "bumps": 0
+      },
+      {
+        "type": "restart",
+        "time": 0
+      },
+      {
+        "type": "start",
+        "time": 0
+      },
+      {
+        "type": "reef-impact",
+        "time": 0.8547000000000018
+      },
+      {
+        "type": "cargo-released",
+        "time": 0.8547000000000018,
+        "position": [
+          1.8990249112348274,
+          -0.2600427972972392,
+          5.999415088622132
+        ],
+        "velocity": [
+          -0.17731983583886668,
+          1.832028456528983,
+          -1.2579041961650321
+        ],
+        "inheritedVelocity": [
+          -0.17731983583886668,
+          0.03202845652898291,
+          -1.2579041961650321
+        ],
+        "hasVelocity": true,
+        "deltaTime": 0.01666666666666672,
+        "reason": "tracked"
+      }
+    ],
+    "frames": 224,
+    "maxFrameMs": 474.1000000014901,
+    "disposed": false
+  },
+  "disposal": {
+    "ready": true,
+    "errors": [],
+    "events": [
+      {
+        "type": "ready",
+        "time": 0,
+        "revision": "186",
+        "houses": 89,
+        "roadVertices": 4888,
+        "renderer": "WebGL2",
+        "source": "authored sampled motion clips"
+      },
+      {
+        "type": "start",
+        "time": 0
+      },
+      {
+        "type": "lantern",
+        "time": 5.0818666666681445,
+        "id": "first"
+      },
+      {
+        "type": "motion-borrowed",
+        "time": 6.315200000001473,
+        "kind": "fly",
+        "clip": "moth-flight"
+      },
+      {
+        "type": "lantern",
+        "time": 11.581866666668311,
+        "id": "second"
+      },
+      {
+        "type": "lantern",
+        "time": 16.000000000000167,
+        "id": "third"
+      },
+      {
+        "type": "motion-borrowed",
+        "time": 16.50000000000014,
+        "kind": "swim",
+        "clip": "koi-swim"
+      },
+      {
+        "type": "docking",
+        "time": 17.366666666666756
+      },
+      {
+        "type": "win",
+        "time": 25.383333333332967,
+        "elapsed": 17.366666666666756,
+        "lanterns": 3,
+        "bumps": 0
+      },
+      {
+        "type": "restart",
+        "time": 0
+      },
+      {
+        "type": "start",
+        "time": 0
+      },
+      {
+        "type": "reef-impact",
+        "time": 0.8547000000000018
+      },
+      {
+        "type": "cargo-released",
+        "time": 0.8547000000000018,
+        "position": [
+          1.8990249112348274,
+          -0.2600427972972392,
+          5.999415088622132
+        ],
+        "velocity": [
+          -0.17731983583886668,
+          1.832028456528983,
+          -1.2579041961650321
+        ],
+        "inheritedVelocity": [
+          -0.17731983583886668,
+          0.03202845652898291,
+          -1.2579041961650321
+        ],
+        "hasVelocity": true,
+        "deltaTime": 0.01666666666666672,
+        "reason": "tracked"
+      }
+    ],
+    "frames": 224,
+    "maxFrameMs": 474.1000000014901,
+    "disposed": true,
+    "framesAfterDisposal": 0
+  },
+  "timedOut": false,
+  "wallMs": 21723
+}

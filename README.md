@@ -9,6 +9,12 @@ Start with the [experiment index](experiments/README.md) and
   The solid cast holds cargo; the same cast left liquid lets it fall. CPU and
   WebGPU checks pass for the authored fixture, with a local GLB adapter and
   explicit contact limits. [Enter the foundry](experiments/matter-forge/README.md).
+- **Carry the City — playable motion-transfer prototype.** An inhabited town
+  borrows authored swimming and flying motion. A shared mapping animates streets,
+  places rigid buildings and supplies interaction anchors. Steer to the lighthouse
+  and rescue eight residents. This combines established animation techniques;
+  it is not a claimed graphics or physics breakthrough.
+  [Play and inspect the implementation](experiments/carry-the-city/README.md).
 - **OIT foreground alpha — confirmed r186 correctness finding.** Transparent
   foreground coverage is missing from output alpha. A one-expression correction
   matches ordinary blending across 15,360 retained pixels in five controlled
