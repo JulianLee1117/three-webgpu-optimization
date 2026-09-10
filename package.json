@@ -16,6 +16,10 @@
     "node": ">=22.12.0"
   },
   "scripts": {
+    "demo:matter-forge": "node scripts/run-matter-forge.mjs --serve",
+    "check:matter-forge": "node scripts/check-matter-forge-casting-gpu.mjs",
+    "test:matter-forge": "node --test experiments/matter-forge/*.test.mjs",
+    "analyze:matter-forge": "node scripts/analyze-matter-forge.mjs --self-test",
     "demo:footprint-filtering": "node scripts/run-footprint-filtering.mjs --serve",
     "check:footprint-filtering": "node scripts/run-footprint-filtering.mjs",
     "test:footprint-filtering": "node --test experiments/footprint-filtering/*.test.mjs",

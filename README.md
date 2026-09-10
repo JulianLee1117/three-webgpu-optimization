@@ -4,6 +4,11 @@ Small, reproducible experiments toward better tools for editable Three.js scenes
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).
 
+- **MatterForge — physical material editing and construction.** Pour a closed
+  mesh's material through a grille, cast it, remove the mold, and load the result.
+  The solid cast holds cargo; the same cast left liquid lets it fall. CPU and
+  WebGPU checks pass for the authored fixture, with a local GLB adapter and
+  explicit contact limits. [Enter the foundry](experiments/matter-forge/README.md).
 - **OIT foreground alpha — confirmed r186 correctness finding.** Transparent
   foreground coverage is missing from output alpha. A one-expression correction
   matches ordinary blending across 15,360 retained pixels in five controlled

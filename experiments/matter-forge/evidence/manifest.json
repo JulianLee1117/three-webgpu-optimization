@@ -1,0 +1,73 @@
+{
+  "kind": "matter-forge-public-evidence-v1",
+  "gpuReport": {
+    "file": "gpu-report.json.gz",
+    "id": "2026-09-10T01-50-50.672Z",
+    "kind": "matter-forge-casting-gpu-report-v2",
+    "rawSHA256": "4a36b8c64374c0d390df5e1b0ffaefa624be49527bd1072c6e4e444087c433bf",
+    "gzipSHA256": "81f40a4694f1393bb728e7fc024f63f5f4a89dca5145f99bb8b826900db6cafa",
+    "rawBytes": 11572318,
+    "gzipBytes": 4432004,
+    "redactions": []
+  },
+  "cpuReference": {
+    "file": "casting-cpu-reference.json",
+    "sha256": "23c1c8eeb892e7511fa453b261f86b28383102b50caf3394a6e2aff8de59a411",
+    "bytes": 12244,
+    "sourceReportSHA256": "b2652a80f8b7b531696f4eaf9847f031a359a6dc2974978f859b63333e73147e"
+  },
+  "sourceHashes": {
+    "scripts/check-matter-forge-casting-gpu.mjs": "288f2a0391b5fc7e641cae24985a111ef1df39812cf1f86856dcdf9d1dc47ca5",
+    "experiments/matter-forge/casting-probe.html": "f8169d4412bb133a9d4693b38343b980aa0435844ac1d6837c3dd6b47e151d97",
+    "experiments/matter-forge/casting-probe.mjs": "66038ad313153609f9ef9dffd5d243940cf18d6ff271ca3d0ccd698504b77626",
+    "experiments/matter-forge/cpu.mjs": "87b18a06a4e2090175bdc9304ec0fff558c98f2e62d65f4f890d6192290231f3",
+    "experiments/matter-forge/gpu.mjs": "7acec03dfea6acd607841215b34d03ded07ffa6eb1b8cdda1e7bf799e1c359a5",
+    "experiments/matter-forge/casting-fixture.mjs": "8dcb0466e744a1192a321fe7a7d628fe0aa6e4a108d1fc5b8efd037d5ecb28a4",
+    "experiments/matter-forge/casting-fixture-v2.mjs": "f5618ff79445baafdaadcdd478cc4442a9085f9d128c38e56eadfec54b76095f"
+  },
+  "kernelSHA256": {
+    "clear": "ae4f051029911f2cb7a1420f3b95fb3e84bf49a19bd6fc425bf7b1f71cd89629",
+    "mass": "eb1a706b35e3bbf42648405e374b5a8f5a65d5c3c2a6ffb47e03f4d82168fdcd",
+    "stress": "c0c11027b4472bb6394ab495cf8656e39fa0ddfa800dfb223a7aac1047583a59",
+    "grid": "50d48433c34d9ff629b4404204433986ef21faddd3cffb11b6de526e61c76a06",
+    "gather": "8245cf586527ec25368b9decccac13b61cf725e8fce858a3fe573146c6975bae"
+  },
+  "layout": {
+    "strideFloats": 36,
+    "byteStride": 144,
+    "position": 0,
+    "mode": 3,
+    "velocity": 4,
+    "mass": 7,
+    "C": 8,
+    "F": 20,
+    "volume": 32,
+    "id": 34,
+    "matrixLayout": "column-major padded vec4 columns"
+  },
+  "priorParityRuns": [
+    {
+      "id": "2026-09-10T01-40-17.387Z",
+      "reportSHA256": "51cb412fe7ef597a5367425d4e9306131b6b33c9bf73661f4c7c5c606af748b8",
+      "status": "failed",
+      "included": false,
+      "reason": "WGSL reserved identifiers meta/target prevented compilation; zero completed steps, device destroyed."
+    },
+    {
+      "id": "2026-09-10T01-41-09.950Z",
+      "reportSHA256": "a75ee8331bdd915145c7890cf801328826af5dc2549dd2a9c0fdfebdb27bc1f3",
+      "status": "failed",
+      "included": false,
+      "reason": "Earlier fixed-point precision failed the eight-step gravity momentum gate (absolute Y momentum error0.005330981900300458);25 steps completed, device destroyed."
+    },
+    {
+      "id": "2026-09-10T01-41-29.695Z",
+      "reportSHA256": "59297dc64527e6a90405446bb98b0d323db55b5fad632e9f44f1d0ea8ac0717c",
+      "status": "passed",
+      "included": false,
+      "reason": "Short independent GPU parity matrix passed after correction; separate from the complete casting report packaged here."
+    }
+  ],
+  "capturedRuntimeIsAuthoritative": true,
+  "scope": "One fixed v2 grid-scale casting fixture, one browser/device, and one unchanged-liquid control. No benchmark, calibrated-material, arbitrary-asset casting or continuum-connectivity claim."
+}

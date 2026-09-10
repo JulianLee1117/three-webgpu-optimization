@@ -6,6 +6,18 @@ contribution with a clear demonstration; novelty and performance require evidenc
 The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
 decision and the criteria for continuing each direction.
 
+## MatterForge — material editing and physical construction
+
+[MatterForge](matter-forge/README.md) casts liquid through a grille, solidifies
+the resulting particles, removes the mold, and drops real simulated cargo onto
+the cast. Its liquid control starts from the identical state. The revised CPU
+and WebGPU fixture passes; the earlier failures and coarse contact limits remain
+explicit. The live Three r186 scene accepts closed local GLB geometry.
+
+```sh
+node scripts/run-matter-forge.mjs --serve
+```
+
 ## OIT alpha — confirmed Three r186 coverage defect
 
 [The isolated WebGPU reproduction](oit-alpha-correctness/README.md) compares

@@ -1,0 +1,9 @@
+// Small self-contained test asset. Geometry/material are authored here, not downloaded.
+import {BoxGeometry} from 'three-r186';
+import {mkdir,writeFile} from 'node:fs/promises';
+const geometry=new BoxGeometry(12,4,3),p=geometry.attributes.position.array,i=geometry.index.array;
+const binary=new Uint8Array(p.byteLength+i.byteLength);binary.set(new Uint8Array(p.buffer,p.byteOffset,p.byteLength));binary.set(new Uint8Array(i.buffer,i.byteOffset,i.byteLength),p.byteLength);
+const json={asset:{version:'2.0',generator:'Matter Forge procedural source fixture'},scene:0,scenes:[{nodes:[0]}],nodes:[{mesh:0}],meshes:[{primitives:[{attributes:{POSITION:0},indices:1,material:0}]}],materials:[{pbrMetallicRoughness:{baseColorFactor:[.18,.69,.61,1]}}],buffers:[{byteLength:binary.length}],bufferViews:[{buffer:0,byteOffset:0,byteLength:p.byteLength},{buffer:0,byteOffset:p.byteLength,byteLength:i.byteLength}],accessors:[{bufferView:0,componentType:5126,type:'VEC3',count:p.length/3,min:[-6,-2,-1.5],max:[6,2,1.5]},{bufferView:1,componentType:5123,type:'SCALAR',count:i.length}]};
+const text=new TextEncoder().encode(JSON.stringify(json)),jn=Math.ceil(text.length/4)*4,bn=Math.ceil(binary.length/4)*4,bytes=new Uint8Array(28+jn+bn),v=new DataView(bytes.buffer);
+v.setUint32(0,0x46546c67,true);v.setUint32(4,2,true);v.setUint32(8,bytes.length,true);v.setUint32(12,jn,true);v.setUint32(16,0x4e4f534a,true);bytes.fill(32,20,20+jn);bytes.set(text,20);v.setUint32(20+jn,bn,true);v.setUint32(24+jn,0x004e4942,true);bytes.set(binary,28+jn);
+geometry.dispose();const dir=new URL('../experiments/matter-forge/assets/',import.meta.url);await mkdir(dir,{recursive:true});await writeFile(new URL('casting-blank.glb',dir),bytes);console.log(JSON.stringify({asset:'experiments/matter-forge/assets/casting-blank.glb',bytes:bytes.length,triangles:12}));

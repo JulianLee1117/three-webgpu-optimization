@@ -1,0 +1,569 @@
+{
+  "kind": "matter-forge-casting-cpu-reference-v1",
+  "status": "passed",
+  "sourceReport": {
+    "kind": "matter-forge-casting-v2",
+    "id": "2026-09-10T01-44-08.983Z",
+    "sha256": "b2652a80f8b7b531696f4eaf9847f031a359a6dc2974978f859b63333e73147e"
+  },
+  "sourceHashes": {
+    "experiments/matter-forge/cpu.mjs": "87b18a06a4e2090175bdc9304ec0fff558c98f2e62d65f4f890d6192290231f3",
+    "experiments/matter-forge/casting-fixture.mjs": "8dcb0466e744a1192a321fe7a7d628fe0aa6e4a108d1fc5b8efd037d5ecb28a4",
+    "experiments/matter-forge/casting-fixture-v2.mjs": "f5618ff79445baafdaadcdd478cc4442a9085f9d128c38e56eadfec54b76095f"
+  },
+  "protocol": {
+    "version": 2,
+    "bars": 2,
+    "N": 24,
+    "dt": 0.004166666666666667,
+    "castingSteps": 960,
+    "releasedSteps": 960,
+    "recordEvery": 60,
+    "totalExecutedSteps": 2880,
+    "seed": "regular-lattice-no-randomness",
+    "body": {
+      "min": [
+        6,
+        13,
+        10
+      ],
+      "max": [
+        18,
+        17,
+        13
+      ],
+      "spacing": 0.5,
+      "mode": 0,
+      "mass": 0.125,
+      "volume": 0.125
+    },
+    "load": {
+      "min": [
+        11,
+        19,
+        10.5
+      ],
+      "max": [
+        13,
+        21,
+        12.5
+      ],
+      "spacing": 0.5,
+      "mode": 1,
+      "mass": 0.125,
+      "volume": 0.125
+    },
+    "gate": {
+      "belowGrilleY": 11.5,
+      "fractionBelowGrilleGreaterThan": 0.75,
+      "centralRegion": {
+        "min": [
+          9,
+          7.5,
+          9.5
+        ],
+        "max": [
+          15,
+          11.5,
+          13.5
+        ]
+      },
+      "minimumCentralBodyParticles": 32,
+      "solidFinalLoadYAtLeast": 8,
+      "solidAboveLiquidByAtLeast": 2,
+      "maxRelativeMassError": 1e-10,
+      "minimumParticlesInEachSupport": 24,
+      "centralBins": {
+        "xEdges": [
+          8,
+          10,
+          12,
+          14,
+          16
+        ],
+        "minY": 8.1,
+        "maxY": 11.1,
+        "minZ": 10,
+        "maxZ": 13,
+        "minimumParticlesPerBin": 24
+      }
+    },
+    "scope": "One v2 engineering candidate. A raised mold, relocated bars, additional liquid volume and stiffer elastic material correct the diagnosed v1 support mismatch. No parameter sweep or force controller. Support and central occupancy gates are necessary checks, not a continuum connectivity proof.",
+    "predecessorSHA256": "35405523337d7bc0a84b6dd1552f0c8475fef5d20d458cdcae7be3a992de1b0e",
+    "changes": [
+      "mold-floor integer node8 instead of7",
+      "grille integer x10/x14 instead of x8..9/x16..17",
+      "body volume144 instead of108",
+      "mu400/lambda600 instead of80/120"
+    ],
+    "material": {
+      "mu": 400,
+      "lambda": 600,
+      "label": "stiff elastic, uncalibrated",
+      "explicitWaveSpeedEstimate": 37.416573867739416,
+      "gridCFLAtRestDensity1": 0.1559023911155809
+    },
+    "computeBudgetMs": 12000
+  },
+  "castingConfig": {
+    "N": 24,
+    "dt": 0.004166666666666667,
+    "gravity": [
+      0,
+      -9.81,
+      0
+    ],
+    "bulk": 120,
+    "gamma": 5,
+    "mu": 400,
+    "lambda": 600,
+    "boundary": 2,
+    "colliders": [
+      {
+        "name": "left-bank",
+        "min": [
+          3,
+          2,
+          8
+        ],
+        "max": [
+          8,
+          8,
+          15
+        ]
+      },
+      {
+        "name": "right-bank",
+        "min": [
+          16,
+          2,
+          8
+        ],
+        "max": [
+          21,
+          8,
+          15
+        ]
+      },
+      {
+        "name": "grille-left-bar",
+        "min": [
+          10,
+          11.5,
+          9
+        ],
+        "max": [
+          10.5,
+          12.5,
+          14
+        ]
+      },
+      {
+        "name": "grille-right-bar",
+        "min": [
+          13.5,
+          11.5,
+          9
+        ],
+        "max": [
+          14,
+          12.5,
+          14
+        ]
+      },
+      {
+        "name": "mold-floor",
+        "min": [
+          5,
+          7.5,
+          8.5
+        ],
+        "max": [
+          19,
+          8.5,
+          14.5
+        ]
+      },
+      {
+        "name": "mold-front-wall",
+        "min": [
+          5,
+          6.5,
+          8.5
+        ],
+        "max": [
+          19,
+          11.5,
+          9.5
+        ]
+      },
+      {
+        "name": "mold-back-wall",
+        "min": [
+          5,
+          6.5,
+          13.5
+        ],
+        "max": [
+          19,
+          11.5,
+          14.5
+        ]
+      },
+      {
+        "name": "mold-left-end",
+        "min": [
+          5,
+          6.5,
+          8.5
+        ],
+        "max": [
+          6,
+          11.5,
+          14.5
+        ]
+      },
+      {
+        "name": "mold-right-end",
+        "min": [
+          18,
+          6.5,
+          8.5
+        ],
+        "max": [
+          19,
+          11.5,
+          14.5
+        ]
+      },
+      {
+        "name": "load-holder",
+        "min": [
+          10,
+          18,
+          9.5
+        ],
+        "max": [
+          14,
+          22,
+          13.5
+        ]
+      }
+    ],
+    "anchors": [
+      {
+        "name": "left-solid-clamp",
+        "min": [
+          6,
+          8.1,
+          10
+        ],
+        "max": [
+          8.1,
+          11.1,
+          13
+        ]
+      },
+      {
+        "name": "right-solid-clamp",
+        "min": [
+          15.9,
+          8.1,
+          10
+        ],
+        "max": [
+          18,
+          11.1,
+          13
+        ]
+      }
+    ],
+    "minimumJacobian": 1e-8
+  },
+  "releasedConfig": {
+    "N": 24,
+    "dt": 0.004166666666666667,
+    "gravity": [
+      0,
+      -9.81,
+      0
+    ],
+    "bulk": 120,
+    "gamma": 5,
+    "mu": 400,
+    "lambda": 600,
+    "boundary": 2,
+    "colliders": [
+      {
+        "name": "left-bank",
+        "min": [
+          3,
+          2,
+          8
+        ],
+        "max": [
+          8,
+          8,
+          15
+        ]
+      },
+      {
+        "name": "right-bank",
+        "min": [
+          16,
+          2,
+          8
+        ],
+        "max": [
+          21,
+          8,
+          15
+        ]
+      }
+    ],
+    "anchors": [
+      {
+        "name": "left-solid-clamp",
+        "min": [
+          6,
+          8.1,
+          10
+        ],
+        "max": [
+          8.1,
+          11.1,
+          13
+        ]
+      },
+      {
+        "name": "right-solid-clamp",
+        "min": [
+          15.9,
+          8.1,
+          10
+        ],
+        "max": [
+          18,
+          11.1,
+          13
+        ]
+      }
+    ],
+    "minimumJacobian": 1e-8
+  },
+  "bodyCount": 1152,
+  "loadCount": 64,
+  "lanes": [
+    {
+      "id": "casting",
+      "measurement": {
+        "bodyFractionBelowGrille": 0.9305555555555556,
+        "centralBodyParticles": 428,
+        "bodyMeanSpeed": 0.1533453110334334,
+        "supports": [
+          {
+            "name": "left-solid-clamp",
+            "particles": 120,
+            "referenceVolume": 15
+          },
+          {
+            "name": "right-solid-clamp",
+            "particles": 120,
+            "referenceVolume": 15
+          }
+        ],
+        "centralBins": [
+          {
+            "minX": 8,
+            "maxX": 10,
+            "particles": 96,
+            "referenceVolume": 12,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0.6666666666666666
+          },
+          {
+            "minX": 10,
+            "maxX": 12,
+            "particles": 92,
+            "referenceVolume": 11.5,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0.6388888888888888
+          },
+          {
+            "minX": 12,
+            "maxX": 14,
+            "particles": 92,
+            "referenceVolume": 11.5,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0.6388888888888888
+          },
+          {
+            "minX": 14,
+            "maxX": 16,
+            "particles": 96,
+            "referenceVolume": 12,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0.6666666666666666
+          }
+        ],
+        "loadCenterY": 20,
+        "loadMeanSpeed": 0,
+        "total": {
+          "mass": 152,
+          "momentum": [
+            1.9586180008586418e-15,
+            -21.484956243943003,
+            4.578687418359956e-16
+          ],
+          "kinetic": 2.8338106432683845,
+          "center": [
+            12.000000000000005,
+            9.996263982854453,
+            11.499999999999995
+          ]
+        }
+      }
+    },
+    {
+      "id": "cast-solid-release",
+      "measurement": {
+        "bodyFractionBelowGrille": 0.9756944444444444,
+        "centralBodyParticles": 392,
+        "bodyMeanSpeed": 0.0394399124420287,
+        "supports": [
+          {
+            "name": "left-solid-clamp",
+            "particles": 118,
+            "referenceVolume": 14.75
+          },
+          {
+            "name": "right-solid-clamp",
+            "particles": 118,
+            "referenceVolume": 14.75
+          }
+        ],
+        "centralBins": [
+          {
+            "minX": 8,
+            "maxX": 10,
+            "particles": 62,
+            "referenceVolume": 7.75,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0.4305555555555556
+          },
+          {
+            "minX": 10,
+            "maxX": 12,
+            "particles": 30,
+            "referenceVolume": 3.75,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0.20833333333333334
+          },
+          {
+            "minX": 12,
+            "maxX": 14,
+            "particles": 30,
+            "referenceVolume": 3.75,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0.20833333333333334
+          },
+          {
+            "minX": 14,
+            "maxX": 16,
+            "particles": 62,
+            "referenceVolume": 7.75,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0.4305555555555556
+          }
+        ],
+        "loadCenterY": 13.593303572152728,
+        "loadMeanSpeed": 0.1127727607153202,
+        "total": {
+          "mass": 152,
+          "momentum": [
+            -2.84897973268361e-14,
+            -6.4502103966953115,
+            3.15226360639298e-15
+          ],
+          "kinetic": 0.2696053376990391,
+          "center": [
+            12,
+            9.298353025769668,
+            11.500000000000005
+          ]
+        }
+      }
+    },
+    {
+      "id": "cast-liquid-release",
+      "measurement": {
+        "bodyFractionBelowGrille": 1,
+        "centralBodyParticles": 0,
+        "bodyMeanSpeed": 0.27034795726882516,
+        "supports": [
+          {
+            "name": "left-solid-clamp",
+            "particles": 58,
+            "referenceVolume": 7.25
+          },
+          {
+            "name": "right-solid-clamp",
+            "particles": 58,
+            "referenceVolume": 7.25
+          }
+        ],
+        "centralBins": [
+          {
+            "minX": 8,
+            "maxX": 10,
+            "particles": 0,
+            "referenceVolume": 0,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0
+          },
+          {
+            "minX": 10,
+            "maxX": 12,
+            "particles": 0,
+            "referenceVolume": 0,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0
+          },
+          {
+            "minX": 12,
+            "maxX": 14,
+            "particles": 0,
+            "referenceVolume": 0,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0
+          },
+          {
+            "minX": 14,
+            "maxX": 16,
+            "particles": 0,
+            "referenceVolume": 0,
+            "binVolume": 18,
+            "referenceVolumeOccupancy": 0
+          }
+        ],
+        "loadCenterY": 2.872658946654099,
+        "loadMeanSpeed": 0.004495310443112627,
+        "total": {
+          "mass": 152,
+          "momentum": [
+            3.389158528474545e-13,
+            -8.184198146953387,
+            9.259623233101588e-14
+          ],
+          "kinetic": 23.030532565853182,
+          "center": [
+            12.000000000000005,
+            3.9831023802182166,
+            11.499999999999996
+          ]
+        }
+      }
+    }
+  ],
+  "scope": "Exact measurements extracted from the retained CPU report; this compact file is not a new simulation run or the complete CPU trajectory."
+}

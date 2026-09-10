@@ -1,0 +1,427 @@
+{
+  "kind": "matter-forge-ui-summary-v1",
+  "sourceReport": {
+    "id": "2026-09-10T02-05-27.984Z",
+    "sha256": "64d04aed7e544fa4f9897633c62169458c8fc6dbab82aefe9e2293a2da501e63",
+    "bytes": 3320061,
+    "status": "passed"
+  },
+  "derivedSummary": true,
+  "fullReportArchivedLocally": true,
+  "browser": "152.0.7977.83",
+  "sourceHashes": {
+    "/experiments/matter-forge/app.html": "d8c583e23a2f8e5b871466e8588945619e1038b5e0409cf2ea3932e37ac9f6d4",
+    "/experiments/matter-forge/app.mjs": "1e1ca3f66300b03e133cd0a1652378fd46e6f06e961afbe5eb297da21f01c88f",
+    "/experiments/matter-forge/gpu.mjs": "6cbfbc800032a6f2dde25464bbfdf33e8e83d015a728fe9409f13da72bef2bf9",
+    "/experiments/matter-forge/cpu.mjs": "87b18a06a4e2090175bdc9304ec0fff558c98f2e62d65f4f890d6192290231f3",
+    "/experiments/matter-forge/casting-fixture.mjs": "8dcb0466e744a1192a321fe7a7d628fe0aa6e4a108d1fc5b8efd037d5ecb28a4",
+    "/experiments/matter-forge/casting-fixture-v2.mjs": "f5618ff79445baafdaadcdd478cc4442a9085f9d128c38e56eadfec54b76095f",
+    "/experiments/matter-forge/environment.mjs": "073ddd05cd16f4f493d5af8ab67d9e18a77873addb191a715df2006eee956b4f",
+    "/experiments/matter-forge/voxelize.mjs": "76a725dfd7772d83eece8fe42e1b54a3afbbe315e5be155e6d8ec810c7c4e6f6",
+    "/experiments/matter-forge/import-glb.mjs": "d0a263bf027e66a2340d9144ec3ef7ca0df711d4bf38bc0b7ca97e1fefa80cba",
+    "/experiments/matter-forge/liquid-surface.mjs": "d42d821c79b91e487525bb1df1be7c5badc463f1d7bc870e2d2a1531f432aaf0",
+    "/scripts/run-matter-forge.mjs": "fd3deb45afb91330553968cb34dda6dc3f7466d1751c592cd88d1d2f29bf98c1"
+  },
+  "servedHashes": {
+    "/experiments/matter-forge/app.html": "d8c583e23a2f8e5b871466e8588945619e1038b5e0409cf2ea3932e37ac9f6d4",
+    "/experiments/matter-forge/app.mjs": "1e1ca3f66300b03e133cd0a1652378fd46e6f06e961afbe5eb297da21f01c88f",
+    "/node_modules/three-r186/examples/jsm/controls/OrbitControls.js": "3d79d07ecb686b4e5d93232eedab255331c1beef711e13164eaa1f68655a5f2b",
+    "/experiments/matter-forge/gpu.mjs": "6cbfbc800032a6f2dde25464bbfdf33e8e83d015a728fe9409f13da72bef2bf9",
+    "/node_modules/three-r186/build/three.webgpu.js": "a78400fa1d359e81fcc12b84ed0a89a7fbecb4b8373e28ae8f9d2b11f6ea13bc",
+    "/experiments/matter-forge/cpu.mjs": "87b18a06a4e2090175bdc9304ec0fff558c98f2e62d65f4f890d6192290231f3",
+    "/experiments/matter-forge/environment.mjs": "073ddd05cd16f4f493d5af8ab67d9e18a77873addb191a715df2006eee956b4f",
+    "/experiments/matter-forge/casting-fixture-v2.mjs": "f5618ff79445baafdaadcdd478cc4442a9085f9d128c38e56eadfec54b76095f",
+    "/experiments/matter-forge/voxelize.mjs": "76a725dfd7772d83eece8fe42e1b54a3afbbe315e5be155e6d8ec810c7c4e6f6",
+    "/experiments/matter-forge/import-glb.mjs": "d0a263bf027e66a2340d9144ec3ef7ca0df711d4bf38bc0b7ca97e1fefa80cba",
+    "/experiments/matter-forge/liquid-surface.mjs": "d42d821c79b91e487525bb1df1be7c5badc463f1d7bc870e2d2a1531f432aaf0",
+    "/experiments/matter-forge/casting-fixture.mjs": "8dcb0466e744a1192a321fe7a7d628fe0aa6e4a108d1fc5b8efd037d5ecb28a4",
+    "/node_modules/three-r186/examples/jsm/objects/MarchingCubes.js": "fe9c6ace2c079bf540befd164ce492de98c820d8b86a722b1060833d42ad9c80",
+    "/node_modules/three-r186/examples/jsm/loaders/GLTFLoader.js": "131c0f78c01d19368ae495caa65b3adaa10487810a36a05bb5901b769a35ac16",
+    "/node_modules/three-r186/examples/jsm/utils/BufferGeometryUtils.js": "9fb63427ce6641fa14fd0baff9cc4d1b5f9c3d85fd084bf2e90e803c44ec1797",
+    "/node_modules/three-r186/examples/jsm/utils/SkeletonUtils.js": "b1632a703206c3d830de9fcbe515696770d04b71a15ee6b50afa6d2c3298c86f",
+    "/node_modules/three-r186/build/three.core.js": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6"
+  },
+  "observedPostTestSourceChanges": [
+    {
+      "path": "/experiments/matter-forge/app.mjs",
+      "testedSHA256": "1e1ca3f66300b03e133cd0a1652378fd46e6f06e961afbe5eb297da21f01c88f",
+      "observedLaterSHA256": "318e535ad75c074a9387a3cdd0811ce618728078d50c5ab8764ca054e09e5278"
+    }
+  ],
+  "uploadArtifact": {
+    "name": "casting-blank.glb",
+    "sha256": "0c932617062604286701621fda9f5b220361858268521bfda2161672e1f0caac",
+    "bytes": 1000
+  },
+  "imported": {
+    "kind": "local closed GLB",
+    "metadata": {
+      "name": "casting-blank.glb",
+      "bytes": 1000,
+      "sha256": "0c932617062604286701621fda9f5b220361858268521bfda2161672e1f0caac",
+      "threeRevision": "186",
+      "definitionTriangles": 12,
+      "definitionPrimitives": 1,
+      "instanceTriangles": 12,
+      "instancePrimitives": 1,
+      "embeddedImages": 0,
+      "accessorValues": 108,
+      "texturesDecoded": 0,
+      "colorSource": "Linear material base color only; image textures, vertex colors, opacity and advanced appearance are not sampled.",
+      "volumeAssumption": "Uniformly fitted closed-mesh union sampled at voxel centers; mass equals represented volume at density 1. Bridge outcomes are not guaranteed.",
+      "externalRequests": 0,
+      "inputModified": false,
+      "resourcesDisposed": true,
+      "disposedCounts": {
+        "geometries": 1,
+        "materials": 2,
+        "textures": 0
+      }
+    },
+    "sampling": {
+      "kind": "closed-mesh-center-voxelization-v1",
+      "sources": [
+        {
+          "meshIndex": 0,
+          "name": "mesh_0",
+          "triangleCount": 12,
+          "materials": [
+            {
+              "materialIndex": 0,
+              "color": [
+                0.18,
+                0.69,
+                0.61
+              ],
+              "textureIgnored": false,
+              "vertexColorsIgnored": false
+            }
+          ],
+          "closedComponentCount": 1,
+          "weldTolerance": 0.0000012999999999999998
+        }
+      ],
+      "pointTests": 1152,
+      "triangleTests": 27648,
+      "rayRetries": 0,
+      "deduplicatedHits": 0,
+      "boundaryCentersOmitted": 0,
+      "overlapCenters": 0,
+      "limits": {
+        "meshes": 64,
+        "triangles": 4096,
+        "pointTests": 200000,
+        "triangleTests": 20000000,
+        "particles": 8192,
+        "milliseconds": 3000
+      },
+      "boundaryPolicy": "Omit centers on the outer boundary; another component containing a center takes precedence.",
+      "volumeSemantics": "Union of individually closed connected components. Cavities represented as separately nested shells are filled by this explicit union policy.",
+      "topologyValidation": "Welded manifold edge closure/orientation, nondegenerate triangles, and consistent sampled ray winding. Global triangle self-intersection is not certified.",
+      "colorSemantics": "Linear material color of a deterministic first-owner exit triangle; material maps and vertex colors are not sampled.",
+      "triangleCount": 12,
+      "closedComponentCount": 1,
+      "candidateCount": 1152,
+      "pointCount": 1152,
+      "worldBounds": {
+        "min": [
+          -6,
+          -2,
+          -1.5
+        ],
+        "max": [
+          6,
+          2,
+          1.5
+        ]
+      },
+      "sampleBounds": {
+        "min": [
+          6,
+          13,
+          10
+        ],
+        "max": [
+          18,
+          17,
+          13
+        ]
+      },
+      "worldToSimulation": {
+        "scale": 1,
+        "translation": [
+          12,
+          15,
+          11.5
+        ]
+      },
+      "spacing": 0.5,
+      "volumePerPoint": 0.125,
+      "representedVolume": 144,
+      "elapsedMs": 1.3999999985098839
+    }
+  },
+  "controls": {
+    "actualDOMInteractions": [
+      "Prepare button",
+      "File input upload of casting-blank.glb",
+      "Melt the bridge button"
+    ],
+    "applicationAPICalls": [
+      "advance(240) four times for casting",
+      "release(1), then advance(240) four times for loading",
+      "advance(240) twice after the melt-button click",
+      "Two concurrent reset() calls coalesced into one reset",
+      "dispose()"
+    ],
+    "scope": "Physics advance/release/reset/disposal were invoked through the application test API. This was not an exhaustive manual test of all visible controls."
+  },
+  "measurements": [
+    {
+      "stage": "cast",
+      "steps": 960,
+      "time": 4,
+      "particles": 1216,
+      "totalMass": 152,
+      "loadCenterY": 20,
+      "bodySolidParticles": 0,
+      "retainedStateSHA256": "948aaa043d5a9e202428820848c0e362647d1819ec389f1da3db3fd4c1d4f973",
+      "materialEdits": []
+    },
+    {
+      "stage": "solid",
+      "steps": 1920,
+      "time": 8,
+      "particles": 1216,
+      "totalMass": 152,
+      "loadCenterY": 13.59323114156723,
+      "bodySolidParticles": 1152,
+      "retainedStateSHA256": "fafc7d51c5d476a7f244041a2f52e3db1765deaf20d24d94e9d5ebf8e44b9848",
+      "materialEdits": [
+        {
+          "step": 960,
+          "time": 4,
+          "mode": 1,
+          "newStressFreeReference": true,
+          "interpretation": "External material edit; position, mass and momentum retained. Reference reset changes stored elastic energy.",
+          "particleCount": 1152,
+          "selectedIDsSHA256": "9daeb95e433380bf25baf88b96eb2354af2d8175b998f19072a8f247f7836746"
+        }
+      ]
+    },
+    {
+      "stage": "melted",
+      "steps": 2400,
+      "time": 10,
+      "particles": 1216,
+      "totalMass": 152,
+      "loadCenterY": 2.705918988212943,
+      "bodySolidParticles": 0,
+      "retainedStateSHA256": "ed3d9854e5542f921d56b8a97677ba95235d67f480e51d5b83fdbdb90fcf5834",
+      "materialEdits": [
+        {
+          "step": 960,
+          "time": 4,
+          "mode": 1,
+          "newStressFreeReference": true,
+          "interpretation": "External material edit; position, mass and momentum retained. Reference reset changes stored elastic energy.",
+          "particleCount": 1152,
+          "selectedIDsSHA256": "9daeb95e433380bf25baf88b96eb2354af2d8175b998f19072a8f247f7836746"
+        },
+        {
+          "step": 1920,
+          "time": 8,
+          "mode": 0,
+          "newStressFreeReference": false,
+          "interpretation": "External material edit; position, mass and momentum retained. Reference reset changes stored elastic energy.",
+          "particleCount": 1152,
+          "selectedIDsSHA256": "9daeb95e433380bf25baf88b96eb2354af2d8175b998f19072a8f247f7836746"
+        }
+      ]
+    }
+  ],
+  "finiteValuesChecked": 102144,
+  "castAndSolidStateComparisonToNumericalReproduction": [
+    {
+      "stage": "cast",
+      "fields": {
+        "ids": true,
+        "mode": true,
+        "mass": true,
+        "volume": true,
+        "x": true,
+        "v": true,
+        "F": true,
+        "C": true
+      },
+      "allExact": true
+    },
+    {
+      "stage": "solid",
+      "fields": {
+        "ids": true,
+        "mode": true,
+        "mass": true,
+        "volume": true,
+        "x": true,
+        "v": true,
+        "F": true,
+        "C": true
+      },
+      "allExact": true
+    }
+  ],
+  "materialEdits": [
+    {
+      "step": 1920,
+      "mode": 0,
+      "count": 1152,
+      "mass": 144
+    }
+  ],
+  "release": {
+    "mode": 1,
+    "step": 960,
+    "particleCount": 1216,
+    "totalMass": 152
+  },
+  "preparedSurface": {
+    "updates": 1,
+    "disposed": false,
+    "fluidParticles": 1152,
+    "triangles": 1848,
+    "geometryOverflow": false,
+    "resolution": 48,
+    "maxPolyCount": 20000,
+    "gridSpacing": 0.5,
+    "isolation": 80,
+    "subtract": 342.02273684210536,
+    "strength": 0.14878939115789477,
+    "isolatedRadius": 0.45,
+    "supportRadius": 0.5,
+    "maximumInterpolationReach": 1,
+    "clippedKernelParticles": 0,
+    "addonUpperSlabCompleted": true,
+    "elapsedMs": 8.5,
+    "maximumElapsedMs": 8.5,
+    "worldBounds": {
+      "min": [
+        5.587982654571533,
+        12.587982907891273,
+        9.587982952594757
+      ],
+      "max": [
+        18.412017345428467,
+        17.412017226219177,
+        13.412017107009888
+      ]
+    },
+    "particleBounds": {
+      "min": [
+        6.25,
+        13.25,
+        10.25
+      ],
+      "max": [
+        17.75,
+        16.75,
+        12.75
+      ]
+    },
+    "maximumAxisExpansion": 0.6620173454284668
+  },
+  "finalSurface": {
+    "updates": 14,
+    "disposed": false,
+    "fluidParticles": 1152,
+    "triangles": 3880,
+    "geometryOverflow": false,
+    "resolution": 48,
+    "maxPolyCount": 20000,
+    "gridSpacing": 0.5,
+    "isolation": 80,
+    "subtract": 342.02273684210536,
+    "strength": 0.14878939115789477,
+    "isolatedRadius": 0.45,
+    "supportRadius": 0.5,
+    "maximumInterpolationReach": 1,
+    "clippedKernelParticles": 8,
+    "addonUpperSlabCompleted": true,
+    "elapsedMs": 4.299999997019768,
+    "maximumElapsedMs": 8.5,
+    "worldBounds": {
+      "min": [
+        5.001354932785034,
+        0.5008699893951416,
+        5.533344268798828
+      ],
+      "max": [
+        18.99864363670349,
+        8.998530864715576,
+        17.466613054275513
+      ]
+    },
+    "particleBounds": {
+      "min": [
+        5.454836368560791,
+        0.9995149970054626,
+        6.26138162612915
+      ],
+      "max": [
+        18.545143127441406,
+        8.548124313354492,
+        16.738510131835938
+      ]
+    },
+    "maximumAxisExpansion": 0.7281029224395752
+  },
+  "renderedFrames": 14,
+  "lifecycle": {
+    "resetCoalesced": true,
+    "disposed": true,
+    "deviceLossReason": "destroyed"
+  },
+  "gates": {
+    "reportPassed": true,
+    "uploadedFileIdentity": true,
+    "importedParticles": true,
+    "noExternalImportRequests": true,
+    "particleIdentityMassVolumeRetained": true,
+    "loadHeldAfterSolidification": true,
+    "loadDroppedAfterMelt": true,
+    "noBrowserErrors": true,
+    "noGeometryOverflow": true,
+    "resetAndDisposal": true
+  },
+  "errors": [],
+  "routeFailures": [],
+  "images": [
+    {
+      "file": "runtime-solid.png",
+      "sourceFile": "solid.png",
+      "sourceReportSHA256": "64d04aed7e544fa4f9897633c62169458c8fc6dbab82aefe9e2293a2da501e63",
+      "stage": "solid at8s",
+      "sha256": "f0aa2388a5ce510611ac68f83d82aea95893ac92b285a403c83d44564cac109f",
+      "bytes": 700331,
+      "width": 1440,
+      "height": 1000,
+      "actualRuntimeScreenshot": true,
+      "generatedConceptArt": false,
+      "edits": "None; byte-exact copy of captured screenshot."
+    },
+    {
+      "file": "runtime-melted.png",
+      "sourceFile": "cut.png",
+      "sourceReportSHA256": "64d04aed7e544fa4f9897633c62169458c8fc6dbab82aefe9e2293a2da501e63",
+      "stage": "melted at10s",
+      "sha256": "33ea7b6598d8ccb3100df2ddacda3dd55e3c5167330be889d12bc4555adb4915",
+      "bytes": 716943,
+      "width": 1440,
+      "height": 1000,
+      "actualRuntimeScreenshot": true,
+      "generatedConceptArt": false,
+      "edits": "None; byte-exact copy of captured screenshot."
+    }
+  ],
+  "scope": "Actual runtime screenshots and retained UI measurements, not generated concept art. The import test used one closed12-triangle box GLB matching the fixed casting volume; arbitrary imported meshes are not guaranteed to form usable bridges. The visual liquid surface is an approximation and retains its recorded clipping/expansion diagnostics. Captured hashes identify the tested revision; later source edits are not covered."
+}

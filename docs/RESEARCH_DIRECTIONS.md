@@ -6,7 +6,29 @@ This document records research priorities and the evidence behind each decision.
 See the [experiment index](../experiments/README.md)
 for existing commands and the documents that govern each result.
 
-## Current decision: evaluate extensions to AI scene creation
+## Current direction: physical material editing and construction
+
+[MatterForge](../experiments/matter-forge/README.md) is the main new prototype:
+closed mesh → persistent particles → liquid through a grille → cast in a mold →
+solidified structure → real simulated cargo. The mold is removed before the load
+test. A control releases the identical cast as liquid. This targets destructible
+props, material reuse and construction puzzles in agent-authored browser worlds.
+
+The revised casting fixture passes independent CPU and WebGPU checks. Both
+supports receive material; the solid cast holds cargo while the liquid control
+lets it fall. Earlier settling, local-cut and mold-design failures remain
+documented. A local GLB adapter supplies geometry and material colors without a
+service or inference request. The verified construction geometry is still a
+deliberately small authored fixture.
+
+APIC/MLS-MPM and browser model-to-particle conversion have direct prior art.
+The proposed contribution is a reusable material-editing workflow with observable
+gameplay consequences, not a new solver or an established industry breakthrough.
+The next substantive evidence must come from independent assets and construction
+tasks, better contact fidelity, and measured interactive rendering. More visual
+detail alone does not establish novelty.
+
+## Source audit: extensions to AI scene creation
 
 The captured-object tool is retained, but its bend-and-release interaction does
 not establish the broader scene-creation improvement sought here. The next
@@ -33,7 +55,8 @@ cross-runtime impulse-response limitation in
 [three-steam-audio](https://github.com/kwaa/three-steam-audio#reflections-and-reverb)
 be removed so browser scenes can retain discrete simulated echoes instead of
 only parametric reverberation? These are investigation targets, not established
-capability or novelty claims. No new flagship demo is ready at this checkpoint.
+capability or novelty claims. They remain separate component investigations;
+MatterForge is the current demonstrable construction direction.
 
 The separate [r186 Gaussian picking finding](../experiments/splat-query-correctness/README.md)
 is concrete: the actual upstream raycast misses two of six fixed cases, while

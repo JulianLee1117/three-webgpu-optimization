@@ -1,0 +1,467 @@
+{
+  "kind": "matter-forge-reproduction-summary-v1",
+  "sourceReport": {
+    "id": "2026-09-10T02-04-41.451Z",
+    "kind": "matter-forge-casting-gpu-report-v2",
+    "sha256": "6c6c293cdad4df792978672963341e06a3f0d5ea9991058073fb572e0a561fdd",
+    "bytes": 11572603,
+    "status": "passed"
+  },
+  "derivedSummary": true,
+  "fullReportArchivedLocally": true,
+  "comparisonArchiveSHA256": "4a36b8c64374c0d390df5e1b0ffaefa624be49527bd1072c6e4e444087c433bf",
+  "sourceHashes": {
+    "scripts/check-matter-forge-casting-gpu.mjs": "4fa5310e751a1d182e51717cb9d5511ee260fc396959b175d07a865f3699b1fb",
+    "experiments/matter-forge/casting-probe.html": "f8169d4412bb133a9d4693b38343b980aa0435844ac1d6837c3dd6b47e151d97",
+    "experiments/matter-forge/casting-probe.mjs": "66038ad313153609f9ef9dffd5d243940cf18d6ff271ca3d0ccd698504b77626",
+    "experiments/matter-forge/cpu.mjs": "87b18a06a4e2090175bdc9304ec0fff558c98f2e62d65f4f890d6192290231f3",
+    "experiments/matter-forge/gpu.mjs": "6cbfbc800032a6f2dde25464bbfdf33e8e83d015a728fe9409f13da72bef2bf9",
+    "experiments/matter-forge/casting-fixture.mjs": "8dcb0466e744a1192a321fe7a7d628fe0aa6e4a108d1fc5b8efd037d5ecb28a4",
+    "experiments/matter-forge/casting-fixture-v2.mjs": "f5618ff79445baafdaadcdd478cc4442a9085f9d128c38e56eadfec54b76095f"
+  },
+  "servedHashes": {
+    "/experiments/matter-forge/casting-probe.html": "f8169d4412bb133a9d4693b38343b980aa0435844ac1d6837c3dd6b47e151d97",
+    "/experiments/matter-forge/casting-probe.mjs": "66038ad313153609f9ef9dffd5d243940cf18d6ff271ca3d0ccd698504b77626",
+    "/experiments/matter-forge/casting-fixture-v2.mjs": "f5618ff79445baafdaadcdd478cc4442a9085f9d128c38e56eadfec54b76095f",
+    "/experiments/matter-forge/cpu.mjs": "87b18a06a4e2090175bdc9304ec0fff558c98f2e62d65f4f890d6192290231f3",
+    "/experiments/matter-forge/gpu.mjs": "6cbfbc800032a6f2dde25464bbfdf33e8e83d015a728fe9409f13da72bef2bf9",
+    "/experiments/matter-forge/casting-fixture.mjs": "8dcb0466e744a1192a321fe7a7d628fe0aa6e4a108d1fc5b8efd037d5ecb28a4"
+  },
+  "kernelSHA256": {
+    "clear": "ae4f051029911f2cb7a1420f3b95fb3e84bf49a19bd6fc425bf7b1f71cd89629",
+    "mass": "eb1a706b35e3bbf42648405e374b5a8f5a65d5c3c2a6ffb47e03f4d82168fdcd",
+    "stress": "c0c11027b4472bb6394ab495cf8656e39fa0ddfa800dfb223a7aac1047583a59",
+    "grid": "50d48433c34d9ff629b4404204433986ef21faddd3cffb11b6de526e61c76a06",
+    "gather": "8245cf586527ec25368b9decccac13b61cf725e8fce858a3fe573146c6975bae"
+  },
+  "cpuReference": {
+    "path": "experiments/matter-forge/evidence/casting-cpu-reference.json",
+    "publicReferenceSHA256": "23c1c8eeb892e7511fa453b261f86b28383102b50caf3394a6e2aff8de59a411",
+    "sha256": "b2652a80f8b7b531696f4eaf9847f031a359a6dc2974978f859b63333e73147e",
+    "kind": "matter-forge-casting-v2",
+    "lanes": [
+      {
+        "id": "casting",
+        "measurement": {
+          "bodyFractionBelowGrille": 0.9305555555555556,
+          "centralBodyParticles": 428,
+          "bodyMeanSpeed": 0.1533453110334334,
+          "supports": [
+            {
+              "name": "left-solid-clamp",
+              "particles": 120,
+              "referenceVolume": 15
+            },
+            {
+              "name": "right-solid-clamp",
+              "particles": 120,
+              "referenceVolume": 15
+            }
+          ],
+          "centralBins": [
+            {
+              "minX": 8,
+              "maxX": 10,
+              "particles": 96,
+              "referenceVolume": 12,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0.6666666666666666
+            },
+            {
+              "minX": 10,
+              "maxX": 12,
+              "particles": 92,
+              "referenceVolume": 11.5,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0.6388888888888888
+            },
+            {
+              "minX": 12,
+              "maxX": 14,
+              "particles": 92,
+              "referenceVolume": 11.5,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0.6388888888888888
+            },
+            {
+              "minX": 14,
+              "maxX": 16,
+              "particles": 96,
+              "referenceVolume": 12,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0.6666666666666666
+            }
+          ],
+          "loadCenterY": 20,
+          "loadMeanSpeed": 0,
+          "total": {
+            "mass": 152,
+            "momentum": [
+              1.9586180008586418e-15,
+              -21.484956243943003,
+              4.578687418359956e-16
+            ],
+            "kinetic": 2.8338106432683845,
+            "center": [
+              12.000000000000005,
+              9.996263982854453,
+              11.499999999999995
+            ]
+          }
+        }
+      },
+      {
+        "id": "cast-solid-release",
+        "measurement": {
+          "bodyFractionBelowGrille": 0.9756944444444444,
+          "centralBodyParticles": 392,
+          "bodyMeanSpeed": 0.0394399124420287,
+          "supports": [
+            {
+              "name": "left-solid-clamp",
+              "particles": 118,
+              "referenceVolume": 14.75
+            },
+            {
+              "name": "right-solid-clamp",
+              "particles": 118,
+              "referenceVolume": 14.75
+            }
+          ],
+          "centralBins": [
+            {
+              "minX": 8,
+              "maxX": 10,
+              "particles": 62,
+              "referenceVolume": 7.75,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0.4305555555555556
+            },
+            {
+              "minX": 10,
+              "maxX": 12,
+              "particles": 30,
+              "referenceVolume": 3.75,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0.20833333333333334
+            },
+            {
+              "minX": 12,
+              "maxX": 14,
+              "particles": 30,
+              "referenceVolume": 3.75,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0.20833333333333334
+            },
+            {
+              "minX": 14,
+              "maxX": 16,
+              "particles": 62,
+              "referenceVolume": 7.75,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0.4305555555555556
+            }
+          ],
+          "loadCenterY": 13.593303572152728,
+          "loadMeanSpeed": 0.1127727607153202,
+          "total": {
+            "mass": 152,
+            "momentum": [
+              -2.84897973268361e-14,
+              -6.4502103966953115,
+              3.15226360639298e-15
+            ],
+            "kinetic": 0.2696053376990391,
+            "center": [
+              12,
+              9.298353025769668,
+              11.500000000000005
+            ]
+          }
+        }
+      },
+      {
+        "id": "cast-liquid-release",
+        "measurement": {
+          "bodyFractionBelowGrille": 1,
+          "centralBodyParticles": 0,
+          "bodyMeanSpeed": 0.27034795726882516,
+          "supports": [
+            {
+              "name": "left-solid-clamp",
+              "particles": 58,
+              "referenceVolume": 7.25
+            },
+            {
+              "name": "right-solid-clamp",
+              "particles": 58,
+              "referenceVolume": 7.25
+            }
+          ],
+          "centralBins": [
+            {
+              "minX": 8,
+              "maxX": 10,
+              "particles": 0,
+              "referenceVolume": 0,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0
+            },
+            {
+              "minX": 10,
+              "maxX": 12,
+              "particles": 0,
+              "referenceVolume": 0,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0
+            },
+            {
+              "minX": 12,
+              "maxX": 14,
+              "particles": 0,
+              "referenceVolume": 0,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0
+            },
+            {
+              "minX": 14,
+              "maxX": 16,
+              "particles": 0,
+              "referenceVolume": 0,
+              "binVolume": 18,
+              "referenceVolumeOccupancy": 0
+            }
+          ],
+          "loadCenterY": 2.872658946654099,
+          "loadMeanSpeed": 0.004495310443112627,
+          "total": {
+            "mass": 152,
+            "momentum": [
+              3.389158528474545e-13,
+              -8.184198146953387,
+              9.259623233101588e-14
+            ],
+            "kinetic": 23.030532565853182,
+            "center": [
+              12.000000000000005,
+              3.9831023802182166,
+              11.499999999999996
+            ]
+          }
+        }
+      }
+    ]
+  },
+  "limits": {
+    "wallClockMs": 45000,
+    "devices": 1,
+    "maximumActiveSimulators": 1,
+    "simulators": 3,
+    "gridN": 24,
+    "particles": 1216,
+    "totalSteps": 2880,
+    "advanceChunkSteps": 240,
+    "advanceCalls": 12,
+    "expectedComputeDispatches": 14400
+  },
+  "gates": {
+    "allStagesComplete": true,
+    "materialPassedGrille": true,
+    "centralCastingPresent": true,
+    "bothSupportsPopulated": true,
+    "allCentralBinsPopulated": true,
+    "editPreservesState": true,
+    "exactRawMetadataAndUploads": true,
+    "finalDeterminantsSafe": true,
+    "solidSupportsLoad": true,
+    "solidBeatsLiquidControl": true,
+    "massRetained": true,
+    "coarseCPUReferenceAgreement": true
+  },
+  "independentAudit": {
+    "status": "passed",
+    "finiteScalars": 715008,
+    "rawParticleRecords": 7296,
+    "sourceSnapshots": 7,
+    "executedSources": 6,
+    "kernels": 5,
+    "steps": 2880,
+    "particles": 1216,
+    "summaries": [
+      {
+        "id": "casting",
+        "bodyFractionBelowGrille": 0.9305555555555556,
+        "centralBodyParticles": 428,
+        "supportCounts": [
+          120,
+          120
+        ],
+        "centralBinCounts": [
+          96,
+          92,
+          92,
+          96
+        ],
+        "loadCenterY": 20,
+        "totalMass": 152,
+        "center": [
+          12.000001146997276,
+          9.996249029903035,
+          11.50000014744307
+        ],
+        "minimumDeterminant": 1
+      },
+      {
+        "id": "cast-solid-release",
+        "bodyFractionBelowGrille": 0.9756944444444444,
+        "centralBodyParticles": 392,
+        "supportCounts": [
+          118,
+          118
+        ],
+        "centralBinCounts": [
+          62,
+          30,
+          30,
+          62
+        ],
+        "loadCenterY": 13.59323114156723,
+        "totalMass": 152,
+        "center": [
+          12.000006039675913,
+          9.298351297645192,
+          11.500003655490122
+        ],
+        "minimumDeterminant": 0.9132981861756418
+      },
+      {
+        "id": "cast-liquid-release",
+        "bodyFractionBelowGrille": 1,
+        "centralBodyParticles": 0,
+        "supportCounts": [
+          58,
+          58
+        ],
+        "centralBinCounts": [
+          0,
+          0,
+          0,
+          0
+        ],
+        "loadCenterY": 2.8726856000721455,
+        "totalMass": 152,
+        "center": [
+          12.000024675538665,
+          3.9832088901710354,
+          11.49999183651648
+        ],
+        "minimumDeterminant": 0.8827050210484875
+      }
+    ],
+    "cpuErrors": [
+      {
+        "id": "casting",
+        "loadCenterY": 0,
+        "totalCenter": 0.00001495295141751285,
+        "bodyFractionBelowGrille": 0,
+        "pass": true
+      },
+      {
+        "id": "cast-solid-release",
+        "loadCenterY": 0.0000724305854973295,
+        "totalCenter": 0.000006039675913172005,
+        "bodyFractionBelowGrille": 0,
+        "pass": true
+      },
+      {
+        "id": "cast-liquid-release",
+        "loadCenterY": 0.00002665341804641841,
+        "totalCenter": 0.00010650995281880071,
+        "bodyFractionBelowGrille": 0,
+        "pass": true
+      }
+    ],
+    "solidAboveLiquid": 10.720545541495085,
+    "scope": "Audit of retained data and captured runtime; no GPU rerun or validation of subsequent source edits."
+  },
+  "rawGPUEquality": {
+    "comparedValues": 262656,
+    "mismatches": 0,
+    "maxAbsoluteDifference": 0,
+    "exactlyEqual": true,
+    "records": [
+      {
+        "stage": "casting",
+        "record": "rawUpload",
+        "float32Values": 43776,
+        "mismatches": 0,
+        "retainedArraySHA256": "e4e168d164aac4379127f487f44721434e4b9dded94d20f8e91e98c1ca05843d"
+      },
+      {
+        "stage": "casting",
+        "record": "rawFinal",
+        "float32Values": 43776,
+        "mismatches": 0,
+        "retainedArraySHA256": "e9401d4a6c56cc08d51efd0af00c4feda9984a2fb56054540edf3716c33156e6"
+      },
+      {
+        "stage": "cast-solid-release",
+        "record": "rawUpload",
+        "float32Values": 43776,
+        "mismatches": 0,
+        "retainedArraySHA256": "95f7e0844c4f5b73fdc1274f6541bccada9fc449969166fa5b20c0c632dd8b75"
+      },
+      {
+        "stage": "cast-solid-release",
+        "record": "rawFinal",
+        "float32Values": 43776,
+        "mismatches": 0,
+        "retainedArraySHA256": "a864ca9d8411164bb524365b4e37f6d825b28b2066cb4b2363bcd8efdc5f1e75"
+      },
+      {
+        "stage": "cast-liquid-release",
+        "record": "rawUpload",
+        "float32Values": 43776,
+        "mismatches": 0,
+        "retainedArraySHA256": "e9401d4a6c56cc08d51efd0af00c4feda9984a2fb56054540edf3716c33156e6"
+      },
+      {
+        "stage": "cast-liquid-release",
+        "record": "rawFinal",
+        "float32Values": 43776,
+        "mismatches": 0,
+        "retainedArraySHA256": "e134c52644af0dae2dc3bfe947262ffc1d511ddb145dff8e7f2662ae356b9d66"
+      }
+    ]
+  },
+  "changedSourcesFromFirstReport": [
+    {
+      "path": "scripts/check-matter-forge-casting-gpu.mjs",
+      "earlierSHA256": "288f2a0391b5fc7e641cae24985a111ef1df39812cf1f86856dcdf9d1dc47ca5",
+      "testedSHA256": "4fa5310e751a1d182e51717cb9d5511ee260fc396959b175d07a865f3699b1fb"
+    },
+    {
+      "path": "experiments/matter-forge/gpu.mjs",
+      "earlierSHA256": "7acec03dfea6acd607841215b34d03ded07ffa6eb1b8cdda1e7bf799e1c359a5",
+      "testedSHA256": "6cbfbc800032a6f2dde25464bbfdf33e8e83d015a728fe9409f13da72bef2bf9"
+    }
+  ],
+  "lifecycle": {
+    "devices": 1,
+    "simulatorsCreated": 3,
+    "simulatorsDisposed": 3,
+    "activeSimulators": 0,
+    "maximumActiveSimulators": 1,
+    "completedSteps": 2880,
+    "advanceCalls": 12,
+    "deviceDestroyed": true,
+    "deviceLossReason": "destroyed",
+    "pass": true
+  },
+  "browser": "152.0.7977.83",
+  "errors": [],
+  "requestFailures": [],
+  "preGpu": "39, 9 %, 1261 MiB, 36.15 W",
+  "postGpu": "40, 22 %, 1256 MiB, 46.01 W",
+  "scope": "One reproduction using the public compact CPU reference. Constructor cleanup and reference-loading sources differ from the first report; all five WGSL kernel hashes and all compared raw GPU particle floats are identical. This summary does not replace the exact first report or claim general determinism/performance."
+}
