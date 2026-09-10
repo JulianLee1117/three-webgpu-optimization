@@ -6,7 +6,19 @@ contribution with a clear demonstration; novelty and performance require evidenc
 The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
 decision and the criteria for continuing each direction.
 
-## Local elasticity — captured-object feasibility experiment
+## Gaussian picking — confirmed Three r186 CPU query defect
+
+[The isolated reproduction](splat-query-correctness/README.md) invokes the
+unmodified Gaussian-splat raycast. Its sphere rejection underbounds rotated
+elongated splats and misses two of six fixed cases. A conservative-bound
+correction agrees with an independent ellipsoid oracle in all six. Portable
+source snapshots, input arrays and evidence are included; no GPU is involved.
+
+```sh
+node scripts/check-splat-query-correctness.mjs
+```
+
+## Local elasticity — retained captured-object tool
 
 [Local elasticity](local-elasticity/README.md) combines browser RKPM preparation,
 an implicit elastic solver, and the native Three r186 Gaussian splat renderer.

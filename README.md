@@ -4,7 +4,11 @@ Small, reproducible experiments toward better tools for editable Three.js scenes
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).
 
-- **Local elasticity for captured splats — active feasibility experiment.**
+- **Gaussian-splat picking — confirmed r186 correctness finding.** Rotated,
+  elongated splats can be missed by the actual CPU raycast. Six fixed cases,
+  an independent oracle, and an isolated conservative-bound correction are
+  [reproducible here](experiments/splat-query-correctness/README.md).
+- **Local elasticity for captured splats — retained feasibility tool.**
   Prepare a mechanical field from an imported splat file in the browser, then
   grab and deform it through Three r186. Uses established FreeForm mechanics;
   a phone capture and a mesh-derived asset are the initial external cases.

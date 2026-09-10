@@ -6,7 +6,41 @@ This document records research priorities and the evidence behind each decision.
 See the [experiment index](../experiments/README.md)
 for existing commands and the documents that govern each result.
 
-## Active direction: local mechanics for captured point-based objects
+## Current decision: evaluate extensions to AI scene creation
+
+The captured-object tool is retained, but its bend-and-release interaction does
+not establish the broader scene-creation improvement sought here. The next
+direction must add a useful capability to an existing creation workflow and
+demonstrate it on substantive content. A more elaborate scene alone would not
+establish that contribution.
+
+The September 9 source audit found close precedents for several candidate
+directions. [Dream Loop](https://github.com/achimala/dream-loop) already combines
+concept images, Blender modeling and visual criticism. The author of a
+[Blender-to-TSL demonstration](https://www.youtube.com/watch?v=vA4O6n9UUl8)
+already demonstrates shader and geometry-node conversion through Blender MCP.
+[Disney's Neural Render Proxies](https://studios.disneyresearch.com/2026/07/01/neural-render-proxies-for-interactive-and-differentiable-lighting/)
+fit lighting to image-space edits and generative targets, with a fixed scene
+and camera. [MUSE](https://arxiv.org/abs/2606.14168) preserves requirements during
+scene edits, while [Fly, Fail, Fix](https://research.nvidia.com/publication/2025-08_fly-fail-fix-iterative-game-repair-reinforcement-learning-and-large-multimodal)
+uses play traces to guide game repairs. None of those broad promises should be
+presented as this repository's discovery.
+
+Two narrower component questions remain open. First, can actual Three motion
+produce continuous geometric constraints useful to a scene-generating agent,
+beyond ordinary functional masks and replay checks? Second, can the documented
+cross-runtime impulse-response limitation in
+[three-steam-audio](https://github.com/kwaa/three-steam-audio#reflections-and-reverb)
+be removed so browser scenes can retain discrete simulated echoes instead of
+only parametric reverberation? These are investigation targets, not established
+capability or novelty claims. No new flagship demo is ready at this checkpoint.
+
+The separate [r186 Gaussian picking finding](../experiments/splat-query-correctness/README.md)
+is concrete: the actual upstream raycast misses two of six fixed cases, while
+an independent intersection oracle and a conservative-bound variant agree.
+It is a CPU query defect, not a new rendering technique.
+
+## Retained tool: local mechanics for captured point-based objects
 
 The [local-elasticity experiment](../experiments/local-elasticity/README.md)
 investigates browser preparation and simulation of an imported Gaussian-splat
