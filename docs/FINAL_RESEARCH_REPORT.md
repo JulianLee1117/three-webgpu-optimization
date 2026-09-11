@@ -13,8 +13,9 @@ algorithm, a general Three.js speedup, or an industry-level breakthrough.
 The strongest technical result is the independently reproduced wrong-edge
 selection in the WebGPU triangle-distance helper. The strongest visible reusable
 capability is automatic pixel/exposure filtering of a restricted native TSL graph
-class. Light Vault is the most complete optical creation-and-play workflow.
-These are different kinds of contributions and should remain distinct.
+class. The later optics and fluid/material demos remain unpolished feasibility
+experiments. Their technical components and recorded limitations are worth
+retaining, but they did not demonstrate a compelling general-audience experience.
 
 The tested versions are pinned in each experiment. “Confirmed” below means
 reproduced in those versions and fixtures. It does not mean accepted upstream,
@@ -146,17 +147,23 @@ theory and compiler precedents are established prior art.
 - [Full comparisons and retained pixels](../experiments/footprint-filtering/RESULTS.md)
 - [Prior art](../experiments/footprint-filtering/PRIOR_ART.md)
 
-## 6. Working creation tools and demos
+## 6. Retained tools and exploratory demos
 
 These implementations demonstrate capabilities; they do not establish new
-underlying mathematics.
+underlying mathematics. Numerical correctness, functioning controls and a
+polished, useful experience are separate outcomes. In particular, Light Vault
+and MatterForge are retained for their experimental intent and component value,
+not as showcase games or headline breakthroughs.
 
 - **Light Vault:** one fixed phase plate forms different images at different
   distances. Actual computed GPU intensity determines captures. Users can draw a
   pair, fit a new plate and exchange a checked seal file. The retained run passes
   61 browser checks and 23 CPU tests, including export/reload/play. Its HI/BY fit
   took about four seconds. Established multi-plane holography and browser CGH
-  are direct precedents. [Demo, reusable GPU module and evidence](../experiments/light-vault/README.md).
+  are direct precedents. The intended value is an inspectable wave engine and
+  editable optical-puzzle mechanism; the interaction and graphics remain rough,
+  and broader educational or game-authoring usefulness was not demonstrated.
+  [Experiment, reusable GPU module and evidence](../experiments/light-vault/README.md).
 - **Sunprint:** draw a mark, fit a refracting surface and independently propagate
   photons through that geometry in native TSL. The target image does not enter
   the forward renderer. This is interactive inverse-optics integration, with
@@ -169,10 +176,17 @@ underlying mathematics.
 - **Trainable TSL:** generate gradients from a forward native graph and fit
   procedural/neural fields. Four field/seed cells pass the declared gate; a
   finite-difference baseline performs similarly. [Results](../experiments/trainable-tsl/RESULTS.md).
-- **MatterForge, Carry the City and local elasticity:** material casting,
-  motion transfer and captured-object deformation work within authored fixtures
-  and documented contact/mechanical approximations. They are retained tools,
-  without a demonstrated general simulation or graphics breakthrough.
+- **MatterForge:** the fluid/material experiment tests whether changing the same
+  cast from liquid to solid changes its ability to support simulated cargo.
+  Its potential value is persistent material editing for construction games.
+  Coarse surfaces, approximate sticky contacts, explicit supports and staged
+  controls limit the result to an unpolished authored fixture. A usable general
+  construction tool or realistic fluid-graphics improvement was not demonstrated.
+  [Intent, implementation and limits](../experiments/matter-forge/README.md).
+- **Carry the City and local elasticity:** motion transfer and captured-object
+  deformation work within authored fixtures and documented mechanical
+  approximations. They remain exploratory tools without a demonstrated general
+  simulation or graphics breakthrough.
   [Experiment index](../experiments/README.md).
 
 ## Performance results and rejected directions

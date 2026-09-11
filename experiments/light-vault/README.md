@@ -1,12 +1,26 @@
 # The Light Vault
 
+**Status: retained, unpolished feasibility experiment.** The interaction and
+graphics are prototype quality. The numerical and browser checks establish
+specific technical behavior; they do not establish a compelling experience for
+a general audience, a finished game, or a graphics breakthrough.
+
+The research question was whether one simulated phase pattern could hold two
+user-authored images, with gameplay reacting to the computed light rather than
+swapped target textures. The retained value is an inspectable Three.js wave
+propagator, a small local fitting workflow, and validated phase-file exchange.
+These components may be useful for optics education or future puzzle tools.
+Their value in a polished game or practical authoring product was not demonstrated.
+
+## Experimental interaction
+
 Slide a glass card through a beam, find two different pictures, and capture both to open the vault. Both pictures come from **one unchanged phase plate**. Moving the card recomputes how its light interferes at the new distance.
 
 You can also draw two bold marks, fit a new plate locally, and save or reopen the resulting seal. The experiment combines a playable Three.js scene with an inspectable wave-optics component; it does not require an AI service or upload drawings.
 
 ![Two captured light images open the vault](evidence/open.png)
 
-## Run and play
+## Run the experiment
 
 From the repository root, with Node.js 22.12 or newer and dependencies installed:
 

@@ -1,5 +1,17 @@
 # MatterForge
 
+**Status: retained, unpolished material-simulation experiment.** This is a
+controlled feasibility fixture. Its coarse fluid surfaces, staged controls and
+approximate contacts do not demonstrate a finished game, polished fluid graphics
+or an intuitive construction tool for a general audience.
+
+The intent was to test whether editing a material's state could have persistent
+consequences: the same cast becomes a support when solid and lets cargo fall when
+liquid. The potential value is a reusable interaction for construction or
+material-reuse games, supported by CPU/GPU comparisons and a mesh-to-particle
+adapter. That broader use remains unproven; passing the authored fixture is not
+evidence of product quality or realistic fluid simulation.
+
 MatterForge tests whether material in a Three.js scene can become something useful through physical editing: pour liquid through a grille, let a mold shape it, solidify the same particles, remove the mold, and drop cargo onto the result. The intended reusable capability is persistent material editing whose consequences affect subsequent simulation. The current result is a bounded casting experiment with a procedural rectangular body.
 
 The revised fixture passes its declared construction test on both an independent CPU implementation and WebGPU. The live scene samples a closed Three.js mesh into particles and accepts local GLB models through the same sampler. This establishes a bounded construction workflow, not a new physics algorithm or reliable arbitrary-object construction.

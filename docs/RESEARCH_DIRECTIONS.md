@@ -4,6 +4,11 @@
 The priorities and continuation criteria below are historical records, not
 ongoing research commitments.
 
+Light Vault and MatterForge are retained as unpolished feasibility experiments.
+Their purpose was to test reusable optical and material-editing mechanisms;
+their graphics and interactions did not establish compelling general-audience
+demos. The historical aspirations below should be read with that closing outcome.
+
 Decision checkpoint: September 9, 2026. The target is a substantial, reusable
 Three.js/WebGPU improvement that can be explained and demonstrated simply.
 This document records research priorities and the evidence behind each decision.

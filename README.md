@@ -1,107 +1,91 @@
 # Three.js / WebGPU Research Lab
 
-**Research concluded September 11, 2026.** Read the
-[final report](docs/FINAL_RESEARCH_REPORT.md) for the strongest confirmed
-findings, reusable integrations, negative results and evidence boundaries.
+**Research concluded September 11, 2026.** The [final report](docs/FINAL_RESEARCH_REPORT.md)
+ranks the findings, explains their practical significance and limits, and records
+negative results. The [experiment index](experiments/README.md) retains the full
+catalog and reproduction instructions.
 
-Small, reproducible experiments toward better tools for editable Three.js scenes.
-Start with the [experiment index](experiments/README.md) and
-[research decisions](docs/RESEARCH_DIRECTIONS.md).
+## Confirmed findings
 
-- **The Light Vault — two pictures in one wave.** Slide a screen through light
-  to discover two different images encoded by one fixed phase pattern. Capture
-  both to open the vault, draw your own pair, or exchange a saved seal. Native
-  Three.js TSL propagates the wave; actual computed intensity decides captures.
-  [Play and inspect the holography experiment](experiments/light-vault/README.md).
-- **Sunprint — draw an image into glass.** Draw a mark and fit a refracting
-  surface, then move the screen, inspect the glass, or flatten it to remove the
-  image. A native Three.js TSL photon pass receives only the fitted geometry.
-  This combines established inverse optics with an interactive browser tool.
-  [Try the light experiment](experiments/caustic-sketch/README.md).
-- **MatterForge — physical material editing and construction.** Pour a closed
-  mesh's material through a grille, cast it, remove the mold, and load the result.
-  The solid cast holds cargo; the same cast left liquid lets it fall. CPU and
-  WebGPU checks pass for the authored fixture, with a local GLB adapter and
-  explicit contact limits. [Enter the foundry](experiments/matter-forge/README.md).
-- **Carry the City — playable motion-transfer prototype.** An inhabited town
-  borrows authored swimming and flying motion. A shared mapping animates streets,
-  places rigid buildings and supplies interaction anchors. Steer to the lighthouse
-  and rescue eight residents. This combines established animation techniques;
-  it is not a claimed graphics or physics breakthrough.
-  [Play and inspect the implementation](experiments/carry-the-city/README.md).
-- **OIT foreground alpha — confirmed r186 correctness finding.** Transparent
-  foreground coverage is missing from output alpha. A one-expression correction
-  matches ordinary blending across 15,360 retained pixels in five controlled
-  fixtures. [Evidence and portable verifier](experiments/oit-alpha-correctness/README.md).
-- **Gaussian-splat picking — confirmed r186 correctness finding.** Rotated,
-  elongated splats can be missed by the actual CPU raycast. Six fixed cases,
-  an independent oracle, and an isolated conservative-bound correction are
-  [reproducible here](experiments/splat-query-correctness/README.md).
-- **Local elasticity for captured splats — retained feasibility tool.**
-  Prepare a mechanical field from an imported splat file in the browser, then
-  grab and deform it through Three r186. Uses established FreeForm mechanics;
-  a phone capture and a mesh-derived asset are the initial external cases.
-  [Run the experiment and read its limits](experiments/local-elasticity/README.md).
-- **Procedural pixel and exposure filtering — new visible improvement.** Transform
-  an existing native TSL color graph into its pixel/shutter average, preserving
-  interference between fine patterns. Twelve GPU cases pass; nine minification
-  and exposure cases reduce error by over 99.99% versus point sampling. The method
-  has a restricted expression class and established filtering mathematics.
-  [Try Signal Loom](experiments/footprint-filtering/README.md).
-- **Constrained shader editing — new capability experiment.** Drag a target on an
-  animated shader object, fit its existing parameters, and preserve motion while
-  clearing an obstacle at sampled times. Two native TSL programs, eight passing
-  GPU lanes, exact agreement in 36 rendered comparisons, and parameter export.
-  [Run the editor](experiments/constraint-editing/README.md).
-- **Stock material derivatives — useful boundary, filtering candidate rejected.**
-  Native stock-shading expansion matches Three's rendered output; five strict
-  hardware derivative checks and both material-mip quality fixtures fail.
-  [Preserved results](experiments/material-mips/README.md).
-- **Trainable native TSL graphs — verified capability experiment.** A forward Three.js
-  shader graph generates its own parameter gradients. Learn procedural or neural
-  surfaces from editable examples and export the weights. Four GPU cases pass;
-  no speed advantage is established. [Run the lab](experiments/trainable-tsl/README.md).
-- **Triangle-distance correctness — verified WebGPU finding.** An obtuse-triangle
-  query in three-mesh-bvh can return a distance about 500× too large. Reproduction,
-  correction and an interactive vertex-order demo are [here](experiments/gpu-deform-collider/README.md).
-- **Native TSL bounds and derivatives — experimental integration.** One shader
-  graph supplies deformation, bounding boxes and analytic time derivatives.
-  Correctness screens pass; performance is mixed. [Evidence and scope](experiments/gpu-deform-collider/README.md).
-- **Editable scene fitting — exploratory tool, no solver advantage.** Fit eight structural dimensions
-  of ordinary Three.js objects to a reference render, then export editable
-  parameters. Compares standard search methods with a GPU finite-difference
-  least-squares adapter. [Run it and inspect the evidence](experiments/scene-fit/README.md).
-- **ZipDepth export fidelity — completed correctness finding.** A minimal patch
-  restores the checkpoint's learned pooling, with six CPU fixtures and a stock
-  Three/WebGPU reproduction. [Finding and local demo](experiments/zipdepth-export/README.md).
-- **External GPU buffers — API prototype, no demonstrated new speed advantage.**
-  [Wave fixture](experiments/ort-surface/README.md) and
-  [strongest-baseline comparison](experiments/ort-handoff/README.md).
-- **Delayed-depth contacts — general candidate rejected.** Rigid-motion gains
-  fail on reversals and independent motion. [CPU screen](experiments/depth-contact/README.md).
+- **Triangle-distance correctness:** the `three-mesh-bvh` WebGPU helper can
+  return a distance about 500× too large and change its answer with vertex order.
+  The local correction passes the 200-case probe.
+  [Counterexample, patch and evidence](experiments/gpu-deform-collider/TRIANGLE-QUERY-FINDING.md).
+- **OIT foreground alpha:** Three r186 omits transparent foreground coverage
+  from output alpha. A one-expression correction matches ordinary blending in
+  the five controlled fixtures and 15,360 retained pixels.
+  [Finding and verifier](experiments/oit-alpha-correctness/README.md).
+- **Gaussian-splat picking:** the pinned r186 raycast misses rotated elongated
+  splats because its bounds are too small. A conservative diagnostic correction
+  matches an independent oracle in all six fixed cases.
+  [Reproduction and scope](experiments/splat-query-correctness/README.md).
+- **ZipDepth export fidelity:** removing an exporter substitution restores the
+  checkpoint's learned pooling and reference agreement in CPU and WebGPU tests.
+  This measures export fidelity, not real-world depth accuracy.
+  [Finding and patch](experiments/zipdepth-export/README.md).
+
+These are version-specific, locally reproduced findings. Upstream acceptance,
+world-first discovery and universal correctness are not claimed.
+
+## Reusable capability experiments
+
+**Signal Loom** automatically integrates a restricted class of native TSL
+procedural color graphs over pixel and exposure intervals. Twelve GPU correctness
+cases pass; nine challenging cases reduce aliasing error by over 99.99% versus
+point sampling. The manual analytical baseline is comparably accurate, and no
+speedup is established. [Results and demo](experiments/footprint-filtering/README.md).
+
+Native graph differentiation and constrained motion editing are also retained
+as scoped integrations, with explicit baseline comparisons:
+[trainable TSL](experiments/trainable-tsl/RESULTS.md) and
+[constrained editing](experiments/constraint-editing/RESULTS.md).
+
+## Exploratory optics, material and motion demos
+
+These are retained research prototypes. Their numerical checks do not establish
+polished graphics, intuitive gameplay or a compelling general-audience experience.
+They are documented for their intent, reusable components and limitations.
+
+- **Light Vault:** tests whether one simulated phase pattern can hold two
+  user-authored images and drive image-based puzzle interactions. Its wave
+  propagator, fitting code and phase-file exchange are the retained technical
+  value. The art and interaction remain unpolished.
+  [Experiment and intended uses](experiments/light-vault/README.md).
+- **MatterForge:** tests persistent material-state edits by comparing whether
+  the same cast supports cargo when solid versus liquid. The intent is a
+  construction-game mechanism; coarse fluid surfaces, staged controls and
+  approximate contacts limit it to an unpolished fixture.
+  [Experiment and intended uses](experiments/matter-forge/README.md).
+- **Sunprint:** explores drawing an image into a fitted refracting surface,
+  followed by independent forward light simulation.
+  [Inverse-optics experiment](experiments/caustic-sketch/README.md).
+- **Carry the City and local elasticity:** explore motion transfer and
+  captured-object deformation with documented mechanical approximations.
+  [Motion prototype](experiments/carry-the-city/README.md) ·
+  [Deformation experiment](experiments/local-elasticity/README.md).
+
+## Reproduction
+
+For the filtering experiment, from the repository root:
 
 ```sh
 npm ci
-npm run demo:light-vault
+npm run demo:footprint-filtering
 ```
 
-Open the printed localhost URL in a WebGPU-capable Chrome. The Light Vault starts
-with a saved phase plate and renders only when something changes. New seals use
-a bounded CPU worker. No model download is needed. Sunprint remains available
-with `npm run demo:sunprint`.
-Signal Loom is available with `npm run demo:footprint-filtering` and caps playback at twelve seconds.
-The motion editor is available with `npm run demo:constraint-editing`.
-The height-field trainer is available with `npm run demo:trainable-tsl`.
-The triangle comparison is available separately with `npm run demo:triangle-query`.
-The tested setup is Windows, Chrome 152 and an RTX 5070 Ti; other setups need
-validation. These research prototypes have explicit limits, recorded comparisons
-and documented prior art.
+Open the printed localhost URL in a compatible WebGPU browser. Signal Loom caps
+playback at twelve seconds. Other experiments have their own setup and bounded
+run commands in the index. Dependencies were removed during research closeout;
+`npm ci` restores Node dependencies, while model experiments need their documented
+preparation steps. The tested setup is Windows, Chrome 152 and an RTX 5070 Ti;
+other setups require validation.
 
-Selected compressed reports and CPU verifiers are included with footprint filtering, constraint editing,
-material mips, trainable TSL and triangle queries. Other raw local reports, model downloads,
-generated bundles and Python environments stay outside Git. Some historical
-analyses refer to local source checkpoints unavailable in a fresh clone. Existing
-historical protocols and consumed attempt limits remain in force.
+Selected immutable evidence and CPU verifiers remain in the repository. Local
+raw results, including failed runs, were preserved in verified compressed
+archives during cleanup. Historical ignored result paths require restoration.
+Original protocols and consumed attempt limits remain in force. See the
+[final report](docs/FINAL_RESEARCH_REPORT.md) for negative findings and scoped
+performance results.
 
 <details>
 <summary>Historical visibility and indirect-rendering lab documentation</summary>

@@ -4,66 +4,11 @@
 is the closing assessment. The entries below preserve the individual studies;
 their historical commands are reproduction instructions, not active work.
 
-Status reviewed September 9, 2026. Start here to distinguish completed evidence
-from active feasibility work. The goal is a useful, reproducible Three.js/WebGPU
-contribution with a clear demonstration; novelty and performance require evidence.
-The [research directions](../docs/RESEARCH_DIRECTIONS.md) describe the current
-decision and the criteria for continuing each direction.
-
-## The Light Vault — playable multi-plane holography
-
-[The Light Vault](light-vault/README.md) encodes two images into one phase pattern.
-Move a detector through its computed wave field, capture both clear images to
-open the vault, then draw and save a new seal. Three r186 TSL calculates an inverse
-FFT at every requested depth. Capture checks read actual GPU intensity; a saved
-seal imports only after its phase reproduces both reference images.
-
-This combines established holography with a browser puzzle and creation tool.
-The [physical contract and prior art](light-vault/PHYSICS.md) distinguish the
-verified implementation from claims that have not been established.
-
-```sh
-npm run demo:light-vault
-```
-
-## Sunprint — interactive inverse optics
-
-[Sunprint](caustic-sketch/README.md) turns a drawing into a shaped glass surface.
-An independent Three.js TSL pass refracts light through that surface to form the
-screen image. Move the screen, flatten the glass, draw a different mark, or save
-the approximate mesh. The CPU optimizer and GPU light renderer use established
-methods; the experiment demonstrates an accessible, reusable browser workflow.
-Its [prior-art notes](caustic-sketch/PRIOR_ART.md) identify close precedents.
-
-```sh
-npm run demo:sunprint
-```
-
-## MatterForge — material editing and physical construction
-
-[MatterForge](matter-forge/README.md) casts liquid through a grille, solidifies
-the resulting particles, removes the mold, and drops real simulated cargo onto
-the cast. Its liquid control starts from the identical state. The revised CPU
-and WebGPU fixture passes; the earlier failures and coarse contact limits remain
-explicit. The live Three r186 scene accepts closed local GLB geometry.
-
-```sh
-node scripts/run-matter-forge.mjs --serve
-```
-
-## Carry the City — playable motion-transfer prototype
-
-[Carry the City](carry-the-city/README.md) applies authored swimming and flying
-motion to an inhabited town. The shared field drives street deformation, rigid
-attachments, a docking endpoint and released-prop motion. The rescue route,
-restart, collision release and cleanup pass a bounded browser check; 17 CPU tests
-pass. This is a creative combination of established techniques with approximate
-gameplay collision. General navigation, physics and a novel algorithm are not
-established.
-
-```sh
-npm run demo:carry-the-city
-```
+Closing presentation reviewed September 11, 2026. Confirmed findings lead this
+index. Later optical and material demos remain unpolished feasibility experiments;
+their technical checks do not establish an impressive or intuitive experience
+for a general audience. The [research directions](../docs/RESEARCH_DIRECTIONS.md)
+preserve historical intentions and continuation criteria.
 
 ## OIT alpha — confirmed Three r186 coverage defect
 
@@ -88,82 +33,6 @@ source snapshots, input arrays and evidence are included; no GPU is involved.
 ```sh
 node scripts/check-splat-query-correctness.mjs
 ```
-
-## Local elasticity — retained captured-object tool
-
-[Local elasticity](local-elasticity/README.md) combines browser RKPM preparation,
-an implicit elastic solver, and the native Three r186 Gaussian splat renderer.
-The initial assets are an external phone capture and mesh-derived splats. There
-is no supplied rig, remote simulation, trained model, or motion recording.
-Material and integration volume are assumptions; the sparse model does not
-establish physical accuracy or general support. FreeForm owns the underlying
-method, and existing browser GLB soft-body tools are explicit prior art.
-
-```sh
-npm run demo:local-elasticity
-npm run test:local-elasticity
-npm run check:local-elasticity
-```
-
-Read [the bounded evidence](local-elasticity/RESULTS.md), including quality and
-out-of-sample limitations, before making claims about this capability.
-
-## Procedural footprint filtering — verified native material integration
-
-[Signal Loom](footprint-filtering/README.md) expands an existing native TSL color
-graph into joint Fourier terms and integrates each over a pixel and a material
-exposure interval. This retains correlations and low-frequency beats between
-fine patterns. Three programs and four fixed footprint/exposure conditions pass
-all twelve GPU correctness cases. All nine nonmagnified cases reduce RGB RMSE
-by over 99.99% versus point sampling and beat the matched 64-sample control.
-The manually filtered baseline also passes; no speed advantage is measured.
-
-The exact mathematical class is constant-amplitude trigonometric polynomials
-with affine phases. The folded, lit interactive illustration uses local
-footprint approximations. Filtering theory is established; this result concerns
-the automatic native TSL integration. Read its [scope and results](footprint-filtering/RESULTS.md).
-
-```sh
-npm run demo:footprint-filtering
-npm run test:footprint-filtering
-node scripts/analyze-footprint-filtering.mjs --self-test
-```
-
-## Constrained shader editing — verified bounded capability experiment
-
-[Direct the motion](constraint-editing/README.md) rebinds one authored native TSL
-graph for rendering, batched evaluation and generated parameter derivatives.
-The demo edits tip targets on two animated programs, avoids a sphere at sampled
-times, retains motion and exports eight parameters. All eight final GPU lanes
-pass and all 36 rendered silhouette pairs match the independent numeric geometry
-exactly. This is a native integration, not new optimization mathematics or a
-general speedup. The failed first penalty solver is preserved alongside the
-successful separately declared constrained follow-up.
-
-Run `npm run demo:constraint-editing`. [Results and CPU verifiers](constraint-editing/RESULTS.md).
-
-## Material mip fitting — candidate rejected; shading parity retained
-
-[The stock-shading bridge](material-mips/README.md) expands actual Three 0.185.1
-metallic direct-light functions. Rendered forward parity passes, while five of
-1,521 smooth hardware-forward finite-difference checks fail fixed tolerances.
-Both mip-fitting fixtures also regress against the strongest roughness-only
-baseline on withheld lighting. Preserve these limits; no filtering improvement
-or exact hardware-gradient claim is justified. Compressed evidence and a CPU
-verifier are included.
-
-## Trainable native TSL — verified bounded capability experiment
-
-[Train a forward shader graph](trainable-tsl/README.md) using automatically
-generated reverse gradients. The lab includes a 28-parameter procedural field,
-a 49-parameter sine neural field, a height-example editor and weight export.
-Four field/seed cells passed initial/final GPU gradient checks and the held-out
-capability gate. A same-GPU finite-difference control achieves similar accuracy
-and completed times. This is a native graph integration, not a new AD algorithm
-or demonstrated speedup.
-
-Run `npm run demo:trainable-tsl`. The [results](trainable-tsl/RESULTS.md) include
-portable evidence verifiable with `node scripts/analyze-trainable-tsl.mjs`.
 
 ## Triangle queries and native shader graphs — new finding and exploratory tools
 
@@ -212,6 +81,142 @@ the result and disposes resources, with a 45-second watchdog. Serve mode starts
 idle and runs only the two inferences requested by its button; it has no animation
 loop. The experiment README is the source of truth for dependencies, fixture
 selection, report hashes and platform limits.
+
+## Procedural footprint filtering — verified native material integration
+
+[Signal Loom](footprint-filtering/README.md) expands an existing native TSL color
+graph into joint Fourier terms and integrates each over a pixel and a material
+exposure interval. This retains correlations and low-frequency beats between
+fine patterns. Three programs and four fixed footprint/exposure conditions pass
+all twelve GPU correctness cases. All nine nonmagnified cases reduce RGB RMSE
+by over 99.99% versus point sampling and beat the matched 64-sample control.
+The manually filtered baseline also passes; no speed advantage is measured.
+
+The exact mathematical class is constant-amplitude trigonometric polynomials
+with affine phases. The folded, lit interactive illustration uses local
+footprint approximations. Filtering theory is established; this result concerns
+the automatic native TSL integration. Read its [scope and results](footprint-filtering/RESULTS.md).
+
+```sh
+npm run demo:footprint-filtering
+npm run test:footprint-filtering
+node scripts/analyze-footprint-filtering.mjs --self-test
+```
+
+## The Light Vault — exploratory wave-optics interaction
+
+[The Light Vault](light-vault/README.md) encodes two images into one phase pattern.
+Move a detector through its computed wave field, capture both clear images to
+open the vault, then draw and save a new seal. Three r186 TSL calculates an inverse
+FFT at every requested depth. Capture checks read actual GPU intensity; a saved
+seal imports only after its phase reproduces both reference images.
+
+The intent was an editable optical-puzzle mechanism. The retained value is a
+wave propagator, local fitting and phase-file exchange. Graphics and interaction
+remain unpolished; broader usefulness in a game or educational tool is unproven.
+The [physical contract and prior art](light-vault/PHYSICS.md) distinguish the
+verified implementation from claims that have not been established.
+
+```sh
+npm run demo:light-vault
+```
+
+## Sunprint — interactive inverse optics
+
+[Sunprint](caustic-sketch/README.md) turns a drawing into a shaped glass surface.
+An independent Three.js TSL pass refracts light through that surface to form the
+screen image. Move the screen, flatten the glass, draw a different mark, or save
+the approximate mesh. The CPU optimizer and GPU light renderer use established
+methods; the experiment demonstrates an accessible, reusable browser workflow.
+Its [prior-art notes](caustic-sketch/PRIOR_ART.md) identify close precedents.
+
+```sh
+npm run demo:sunprint
+```
+
+## MatterForge — experimental material-state editing
+
+The intent is persistent material editing for construction games, tested through
+a controlled solid-versus-liquid comparison. Fluid appearance and interaction
+remain unpolished, with coarse contacts and explicit supports.
+[MatterForge](matter-forge/README.md) casts liquid through a grille, solidifies
+the resulting particles, removes the mold, and drops real simulated cargo onto
+the cast. Its liquid control starts from the identical state. The revised CPU
+and WebGPU fixture passes; the earlier failures and coarse contact limits remain
+explicit. The live Three r186 scene accepts closed local GLB geometry.
+
+```sh
+node scripts/run-matter-forge.mjs --serve
+```
+
+## Carry the City — playable motion-transfer prototype
+
+[Carry the City](carry-the-city/README.md) applies authored swimming and flying
+motion to an inhabited town. The shared field drives street deformation, rigid
+attachments, a docking endpoint and released-prop motion. The rescue route,
+restart, collision release and cleanup pass a bounded browser check; 17 CPU tests
+pass. This is a creative combination of established techniques with approximate
+gameplay collision. General navigation, physics and a novel algorithm are not
+established.
+
+```sh
+npm run demo:carry-the-city
+```
+
+## Local elasticity — retained captured-object tool
+
+[Local elasticity](local-elasticity/README.md) combines browser RKPM preparation,
+an implicit elastic solver, and the native Three r186 Gaussian splat renderer.
+The initial assets are an external phone capture and mesh-derived splats. There
+is no supplied rig, remote simulation, trained model, or motion recording.
+Material and integration volume are assumptions; the sparse model does not
+establish physical accuracy or general support. FreeForm owns the underlying
+method, and existing browser GLB soft-body tools are explicit prior art.
+
+```sh
+npm run demo:local-elasticity
+npm run test:local-elasticity
+npm run check:local-elasticity
+```
+
+Read [the bounded evidence](local-elasticity/RESULTS.md), including quality and
+out-of-sample limitations, before making claims about this capability.
+
+## Constrained shader editing — verified bounded capability experiment
+
+[Direct the motion](constraint-editing/README.md) rebinds one authored native TSL
+graph for rendering, batched evaluation and generated parameter derivatives.
+The demo edits tip targets on two animated programs, avoids a sphere at sampled
+times, retains motion and exports eight parameters. All eight final GPU lanes
+pass and all 36 rendered silhouette pairs match the independent numeric geometry
+exactly. This is a native integration, not new optimization mathematics or a
+general speedup. The failed first penalty solver is preserved alongside the
+successful separately declared constrained follow-up.
+
+Run `npm run demo:constraint-editing`. [Results and CPU verifiers](constraint-editing/RESULTS.md).
+
+## Material mip fitting — candidate rejected; shading parity retained
+
+[The stock-shading bridge](material-mips/README.md) expands actual Three 0.185.1
+metallic direct-light functions. Rendered forward parity passes, while five of
+1,521 smooth hardware-forward finite-difference checks fail fixed tolerances.
+Both mip-fitting fixtures also regress against the strongest roughness-only
+baseline on withheld lighting. Preserve these limits; no filtering improvement
+or exact hardware-gradient claim is justified. Compressed evidence and a CPU
+verifier are included.
+
+## Trainable native TSL — verified bounded capability experiment
+
+[Train a forward shader graph](trainable-tsl/README.md) using automatically
+generated reverse gradients. The lab includes a 28-parameter procedural field,
+a 49-parameter sine neural field, a height-example editor and weight export.
+Four field/seed cells passed initial/final GPU gradient checks and the held-out
+capability gate. A same-GPU finite-difference control achieves similar accuracy
+and completed times. This is a native graph integration, not a new AD algorithm
+or demonstrated speedup.
+
+Run `npm run demo:trainable-tsl`. The [results](trainable-tsl/RESULTS.md) include
+portable evidence verifiable with `node scripts/analyze-trainable-tsl.mjs`.
 
 ## External-buffer handoff — working API prototype, no demonstrated performance advantage
 
