@@ -1,5 +1,9 @@
 # Research experiment index
 
+**Research is concluded.** The [final report](../docs/FINAL_RESEARCH_REPORT.md)
+is the closing assessment. The entries below preserve the individual studies;
+their historical commands are reproduction instructions, not active work.
+
 Status reviewed September 9, 2026. Start here to distinguish completed evidence
 from active feasibility work. The goal is a useful, reproducible Three.js/WebGPU
 contribution with a clear demonstration; novelty and performance require evidence.

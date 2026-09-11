@@ -1,0 +1,26 @@
+{
+  "reports": [
+    {
+      "file": "zipdepth-cpu-square.json.gz",
+      "source": "results/development/zipdepth-export/2026-09-09T16-56-54.752+00-00/report.json",
+      "rawSHA256": "d0be7c89ebb8a6a056a6f743e58454a19f8cb03d63100b6c3d3cb27794e54d30",
+      "gzipSHA256": "f4e81dd4cdebd6c430670f71aa483b1a908b4d7e0d27b2e3581c1f85f727d5ec",
+      "rawBytes": 12890
+    },
+    {
+      "file": "zipdepth-cpu-rectangle.json.gz",
+      "source": "results/development/zipdepth-export/2026-09-09T16-56-57.499+00-00/report.json",
+      "rawSHA256": "3448b6f2cee850ad7db40290588db7735a7e563afcc2f8fdd3a61ce76276a839",
+      "gzipSHA256": "9ec0a22bc99f95756a246b1ce2bef7a3316aafed6ee481e95daa50641ea95a97",
+      "rawBytes": 12887
+    },
+    {
+      "file": "zipdepth-browser.json.gz",
+      "source": "results/development/zipdepth-browser/2026-09-09T16-57-30.246Z/report.json",
+      "rawSHA256": "e41ccd821baa520fd6993867d061dc789a782e9fb5ced865ea22ad1610bb6355",
+      "gzipSHA256": "1511b266203c0e1b4f6460bf30867cbb04af138fe0bac439a60bdd6922a41edf",
+      "rawBytes": 4141
+    }
+  ],
+  "scope": "Unmodified original report bytes, not a new model inference run. Full arrays and models retained in local preservation archive."
+}

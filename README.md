@@ -1,5 +1,9 @@
 # Three.js / WebGPU Research Lab
 
+**Research concluded September 11, 2026.** Read the
+[final report](docs/FINAL_RESEARCH_REPORT.md) for the strongest confirmed
+findings, reusable integrations, negative results and evidence boundaries.
+
 Small, reproducible experiments toward better tools for editable Three.js scenes.
 Start with the [experiment index](experiments/README.md) and
 [research decisions](docs/RESEARCH_DIRECTIONS.md).

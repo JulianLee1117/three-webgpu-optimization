@@ -1,5 +1,9 @@
 # Research directions
 
+**Closed September 11, 2026.** See the [final report](FINAL_RESEARCH_REPORT.md).
+The priorities and continuation criteria below are historical records, not
+ongoing research commitments.
+
 Decision checkpoint: September 9, 2026. The target is a substantial, reusable
 Three.js/WebGPU improvement that can be explained and demonstrated simply.
 This document records research priorities and the evidence behind each decision.
